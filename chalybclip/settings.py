@@ -65,6 +65,22 @@ class Settings(BaseSettings):
     # One small LLM call per qualifying clip. Set False to disable.
     auto_hook_enabled: bool = True
 
+    # Active-speaker tracking crop (reframe). When ON, clips the framing
+    # pass flags as `mobile_crop_tracking` (the subject moves across the
+    # frame) get a MOVING 9:16 crop that pans to follow the speaker — the
+    # OpusClip "ReframeAnything" behaviour — instead of a static crop or a
+    # letterbox. Opt-in (default OFF): it adds one dense face-detect decode
+    # pass per QUALIFYING clip, and leaves every other clip byte-identical.
+    reframe_tracking_enabled: bool = Field(
+        default=False, validation_alias="NEXOCLIP_REFRAME_TRACKING_ENABLED"
+    )
+    # Sampling rate (fps) for the reframe face track. Higher = tighter
+    # follow + more decode cost. 3 fps is a calm, TV-like pan on a
+    # talking-head clip; bump to 5-6 for fast movement.
+    reframe_sample_fps: float = Field(
+        default=3.0, validation_alias="NEXOCLIP_REFRAME_SAMPLE_FPS"
+    )
+
     # Storage hygiene — delete the raw source VOD (downloaded video +
     # extracted audio) as soon as the pipeline finishes. The raw source is
     # by far the heaviest artifact on disk (~5-50 GB per 4hr stream) and is
