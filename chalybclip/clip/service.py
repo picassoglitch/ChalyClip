@@ -842,8 +842,31 @@ def _ffmpeg_reformat_9_16(
     Failures to resolve a font or read kit attributes are silent — the
     clip still renders, just without the overlay.
     """
+    # Active-speaker reframe (static). By default a horizontal source
+    # letterboxes (the branch below), which wastes ~60% of the vertical
+    # frame even on a centered talking head. When the operator has enabled
+    # reframe tracking AND the framing pass judged this clip a safe *static*
+    # crop AND we have a smart crop box, fill the 9:16 frame with that face
+    # crop instead — the same crop path a vertical/square source already
+    # takes. `full_screen_horizontal` and `reject_crop` verdicts stay on the
+    # letterbox path: there is no safe fill for two far-apart speakers or an
+    # uncroppable spread. The flag is read via get_settings() (lazy import,
+    # matching _safe_reframe_track) and defensively — a settings build
+    # without the field, or the flag OFF, is byte-identical to the legacy
+    # letterbox behavior. The dynamic reframe_track branch is untouched.
+    from nexoclip.settings import get_settings
+
+    reframe_static_fill = (
+        bool(getattr(get_settings(), "reframe_tracking_enabled", False))
+        and smart_box is not None
+        and framing_verdict is not None
+        and getattr(framing_verdict, "source_orientation", None) == "horizontal"
+        and getattr(framing_verdict, "recommended_output", None) == "mobile_crop_static"
+    )
+
     is_horizontal = (
-        framing_verdict is not None
+        not reframe_static_fill
+        and framing_verdict is not None
         and getattr(framing_verdict, "source_orientation", None) == "horizontal"
     )
 
