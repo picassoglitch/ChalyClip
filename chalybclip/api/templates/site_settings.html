@@ -57,4 +57,46 @@
   </div>
 </form>
 
+{# Active-speaker reframe status. Read-only on purpose: the render path
+   reads this from process config (env), not from a per-tenant DB row, so
+   surfacing a toggle here would save nothing the renderer consults. Mirrors
+   the LLM-settings "you see it, you don't touch it" read-only panel. #}
+<div class="nc-panel" style="margin-top: 22px;">
+  <div class="nc-panel__header">
+    <i class="ti ti-crop-1-1" aria-hidden="true" style="color: var(--nc-blue-bright);"></i>
+    <span class="nc-panel__title">Reencuadre por hablante activo</span>
+    <small>— recorte 9:16 que sigue a quien habla</small>
+  </div>
+  <div class="nc-panel__body">
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+      {% if reframe_tracking_enabled %}
+      <span class="nc-chip" style="background: rgba(0,217,122,0.18); color:#00d97a;">
+        <i class="ti ti-player-play" aria-hidden="true"></i> Activado
+      </span>
+      {% else %}
+      <span class="nc-chip nc-chip--muted">
+        <i class="ti ti-player-pause" aria-hidden="true"></i> Desactivado
+      </span>
+      {% endif %}
+      <span style="color: var(--nc-text-muted); font-size: 12.5px; line-height: 1.5;">
+        {% if reframe_tracking_enabled %}
+        Los clips que la IA marca como “recorte que sigue la cara” se exportan
+        siguiendo al hablante, en vez de un recorte fijo.
+        {% else %}
+        Esos clips se exportan con un recorte 9:16 fijo centrado (comportamiento
+        actual). El seguimiento del hablante está apagado.
+        {% endif %}
+      </span>
+    </div>
+    <p style="color: var(--nc-text-muted); font-size: 12px; margin: 14px 0 0; line-height: 1.55;">
+      <i class="ti ti-info-circle" aria-hidden="true"></i>
+      Se ajusta con la variable <code>NEXOCLIP_REFRAME_TRACKING_ENABLED</code>
+      y requiere reiniciar el servicio.
+      {% if reframe_sample_fps %}
+      Muestreo actual: <span class="nc-mono">{{ reframe_sample_fps }} fps</span>.
+      {% endif %}
+    </p>
+  </div>
+</div>
+
 {% endblock %}
