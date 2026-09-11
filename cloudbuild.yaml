@@ -2,7 +2,7 @@
 #
 # Trigger on push to main, or run by hand:
 #   gcloud builds submit --config=cloudbuild.yaml \
-#     --substitutions=_REGION=us-central1,_PROJECT=chalyb-prod
+#     --substitutions=_REGION=us-central1,_PROJECT=chalyb
 #
 # The image is LARGE — ffmpeg, OpenCV, and a full Playwright Chromium (~300 MB
 # on its own). Two consequences, both handled below:
@@ -13,7 +13,7 @@
 
 substitutions:
   _REGION: us-central1
-  _PROJECT: chalyb-prod
+  _PROJECT: chalyb
   _REPO: engines
   _SERVICE: chalybclip
   _WORKER: chalybclip-worker

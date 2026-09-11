@@ -72,7 +72,7 @@ follow-up, and both sides must move together.
 
 ```sh
 gcloud builds submit --config=cloudbuild.yaml \
-  --substitutions=_REGION=us-central1,_PROJECT=chalyb-prod
+  --substitutions=_REGION=us-central1,_PROJECT=chalyb
 ```
 
 The build timeout is 2400s and the machine is `E2_HIGHCPU_8` on purpose:
