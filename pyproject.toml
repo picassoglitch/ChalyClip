@@ -100,7 +100,7 @@ dependencies = [
 
     # MCP server — translation layer over the REST surface for external agents
     # (Claude Code / Cursor / etc.). Phase 3 #3.
-    "mcp>=1.0",
+    "mcp>=1.0,<2",
 ]
 
 [project.optional-dependencies]
