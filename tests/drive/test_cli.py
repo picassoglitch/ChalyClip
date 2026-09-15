@@ -30,7 +30,7 @@ def test_drive_add_then_list(tmp_path: Path) -> None:
             "aldo",
             "folder_xyz",
             "--folder-name",
-            "ChalybClip Inbox",
+            "ChalyClip Inbox",
             "--refresh-token",
             "rt",
             "--db-path",
@@ -45,7 +45,7 @@ def test_drive_add_then_list(tmp_path: Path) -> None:
     )
     assert r2.exit_code == 0, r2.output
     assert "folder_xyz" in r2.output
-    assert "ChalybClip Inbox" in r2.output
+    assert "ChalyClip Inbox" in r2.output
     assert "enabled" in r2.output
 
 

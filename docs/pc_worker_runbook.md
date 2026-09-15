@@ -58,7 +58,7 @@ R2 bucket — regenerate worker.env).
 To survive reboots, register it as a scheduled task at logon:
 
 ```
-schtasks /Create /TN "ChalybClip PC Worker" /SC ONLOGON ^
+schtasks /Create /TN "ChalyClip PC Worker" /SC ONLOGON ^
   /TR "powershell -ExecutionPolicy Bypass -File C:\Users\picasso\Projects\QuantorClipAI\scripts\run_pc_worker.ps1"
 ```
 

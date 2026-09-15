@@ -1,9 +1,9 @@
-# Deploying MediaMTX for ChalybClip live ingest
+# Deploying MediaMTX for ChalyClip live ingest
 
 > **Canonical deploy is now Path B — the `chalybclip-live` repo + S3-compatible
 > object storage.** The MediaMTX service lives in its own repo
 > (`picassoglitch/chalybclip-live`), records each stream, and uploads it to an
-> object store; ChalybClip pulls it to auto-clip (Phase L.2). **Default store is
+> object store; ChalyClip pulls it to auto-clip (Phase L.2). **Default store is
 > Cloudflare R2** — $0 egress, so the once-per-stream download is free
 > (~$0.005/stream vs ~$0.40 on metered-egress stores); cheapest for video and
 > it isolates bulky recordings from the shared Supabase egress budget.
@@ -22,11 +22,11 @@
 OBS ──rtmp──▶ chalybclip-live (MediaMTX svc) ──upload──▶ store/live/<stream_id>/
                      │ webhooks (authorize/started/ended)        ▲
                      ▼                                            │ pull
-                  ChalybClip  ──auto-clip──────────────────────────┘
+                  ChalyClip  ──auto-clip──────────────────────────┘
 ```
 
 - **Service repo + full deploy steps:** `chalybclip-live/README.md`.
-- **ChalybClip side:** set `CHALYBCLIP_LIVE_STORAGE_BUCKET`,
+- **ChalyClip side:** set `CHALYBCLIP_LIVE_STORAGE_BUCKET`,
   `CHALYBCLIP_LIVE_STORAGE_ENDPOINT`, `CHALYBCLIP_LIVE_STORAGE_ACCESS_KEY_ID`,
   `CHALYBCLIP_LIVE_STORAGE_SECRET_ACCESS_KEY` (+ optional
   `CHALYBCLIP_LIVE_STORAGE_PREFIX`, `CHALYBCLIP_LIVE_STORAGE_REGION`) and
@@ -52,7 +52,7 @@ The rest of this doc is **Path A (legacy, shared volume).**
 # Path A (legacy) — shared `/data` volume
 
 This is the operator-side deploy guide for the MediaMTX service that
-sits in front of ChalybClip and accepts RTMP push from OBS.
+sits in front of ChalyClip and accepts RTMP push from OBS.
 
 **One-time setup**. Run through this once; MediaMTX then runs as a
 separate Railway service indefinitely.
@@ -67,24 +67,24 @@ OBS / Streamlabs
 │ MediaMTX (Railway service) │  config: infra/mediamtx.yml
 │ - RTMP on :1935            │
 │ - records to /data/live/   │
-│ - calls ChalybClip webhooks  │
+│ - calls ChalyClip webhooks  │
 └──────────┬─────────────────┘
            │ webhooks (auth, started, ended)
            ▼
 ┌────────────────────────────┐
-│ ChalybClip (existing service)│
+│ ChalyClip (existing service)│
 │ - creates streams row      │
 │ - existing VOD pipeline    │
 └────────────────────────────┘
 ```
 
 The two services share the same `/data` volume so MediaMTX's
-recording lands where ChalybClip's existing pipeline expects to find
+recording lands where ChalyClip's existing pipeline expects to find
 clip sources.
 
 ## Step 1 — Create the MediaMTX Railway service
 
-In your Railway project (the one already running ChalybClip):
+In your Railway project (the one already running ChalyClip):
 
 1. **+ New** → **Empty Service**
 2. Settings → name it `mediamtx`
@@ -93,25 +93,25 @@ In your Railway project (the one already running ChalybClip):
    (TCP, not HTTP). The host gives you a TCP proxy host + port; CNAME
    `live.chalybclip.chalyb.com` to that host in DNS so the public
    endpoint is `live.chalybclip.chalyb.com:NNNN` — note the port.
-5. **Volume** → attach the SAME volume that ChalybClip is mounted on
+5. **Volume** → attach the SAME volume that ChalyClip is mounted on
    (don't create a new one). Mount path `/data`. This is what makes
    the recording handoff work.
 6. **Variables** → add the four below.
 
 ## Step 2 — Environment variables
 
-These three URLs all point at your ChalybClip dashboard service
+These three URLs all point at your ChalyClip dashboard service
 (same Railway project, different service):
 
 ```bash
 CHALYBCLIP_AUTH_URL=https://chalybclip.chalyb.com/api/internal/live/authorize
 CHALYBCLIP_STARTED_URL=https://chalybclip.chalyb.com/api/internal/live/started
 CHALYBCLIP_ENDED_URL=https://chalybclip.chalyb.com/api/internal/live/ended
-CHALYBCLIP_INTERNAL_SIGNING_SECRET=<SAME value already set on the ChalybClip service>
+CHALYBCLIP_INTERNAL_SIGNING_SECRET=<SAME value already set on the ChalyClip service>
 ```
 
-The signing secret MUST match what's set on the ChalybClip side — it's
-the bearer MediaMTX passes back to ChalybClip on each webhook.
+The signing secret MUST match what's set on the ChalyClip side — it's
+the bearer MediaMTX passes back to ChalyClip on each webhook.
 
 ## Step 3 — Mount the config file
 
@@ -132,9 +132,9 @@ point at `Dockerfile.mediamtx`.
 **Alternative** — use Railway's Config File feature to mount the YAML
 at `/mediamtx.yml`. Slightly more setup; not recommended.
 
-## Step 4 — Set the RTMP URL in ChalybClip
+## Step 4 — Set the RTMP URL in ChalyClip
 
-On the ChalybClip service (not MediaMTX), add the env var so the
+On the ChalyClip service (not MediaMTX), add the env var so the
 dashboard knows what URL to show operators:
 
 ```bash
@@ -146,7 +146,7 @@ CHALYBCLIP_LIVE_RTMP_BASE_URL=rtmp://live.chalybclip.chalyb.com:NNNN/live
 ## Step 5 — Verify
 
 1. Both services should show **Active** in Railway.
-2. From ChalybClip's `/dashboard/live` page: the "Push URL for OBS"
+2. From ChalyClip's `/dashboard/live` page: the "Push URL for OBS"
    section should now be populated (not the "not configured" state).
 3. Click "Generate stream key" — the key value should appear.
 4. In OBS: Settings → Stream → Custom → paste the Server URL +

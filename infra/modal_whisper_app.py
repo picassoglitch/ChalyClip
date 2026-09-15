@@ -1,4 +1,4 @@
-"""Modal app: GPU-backed Whisper for ChalybClip.
+"""Modal app: GPU-backed Whisper for ChalyClip.
 
 Run once on the operator's machine to deploy:
 
@@ -21,7 +21,7 @@ warm for 5 minutes between requests so back-to-back uploads from
 the same user pay it once.
 
 Why this design:
-  - ChalybClip serves the audio file at a short-lived HMAC-signed URL
+  - ChalyClip serves the audio file at a short-lived HMAC-signed URL
     on its own Railway domain. Modal pulls from there over HTTPS.
   - Avoids the 32 MB Modal web-endpoint multipart limit that bites
     long VODs.
@@ -164,7 +164,7 @@ def transcribe(payload: dict) -> dict:
 
     started_at = time.time()
 
-    # Download the audio from ChalybClip's signed URL.
+    # Download the audio from ChalyClip's signed URL.
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
         tmp_path = Path(tmp.name)
     try:

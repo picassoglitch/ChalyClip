@@ -1,6 +1,6 @@
 """Per-clip intelligence timeline — slice F.7-C.
 
-Aggregates the multimodal signals ChalybClip already collects into
+Aggregates the multimodal signals ChalyClip already collects into
 labeled markers the editor renders under the waveform:
 
     00:04  Audio peak

@@ -381,7 +381,7 @@ class ZernioPublishRow(BaseModel):
 class HubPublishJobRow(BaseModel):
     """One internal-API publish job (migration 032).
 
-    Created by /api/internal/v1/publish (ChalybOBS, Chalyb). The
+    Created by /api/internal/v1/publish (ChalyOBS, Chalyb). The
     idempotency_key dedups caller retries per tenant; zernio_post_id
     links to the Zernio post once accepted, and the phase-2 webhook
     processor keeps status/platforms_json live from there."""
@@ -679,7 +679,7 @@ class BrandKitRow(BaseModel):
 
 
 class DriveWatchRow(BaseModel):
-    """One row in `drive_watches` — a folder ChalybClip polls for new VODs."""
+    """One row in `drive_watches` — a folder ChalyClip polls for new VODs."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -699,7 +699,7 @@ class DriveWatchRow(BaseModel):
 
 
 class ChannelWatchRow(BaseModel):
-    """One row in `channel_watches` — a creator channel ChalybClip polls for
+    """One row in `channel_watches` — a creator channel ChalyClip polls for
     new VODs (YouTube / Twitch / Kick). The auto-ingest counterpart to
     `DriveWatchRow`: instead of a Drive folder it watches a channel URL,
     and `seen_video_ids` is the per-video dedup key."""

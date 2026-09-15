@@ -54,7 +54,7 @@ it doesn't refactor the editor / publish / billing surfaces.
                                        │ RTMP
                   ┌────────────────────▼───────────────────────┐
                   │   MediaMTX (Railway sidecar service)       │
-                  │   - Auth via webhook → ChalybClip            │
+                  │   - Auth via webhook → ChalyClip            │
                   │   - HLS muxer: 6s segments                 │
                   │   - MP4 recorder: appending file on disk   │
                   │   - Webhooks on publish-start / -end       │
@@ -63,7 +63,7 @@ it doesn't refactor the editor / publish / billing surfaces.
                                        │ + MP4 mirror
                                        │ + webhook events
                   ┌────────────────────▼───────────────────────┐
-                  │   ChalybClip live runner (FastAPI + worker)  │
+                  │   ChalyClip live runner (FastAPI + worker)  │
                   │                                            │
                   │   on RTMP start:                           │
                   │     create stream row (is_live=True)       │
@@ -160,7 +160,7 @@ and are NOT affected by the live retention sweep.
 ## RTMP authentication
 
 OBS hits `rtmp://live.chalybclip.chalyb.com/live/<stream_key>`. MediaMTX is
-configured to POST to ChalybClip's auth webhook before accepting:
+configured to POST to ChalyClip's auth webhook before accepting:
 
 ```
 POST /api/internal/live/authorize
@@ -174,7 +174,7 @@ Authorization: Bearer <CHALYBCLIP_INTERNAL_SIGNING_SECRET>
 401     → MediaMTX rejects
 ```
 
-ChalybClip looks up the key in `live_stream_keys`, validates it's not
+ChalyClip looks up the key in `live_stream_keys`, validates it's not
 revoked, creates the `streams` row with `is_live=1`, returns the
 `stream_id` MediaMTX should use for the recording path.
 
@@ -256,7 +256,7 @@ Each one only matters once — picking now avoids rework.
 
 4. **Whisper input format**: feed Modal raw HLS .ts segments
    directly (Modal's whisper container handles it) or pre-mux to
-   WAV in ChalybClip? **Recommendation**: pre-mux to WAV. .ts is
+   WAV in ChalyClip? **Recommendation**: pre-mux to WAV. .ts is
    container-y; WAV makes Modal's job a pure decode, ~30% faster.
 
 5. **Auto-publish kill-switch**: per-tenant "pause auto-publish
@@ -353,7 +353,7 @@ Explicitly NOT covered:
   Whisper, mid-segment transcript stitching. Order of magnitude
   more complex. Defer to a future Phase M.
 - **Multi-camera live mixing** — operator brings a switched feed
-  via OBS, we treat it as one source. If they want ChalybClip to do
+  via OBS, we treat it as one source. If they want ChalyClip to do
   the switching, that's a different product.
 - **Live captions burned into the live stream** — that's
   re-streaming territory + extra infra. Out of scope.
@@ -376,5 +376,5 @@ Each slice ships with:
 
 `docker compose up mediamtx` in the repo gives the operator a local
 MediaMTX bound to `rtmp://localhost:1935/live`. OBS can push to it,
-the local ChalybClip dev server receives the webhooks the same way
+the local ChalyClip dev server receives the webhooks the same way
 prod would. Reproducing a production bug locally is one command.

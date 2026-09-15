@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Diag · Chalyb · ChalybClip{% endblock %}
+{% block title %}Diag · Chalyb · ChalyClip{% endblock %}
 {% block content %}
 
 {# Diagnostic page for the Chalyb integration. Rendered when the user clicks
@@ -105,17 +105,17 @@
   </div>
 </div>
 
-{# ── Tenant row: this is YOUR tenant in ChalybClip ─────────────────────── #}
+{# ── Tenant row: this is YOUR tenant in ChalyClip ─────────────────────── #}
 <div class="nc-panel" style="margin-bottom: 14px;">
   <div class="nc-panel__header">
     <i class="ti ti-user" aria-hidden="true"></i>
-    <span class="nc-panel__title">Tu tenant en ChalybClip</span>
+    <span class="nc-panel__title">Tu tenant en ChalyClip</span>
   </div>
   <div class="nc-panel__body">
     <table style="width: 100%; border-collapse: collapse; font-size: 12.5px;">
       <tbody>
         <tr style="border-bottom: 1px solid var(--nc-line-soft);">
-          <td style="padding: 8px 0; color: var(--nc-text-muted);">Tenant ID (ChalybClip)</td>
+          <td style="padding: 8px 0; color: var(--nc-text-muted);">Tenant ID (ChalyClip)</td>
           <td style="padding: 8px 0; text-align: right;"><code style="font-size: 11.5px;">{{ tenant_id }}</code></td>
         </tr>
         <tr style="border-bottom: 1px solid var(--nc-line-soft);">
@@ -289,7 +289,7 @@
     </table>
     {% if report_ok == 0 %}
     <small style="display: block; margin-top: 10px; color: var(--nc-text-muted); line-height: 1.5;">
-      ▸ HTTP 401/403 → el <code>CHALYB_ADMIN_TOKEN</code> de ChalybClip no coincide con el
+      ▸ HTTP 401/403 → el <code>CHALYB_ADMIN_TOKEN</code> de ChalyClip no coincide con el
       <code>CHALYBCLIP_ADMIN_TOKEN</code> de Chalyb. HTTP 400/422 → Chalyb rechazó el payload
       nuevo (campos <code>cost_usd_micros</code> / <code>provider</code> o el kind
       <code>transcription.seconds</code>): hay que aceptarlos en el endpoint /usage.
@@ -301,7 +301,7 @@
 <div class="nc-panel" style="margin-bottom: 14px;">
   <div class="nc-panel__header">
     <i class="ti ti-database" aria-hidden="true"></i>
-    <span class="nc-panel__title">Saldo guardado en ChalybClip</span>
+    <span class="nc-panel__title">Saldo guardado en ChalyClip</span>
   </div>
   <div class="nc-panel__body">
     <table style="width: 100%; border-collapse: collapse; font-size: 12.5px;">
@@ -367,12 +367,12 @@
 <details class="nc-details" style="margin-top: 22px;">
   <summary>Cómo funciona todo esto (referencia)</summary>
   <ol style="line-height: 1.7; font-size: 13px; color: var(--nc-text-muted); margin-top: 12px; padding-left: 22px;">
-    <li>ChalybClip hace una llamada LLM (variants, hooks, etc.).</li>
+    <li>ChalyClip hace una llamada LLM (variants, hooks, etc.).</li>
     <li><code>chalybclip/llm/router.py</code> termina la llamada y dispara <code>schedule_report()</code> fire-and-forget.</li>
     <li>El reporter en <code>chalybclip/integrations/chalyb/reporter.py</code> hace
         <code>POST {CHALYB_BASE_URL}/api/engines/chalybclip/usage</code> con bearer auth.</li>
     <li>Chalyb inserta en <code>usage_events</code> de Supabase y devuelve el balance actualizado.</li>
-    <li>ChalybClip persiste ese balance en <code>tenants.cached_balance_*</code>.</li>
+    <li>ChalyClip persiste ese balance en <code>tenants.cached_balance_*</code>.</li>
     <li>El middleware <code>BearerAuthMiddleware</code> lee la cache en cada request y la pone en <code>request.state.token_balance</code>.</li>
     <li><code>base.html</code> renderiza el chip arriba a la derecha.</li>
   </ol>

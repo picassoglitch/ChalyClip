@@ -1,6 +1,6 @@
 """Internal Publish API — /api/internal/v1/* (Hub phase 3).
 
-The service-to-service entry point ChalybOBS Auto-Clip Mode and Chalyb
+The service-to-service entry point ChalyOBS Auto-Clip Mode and Chalyb
 engines publish through. Auth is a bearer service token validated
 against CHALYBCLIP_HUB_SERVICE_TOKENS (comma-separated name:token pairs)
 — consumers address tenants by id and never see Zernio.
@@ -214,7 +214,7 @@ async def internal_accounts(
     _consumer: str = Depends(require_hub_service),
     db: Database = Depends(get_db),
 ) -> JSONResponse:
-    """Connected platforms for a tenant — what ChalybOBS shows before
+    """Connected platforms for a tenant — what ChalyOBS shows before
     offering publish targets."""
     tenant = await TenantsRepo(db).get(tenant_id)
     if tenant is None:

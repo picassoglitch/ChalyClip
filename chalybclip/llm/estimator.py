@@ -1,4 +1,4 @@
-"""Pre-run token cost estimator for the ChalybClip pipeline.
+"""Pre-run token cost estimator for the ChalyClip pipeline.
 
 Given a stream that's about to run, estimate the rough token budget the
 LLM-consuming steps will use. Returned as a single integer + a short
@@ -33,7 +33,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
-# Empirical multipliers — measured across ~30 ChalybClip pipeline runs in
+# Empirical multipliers — measured across ~30 ChalyClip pipeline runs in
 # Q1-Q2 2026. These are 80th-percentile values so we overestimate slightly;
 # the worst real-world miss is ~15% under the estimate, which means the
 # user sees the bar move LESS than they expected → positive surprise.

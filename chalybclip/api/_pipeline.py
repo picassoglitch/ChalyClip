@@ -531,7 +531,7 @@ async def live_pipeline_runner(
                 )
                 await StreamsRepo(db).upsert(row)
                 # upsert is INSERT OR IGNORE; backfill the real length onto
-                # the live row the ChalybOBS webhook created with duration 0.
+                # the live row the ChalyOBS webhook created with duration 0.
                 await StreamsRepo(db).set_duration(
                     stream.id, float(getattr(stream, "duration_s", 0) or 0)
                 )

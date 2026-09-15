@@ -645,7 +645,7 @@ def _interpret_diag(
             "action": (
                 "Abre el dashboard de Railway → este servicio → Variables, "
                 "agrega CHALYB_BASE_URL=https://chalyb.com, y redeploya. "
-                "Sin esto ChalybClip no sabe a dónde reportar usage."
+                "Sin esto ChalyClip no sabe a dónde reportar usage."
             ),
         }
     if not has_admin_token:
@@ -5044,7 +5044,7 @@ async def llm_settings_view(
 # ---------- Site / landing settings (admin) ----------
 #
 # Slice O.57 — operator-editable landing values that we don't want to
-# hard-code in i18n.py + redeploy for. Currently the ChalybClip price shown
+# hard-code in i18n.py + redeploy for. Currently the ChalyClip price shown
 # in the landing's "what does an editor cost" comparison; the backing
 # table (platform_settings) is a generic key/value store so future
 # site-wide knobs land here too.

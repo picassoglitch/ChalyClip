@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 #
-# ChalybClip production image — slim Debian + Python 3.11 + ffmpeg.
+# ChalyClip production image — slim Debian + Python 3.11 + ffmpeg.
 # CPU-only by design. Transcription + diarization run on AssemblyAI
 # (Migration Tasks A1-A3) so there's no torch / faster-whisper /
 # pyannote / CUDA in this image. The `diarize` and `local-whisper`

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Tus transmisiones - ChalybClip{% endblock %}
+{% block title %}Tus transmisiones - ChalyClip{% endblock %}
 {% block content %}
 
 {% macro mid_trunc(text, head=10, tail=10) -%}
@@ -13,7 +13,7 @@
 <div class="nc-page-header">
   <div>
     <h2>Tus transmisiones</h2>
-    <small>Tus transmisiones de ChalybOBS llegan aquí y la IA genera los clips automáticamente.</small>
+    <small>Tus transmisiones de ChalyOBS llegan aquí y la IA genera los clips automáticamente.</small>
   </div>
   <div class="nc-page-summary">
     <span class="nc-mono">{{ streams|length }}</span> transmisi{{ "ones" if streams|length != 1 else "ón" }}
@@ -26,7 +26,7 @@
   <div class="nc-alert__body">
     <div class="nc-alert__title">Falta instalar ffmpeg</div>
     <div class="nc-alert__detail">
-      ChalybClip necesita ffmpeg para sacar el audio. No puede crear clips hasta que lo instales.
+      ChalyClip necesita ffmpeg para sacar el audio. No puede crear clips hasta que lo instales.
       Instálalo con <code>winget install --id=Gyan.FFmpeg -e</code> (Windows) /
       <code>brew install ffmpeg</code> (macOS) / <code>sudo apt install ffmpeg</code> (Debian),
       y luego reinicia el panel.
@@ -78,7 +78,7 @@
               {{ mid_trunc(s.title or s.vod_url, 16, 12) }}
             </a>
           </td>
-          <td>{{ s.channel or ("ChalybOBS" if s.platform == "live" else "—") }}</td>
+          <td>{{ s.channel or ("ChalyOBS" if s.platform == "live" else "—") }}</td>
           <td class="nc-num nc-mono">{{ "%d"|format(s.duration_s|int) }}s</td>
           <td>
             {#- The status column lags the truth: it stays 'ingested' /
@@ -131,7 +131,7 @@
     <div class="nc-empty">
       <div class="nc-empty__icon"><i class="ti ti-video-off" aria-hidden="true"></i></div>
       <div class="nc-empty__title">Aún no tienes transmisiones</div>
-      <p class="nc-empty__body">Sube un video arriba y ChalybClip empieza a trabajar solo.</p>
+      <p class="nc-empty__body">Sube un video arriba y ChalyClip empieza a trabajar solo.</p>
     </div>
     {% endif %}
   </div>

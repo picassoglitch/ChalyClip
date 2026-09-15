@@ -1,8 +1,8 @@
-# ChalybClip — Claude Code Project Rules
+# ChalyClip — Claude Code Project Rules
 
 ## What this is
 
-ChalybClip is a multi-tenant SaaS that turns a streamer's VOD into a multi-platform short-form clip pipeline. Voice cues + chat heat + audio peaks + visual signals detect clip-worthy moments; an LLM generates persona-flavored captions, hooks, and viral-moment selections (self-hosted open models by default — see rule 3); local Whisper handles transcription on the user's GPU.
+ChalyClip is a multi-tenant SaaS that turns a streamer's VOD into a multi-platform short-form clip pipeline. Voice cues + chat heat + audio peaks + visual signals detect clip-worthy moments; an LLM generates persona-flavored captions, hooks, and viral-moment selections (self-hosted open models by default — see rule 3); local Whisper handles transcription on the user's GPU.
 
 **Read these first, in this order:**
 1. `docs/chalybclip_spec.md` — full architectural spec (v0.5)

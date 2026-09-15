@@ -85,8 +85,8 @@ async def live_dashboard(
         s for s in all_streams
         if s.is_live or (s.status in ("live_ended", "live"))
     ]
-    # ChalybOBS is the streaming front-door now: the operator connects their
-    # encoder there (multistream + preview), and ChalybOBS forwards the
+    # ChalyOBS is the streaming front-door now: the operator connects their
+    # encoder there (multistream + preview), and ChalyOBS forwards the
     # recording to this pipeline for clipping. The live page links out to it
     # via Chalyb's cross-app SSO launcher so the session carries over (no
     # landing/login bounce). The launcher gates to ALL_ACCESS server-side.
@@ -131,8 +131,8 @@ async def live_set_connection(
     tenant_id: str = Depends(tenant_binder),
     db: Database = Depends(get_db),
 ) -> Response:
-    """Flip the bidirectional ChalybOBS↔ChalybClip connection switch from the
-    ChalybClip side. Full-access only — mirror of the gate ChalybOBS enforces.
+    """Flip the bidirectional ChalyOBS↔ChalyClip connection switch from the
+    ChalyClip side. Full-access only — mirror of the gate ChalyOBS enforces.
     The new state is read from the posted `enabled` field."""
     from chalybclip.integrations.chalybobs import set_connection
 
@@ -165,7 +165,7 @@ async def live_rotate_key(
     return RedirectResponse(url="/dashboard/live?rotated=1", status_code=303)
 
 
-# ---- Internal webhooks (MediaMTX -> ChalybClip) -----------------------------
+# ---- Internal webhooks (MediaMTX -> ChalyClip) -----------------------------
 #
 # All three endpoints share the same auth model: shared
 # CHALYBCLIP_INTERNAL_SIGNING_SECRET as a bearer. MediaMTX is configured
@@ -203,7 +203,7 @@ def _verify_internal_bearer(authorization: str | None) -> None:
 # after _AUTHORIZE_TTL_S; expired entries are GC'd opportunistically on
 # each write.
 #
-# Single-process only. ChalybClip currently runs as a single Railway replica;
+# Single-process only. ChalyClip currently runs as a single Railway replica;
 # when this horizontally scales, swap for Redis (same Redis story as the
 # rate-limit infra needed for engine-usage and contact-form endpoints).
 _AUTHORIZE_REGISTRY: dict[str, tuple[str, float]] = {}
@@ -458,15 +458,15 @@ async def live_ended(
     )
 
 
-# ---- ChalybOBS handoff (ChalybOBS -> ChalybClip) --------------------------------
+# ---- ChalyOBS handoff (ChalyOBS -> ChalyClip) --------------------------------
 #
-# When the bidirectional connection switch is ON, ChalybOBS forwards each
+# When the bidirectional connection switch is ON, ChalyOBS forwards each
 # stream's lifecycle here. Unlike the relay-native /api/internal/live/*
-# endpoints (which carry ChalybClip's own ten_ id), ChalybOBS only knows the
-# Chalyb user id — so these endpoints MAP external_user_id -> ChalybClip
+# endpoints (which carry ChalyClip's own ten_ id), ChalyOBS only knows the
+# Chalyb user id — so these endpoints MAP external_user_id -> ChalyClip
 # tenant, then reuse the exact same live pipeline (create stream row →
 # autoclip on end). The recording is fetched from object storage by
-# stream_id (the id ChalybOBS minted + the relay uploaded under).
+# stream_id (the id ChalyOBS minted + the relay uploaded under).
 
 
 @router.post("/api/internal/chalybobs/started")
@@ -475,8 +475,8 @@ async def chalybobs_started(
     payload: dict,
     authorization: Annotated[str | None, Header()] = None,
 ) -> JSONResponse:
-    """ChalybOBS stream went live → create the streams row so it shows in the
-    Live list. Maps external_user_id (Chalyb user id) to the ChalybClip
+    """ChalyOBS stream went live → create the streams row so it shows in the
+    Live list. Maps external_user_id (Chalyb user id) to the ChalyClip
     tenant. Full-access only."""
     _verify_internal_bearer(authorization)
     body = payload or {}
@@ -503,13 +503,13 @@ async def chalybobs_started(
 
     now = _adapters_now()
     audio_path = recording_path.rsplit(".", 1)[0] + ".audio.wav"
-    # Prefer the title the operator set for the stream in ChalybOBS (forwarded
-    # in the webhook payload). Fall back to a per-session tag when ChalybOBS
+    # Prefer the title the operator set for the stream in ChalyOBS (forwarded
+    # in the webhook payload). Fall back to a per-session tag when ChalyOBS
     # didn't send one: stream_id is <tenant>__<random>, so the random suffix
     # is the per-session part (the tenant prefix is identical across a
     # tenant's streams and made every row look the same in the list).
     session_tag = stream_id.rsplit("__", 1)[-1][:10]
-    title = str(body.get("title") or "").strip() or f"ChalybOBS live · {session_tag}"
+    title = str(body.get("title") or "").strip() or f"ChalyOBS live · {session_tag}"
     with bound_tenant(tenant.id):
         streams_repo = StreamsRepo(db)
         row = StreamRow(
@@ -518,7 +518,7 @@ async def chalybobs_started(
             vod_url=f"live://chalybobs/{stream_id}",
             platform="live",
             title=title,
-            channel="ChalybOBS",
+            channel="ChalyOBS",
             duration_s=0.0,
             source_video_path=recording_path,
             source_audio_path=audio_path,
@@ -540,7 +540,7 @@ async def chalybobs_ended(
     background_tasks: BackgroundTasks,
     authorization: Annotated[str | None, Header()] = None,
 ) -> JSONResponse:
-    """ChalybOBS stream ended → mark ended + auto-clip the recording (pulled
+    """ChalyOBS stream ended → mark ended + auto-clip the recording (pulled
     from storage by stream_id). Full-access only."""
     _verify_internal_bearer(authorization)
     body = payload or {}

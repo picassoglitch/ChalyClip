@@ -1,7 +1,7 @@
 """Publish & Engagement Hub — internal service-API publish orchestration.
 
 The business logic behind /api/internal/v1/* (routers/internal_publish.py
-is a thin wrapper). ChalybOBS Auto-Clip Mode and Chalyb engines publish
+is a thin wrapper). ChalyOBS Auto-Clip Mode and Chalyb engines publish
 through here with a service token; they never talk to Zernio directly.
 
 Every function takes `tenant_id` explicitly (the caller addresses
@@ -299,7 +299,7 @@ async def hub_publish(
         raise HubPublishError(
             "no_zernio_profile",
             "Tenant has no Zernio profile yet — create one from the "
-            "ChalybClip Publish Center first.",
+            "ChalyClip Publish Center first.",
             http_status=409,
         )
 

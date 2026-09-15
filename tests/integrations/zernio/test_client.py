@@ -599,7 +599,7 @@ async def test_list_queues_empty_when_none() -> None:
 async def test_upsert_default_queue_sends_slots() -> None:
     body = {
         "success": True,
-        "schedule": {"_id": "q9", "name": "ChalybClip Queue", "slots": []},
+        "schedule": {"_id": "q9", "name": "ChalyClip Queue", "slots": []},
     }
     slots = [{"dayOfWeek": 1, "time": "09:00"}, {"dayOfWeek": 5, "time": "18:30"}]
     async with httpx.AsyncClient() as http:

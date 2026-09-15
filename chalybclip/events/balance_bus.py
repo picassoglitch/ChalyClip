@@ -8,7 +8,7 @@ publishes here, and the /dashboard/_balance/stream SSE endpoint relays it to the
 browser, which then swaps the chip — so a request fires only on an actual change.
 
 Scope / assumptions:
-  - In-process only. ChalybClip runs as a single uvicorn worker (Whisper runs
+  - In-process only. ChalyClip runs as a single uvicorn worker (Whisper runs
     in-process; see run.py / Dockerfile CMD), so every request — including the
     usage reporter that updates the balance and the SSE connection — shares one
     event loop. If this ever scales to multiple workers/instances, swap this for

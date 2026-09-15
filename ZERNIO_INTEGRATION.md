@@ -1,16 +1,16 @@
 # Zernio Integration — Quantor Publish & Engagement Hub
 
 The single Zernio integration layer for the Quantor ecosystem. It lives
-inside the ChalybClip backend and is consumed three ways:
+inside the ChalyClip backend and is consumed three ways:
 
-- **ChalybClip** — the Publish Center dashboard (streamers, direct UI).
-- **ChalybOBS** — the Android IRL app; its Auto-Clip Mode publishes via the
+- **ChalyClip** — the Publish Center dashboard (streamers, direct UI).
+- **ChalyOBS** — the Android IRL app; its Auto-Clip Mode publishes via the
   internal API (`/api/internal/v1/*`) and never talks to Zernio directly.
 - **Chalyb** — other ecosystem engines (content generators, ranking)
   use the same internal API + the analytics read.
 
 Zernio is the upstream social API (`https://zernio.com/api/v1`, 14+
-platforms, OAuth on their side). One company-wide API key; each ChalybClip
+platforms, OAuth on their side). One company-wide API key; each ChalyClip
 tenant is one Zernio `profileId`.
 
 ---
@@ -79,7 +79,7 @@ never clip targets).
 ### Outbound event fan-out
 Each processed Zernio event is recorded as a `zernio.<type>` row in the
 `events` table and relayed to the tenant's webhook subscriptions via the
-existing HMAC-signed dispatcher (`X-Chalybclip-Signature`). So ChalybOBS /
+existing HMAC-signed dispatcher (`X-Chalybclip-Signature`). So ChalyOBS /
 Chalyb subscribers receive the relay. Relay bodies carry ids/status
 only — never comment/message text.
 

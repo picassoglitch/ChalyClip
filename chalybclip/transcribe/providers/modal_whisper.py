@@ -14,7 +14,7 @@ Deploy plan:
   3. On Modal side, create the secret the app expects:
         modal secret create chalybclip-modal-token MODAL_BEARER_TOKEN=<same>
 
-Once both sides agree on the bearer token, ChalybClip POSTs the audio
+Once both sides agree on the bearer token, ChalyClip POSTs the audio
 URL + signed token to Modal, Modal pulls + transcribes + returns
 JSON, and the pipeline keeps going.
 """

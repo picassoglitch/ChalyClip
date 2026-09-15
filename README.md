@@ -1,4 +1,4 @@
-## ChalybClip
+## ChalyClip
 
 Multi-tenant SaaS that turns streamer VODs into multi-platform short-form clips.
 

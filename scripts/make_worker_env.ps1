@@ -14,7 +14,7 @@
 
 $ErrorActionPreference = "Stop"
 
-$app = railway variables --service ChalybClip --json | ConvertFrom-Json
+$app = railway variables --service ChalyClip --json | ConvertFrom-Json
 $pg  = railway variables --service Postgres --json | ConvertFrom-Json
 
 # Everything the pipeline needs on the worker side, copied verbatim.

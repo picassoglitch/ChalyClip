@@ -189,7 +189,7 @@ class Settings(BaseSettings):
     internal_signing_secret: str | None = None
 
     # Phase L.1 — RTMP base URL the operator pastes into OBS. This is
-    # the MediaMTX endpoint, NOT the ChalybClip API host. Example:
+    # the MediaMTX endpoint, NOT the ChalyClip API host. Example:
     # `rtmp://live.chalybclip.chalyb.com/live`
     # The dashboard appends the active stream key to this base when
     # displaying the OBS URL. Unset = the live dashboard renders a
@@ -209,7 +209,7 @@ class Settings(BaseSettings):
 
     # Phase L.2 / Path B — object storage the live-ingest service (the
     # separate `chalybclip-live` MediaMTX deployment) uploads recordings to,
-    # and that ChalybClip pulls them from. Vendor-neutral: ANY S3-compatible
+    # and that ChalyClip pulls them from. Vendor-neutral: ANY S3-compatible
     # store works via `endpoint` — Cloudflare R2 (recommended: $0 egress, so
     # the once-per-stream download is free; cheapest for video), Supabase
     # Storage, MinIO, Backblaze B2, AWS S3, … When the bucket is UNSET, live
@@ -431,14 +431,14 @@ class Settings(BaseSettings):
     )
     # Slice NX.3 — outbound URL to Chalyb. Used to push usage events back
     # to the platform after each LLM call. When unset, usage reporting is a
-    # no-op (ChalybClip can run standalone without Chalyb knowing about it).
+    # no-op (ChalyClip can run standalone without Chalyb knowing about it).
     chalyb_base_url: str | None = Field(
         default=None,
         validation_alias="CHALYB_BASE_URL",
     )
     # Token T3 — per-run BASE CHARGE in USD micros. The raw API cost of a
     # run (transcription + occasional Claude) can be near-zero, but each run
-    # consumes the FULL stack we pay for: ChalybClip's Railway compute (ffmpeg
+    # consumes the FULL stack we pay for: ChalyClip's Railway compute (ffmpeg
     # + render + orchestration), storage, bandwidth, AND a fair share of the
     # shared platform — Vercel (Chalyb), Supabase, Resend, the domain, etc.
     # This flat charge — reported as an `engine.base` usage event after every
@@ -457,7 +457,7 @@ class Settings(BaseSettings):
         default=60_000,
         validation_alias="CHALYBCLIP_PIPELINE_BASE_CHARGE_USD_MICROS",
     )
-    # Where ChalybClip is reachable from the public internet. Used as the
+    # Where ChalyClip is reachable from the public internet. Used as the
     # post-SSO landing origin if we ever need to build absolute URLs.
     # Defaults to localhost for dev. Same override pattern.
     public_url: str = Field(
@@ -480,7 +480,7 @@ class Settings(BaseSettings):
     # your own tenant id to see the admin pages back.
     admin_tenant_ids: str = ""
 
-    # Slice O.22 — chalyb is the gatekeeper now. ChalybClip no longer
+    # Slice O.22 — chalyb is the gatekeeper now. ChalyClip no longer
     # serves a token-paste login form. Anyone hitting `/dashboard/login`
     # or any /dashboard/* page without a valid session cookie is bounced
     # to this URL. Production: https://chalyb.com/login. Set blank
@@ -496,7 +496,7 @@ class Settings(BaseSettings):
     # upload-post.com). We hand Zernio a video URL + target accounts,
     # they do the actual OAuth + posting against TikTok / IG / YT / X /
     # LinkedIn / etc. (15 platforms). Multi-tenant via their `profileId`
-    # model — one Zernio profileId per ChalybClip tenant.
+    # model — one Zernio profileId per ChalyClip tenant.
     # ------------------------------------------------------------------
     #
     # zernio_api_key — single company-wide API key from Zernio (a
@@ -521,7 +521,7 @@ class Settings(BaseSettings):
     # ---------- Publish & Engagement Hub (internal service API) ----------
 
     # Service-to-service bearer tokens for /api/internal/v1/* — the
-    # entry point ChalybOBS and Chalyb engines publish through. Format:
+    # entry point ChalyOBS and Chalyb engines publish through. Format:
     # comma-separated `name:token` pairs ("chalybobs:tok_abc,chalyb:tok_x").
     # Env var: CHALYBCLIP_HUB_SERVICE_TOKENS. When unset, the internal
     # publish API returns 503 (no anonymous service access, ever).

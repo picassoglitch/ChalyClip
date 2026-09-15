@@ -1,4 +1,4 @@
-"""FastAPI surface for ChalybClip.
+"""FastAPI surface for ChalyClip.
 
 Phase 1 ships:
     * Bearer-token auth (api_tokens table, sha256-hashed at rest).

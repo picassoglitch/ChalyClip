@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{% if kit %}{{ kit.name }} - Tu estilo{% else %}Nuevo estilo{% endif %} - ChalybClip{% endblock %}
+{% block title %}{% if kit %}{{ kit.name }} - Tu estilo{% else %}Nuevo estilo{% endif %} - ChalyClip{% endblock %}
 {% block content %}
 
 <div class="nc-page-header">
@@ -103,7 +103,7 @@
          "retroactive" from the field labels. #}
       <div class="nc-trigger-help">
         <div class="nc-trigger-help__intro">
-          ChalybClip escucha el audio de tu stream. Cuando lo que dices coincide
+          ChalyClip escucha el audio de tu stream. Cuando lo que dices coincide
           con una de estas frases, saca un clip alrededor de ese momento:
         </div>
         <div class="nc-grid-2 nc-trigger-help__cards">
@@ -211,7 +211,7 @@
     </div>
   </div>
 
-  {#- Slice O.1 — ChalybClip credit toggle.
+  {#- Slice O.1 — ChalyClip credit toggle.
 
       Only PAID tenants can disable the bottom-right "chalybclip.com"
       watermark; free tenants see an info chip explaining the watermark
@@ -222,7 +222,7 @@
   <div class="nc-panel">
     <div class="nc-panel__header">
       <i class="ti ti-license" aria-hidden="true" style="color: var(--nc-lime, #c8ff5c);"></i>
-      <span class="nc-panel__title">Marca ChalybClip</span>
+      <span class="nc-panel__title">Marca ChalyClip</span>
       <small>— el sello "chalybclip.com" abajo a la derecha de tus clips</small>
     </div>
     <div class="nc-panel__body">
@@ -251,7 +251,7 @@
     </div>
   </div>
 
-  {#- ChalybClip end-card outro toggle (migration 050).
+  {#- ChalyClip end-card outro toggle (migration 050).
 
       A short bundled chalybclip end card is appended to every exported
       clip. Free tenants always get it (hidden value=1 + info chip);
@@ -260,15 +260,15 @@
   <div class="nc-panel">
     <div class="nc-panel__header">
       <i class="ti ti-movie" aria-hidden="true" style="color: var(--nc-lime, #c8ff5c);"></i>
-      <span class="nc-panel__title">Cierre ChalybClip</span>
-      <small>— una breve placa final de ChalybClip al terminar cada clip</small>
+      <span class="nc-panel__title">Cierre ChalyClip</span>
+      <small>— una breve placa final de ChalyClip al terminar cada clip</small>
     </div>
     <div class="nc-panel__body">
       {% if _tier == 'free' %}
       <div class="nc-empty" style="margin: 0; padding: 12px 14px; text-align: left;">
         <strong style="color: var(--nc-lime, #c8ff5c);">Plan gratis</strong>
         <span style="color: var(--nc-text-muted);">
-          — la placa final de ChalybClip se añade a todos tus clips.
+          — la placa final de ChalyClip se añade a todos tus clips.
           Pásate a un plan Pro para quitarla.
         </span>
       </div>
@@ -277,7 +277,7 @@
       <label class="nc-checkbox">
         <input type="checkbox" name="show_chalybclip_outro" value="1"
                {% if not kit or kit.show_chalybclip_outro %}checked{% endif %}>
-        <span>Añadir la placa final de ChalybClip a tus clips
+        <span>Añadir la placa final de ChalyClip a tus clips
           <small style="display:block;color:var(--nc-text-muted);">
             Activado por defecto. Apágalo para terminar el clip sin cierre de marca.
           </small>

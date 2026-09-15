@@ -1,4 +1,4 @@
-"""Modal app: the full ChalybClip VOD pipeline on a CPU worker (Phase 2b).
+"""Modal app: the full ChalyClip VOD pipeline on a CPU worker (Phase 2b).
 
 Deploy from the repo root (the image bundles the local `chalybclip/` source
 plus `config/`, so deploy re-runs ship code changes):

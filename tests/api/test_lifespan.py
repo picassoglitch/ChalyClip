@@ -34,7 +34,7 @@ async def test_default_does_not_spin_background_loops(db: Database) -> None:
     """Default `enable_background_drains=False` keeps the lifespan a no-op.
 
     A lingering task at the end would fail this. We assert that hitting
-    `/healthz` works and no ChalybClip-named tasks survive.
+    `/healthz` works and no ChalyClip-named tasks survive.
     """
     app = create_app(db=db)
     transport = httpx.ASGITransport(app=app)

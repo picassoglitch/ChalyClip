@@ -8,7 +8,7 @@ turns that into:
 
 Single source of truth for both the dashboard FAILED list and the
 auto-retry policy (phase 6), and the structured error CODES the
-internal API surfaces to ChalybOBS / Chalyb.
+internal API surfaces to ChalyOBS / Chalyb.
 """
 from __future__ import annotations
 

@@ -1,6 +1,6 @@
-"""Read + write the ChalybOBS↔ChalybClip connection flag (source of truth in
-ChalybOBS). Best-effort: network/config failures return safe defaults so the
-Live page never 500s on a ChalybOBS hiccup."""
+"""Read + write the ChalyOBS↔ChalyClip connection flag (source of truth in
+ChalyOBS). Best-effort: network/config failures return safe defaults so the
+Live page never 500s on a ChalyOBS hiccup."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ def _base() -> str | None:
 
 
 def _secret() -> str | None:
-    # Same shared internal bearer ChalybOBS checks as CHALYBOBS_RELAY_SECRET.
+    # Same shared internal bearer ChalyOBS checks as CHALYBOBS_RELAY_SECRET.
     return (os.environ.get("CHALYBCLIP_INTERNAL_SIGNING_SECRET") or "").strip() or None
 
 
@@ -24,7 +24,7 @@ def is_configured() -> bool:
 
 
 async def get_connection(external_user_id: str) -> bool:
-    """Is the ChalybClip connection on for this tenant? False on any error."""
+    """Is the ChalyClip connection on for this tenant? False on any error."""
     base, secret = _base(), _secret()
     if not (base and secret and external_user_id):
         return False

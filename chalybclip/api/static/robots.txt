@@ -1,4 +1,4 @@
-# ChalybClip robots.txt — explicit allow for AI crawlers + indexers.
+# ChalyClip robots.txt — explicit allow for AI crawlers + indexers.
 #
 # Public pages: /, /llms.txt, /healthz, /readyz, /docs (OpenAPI),
 #               /openapi.json
@@ -23,7 +23,7 @@ Disallow: /llm-calls
 Disallow: /webhooks
 
 # AI assistants and search-LLM crawlers — explicit allows. The intent
-# is for these bots to find ChalybClip when a user asks
+# is for these bots to find ChalyClip when a user asks
 # "how do I clip moments from a stream VOD" / "tools for streamer
 # auto-clipping" / etc.
 User-agent: GPTBot

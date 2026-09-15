@@ -364,7 +364,7 @@ class ZernioClient:
         resulting account shows up scoped to them on GET /accounts.
         `redirect_url` is where Zernio sends the browser AFTER the
         OAuth callback completes — point it at our own /connected page
-        so the operator lands back on ChalybClip instead of Zernio's
+        so the operator lands back on ChalyClip instead of Zernio's
         dashboard (their white-label flow).
         `headless=True` skips Zernio's own post-OAuth selection UI for
         platforms that need one (Facebook page, Pinterest board, …):
@@ -510,7 +510,7 @@ class ZernioClient:
     # page must be picked to finish the connection. With headless=true
     # on connect_url, Zernio's redirect carries the selection state
     # (profileId + tempToken + userProfile) instead of showing its own
-    # picker — these two calls let us render the picker in ChalybClip.
+    # picker — these two calls let us render the picker in ChalyClip.
 
     async def list_facebook_pages(
         self,
@@ -1188,7 +1188,7 @@ class ZernioClient:
         profile_id: str,
         slots: list[dict[str, Any]],
         timezone: str = "UTC",
-        name: str = "ChalybClip Queue",
+        name: str = "ChalyClip Queue",
         reshuffle_existing: bool = False,
     ) -> dict[str, Any]:
         """PUT /queue/slots — create-or-update the profile's DEFAULT

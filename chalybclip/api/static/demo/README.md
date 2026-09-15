@@ -34,7 +34,7 @@ asset — so you can add these one at a time.
 ## ⚠️ Rights / licensing — read before adding faces
 
 These appear on the public, commercial landing page. Using a real,
-identifiable person's image here implies they endorse / use ChalybClip and
+identifiable person's image here implies they endorse / use ChalyClip and
 carries real legal exposure:
 
 - **Right of publicity** — commercial use of someone's likeness needs

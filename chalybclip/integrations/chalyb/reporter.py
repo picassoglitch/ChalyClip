@@ -20,7 +20,7 @@ Called from LLMRouter._log after each successful Claude call. The flow:
 Idempotency: Chalyb's usage_events table has UNIQUE (engine_id, source_id),
 so re-runs are no-ops. We use the llm_calls.id ULID as the source_id.
 
-When CHALYB_BASE_URL is unset (ChalybClip running standalone), the reporter
+When CHALYB_BASE_URL is unset (ChalyClip running standalone), the reporter
 is a complete no-op (logged at INFO level once per call so the operator
 knows why nothing reaches Chalyb). Same when the tenant has no
 external_user_id (CLI-created, never linked).

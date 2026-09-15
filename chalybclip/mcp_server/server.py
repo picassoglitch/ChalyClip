@@ -264,7 +264,7 @@ def build_server(
     scope: str,
     name: str = "chalybclip",
 ) -> FastMCP:
-    """Return a FastMCP server with all ChalybClip tools registered.
+    """Return a FastMCP server with all ChalyClip tools registered.
 
     Tests can build a server, hand-call its registered tools through the
     in-process tool functions exported above, and skip the stdio bridge.

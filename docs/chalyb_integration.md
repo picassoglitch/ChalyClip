@@ -1,10 +1,10 @@
-# ChalybClip ↔ Chalyb integration contract
+# ChalyClip ↔ Chalyb integration contract
 
-This document is the SOURCE OF TRUTH for what ChalybClip must expose so Chalyb
+This document is the SOURCE OF TRUTH for what ChalyClip must expose so Chalyb
 (the operator dashboard at `chalyb.com`) can onboard and launch users into
-ChalybClip seamlessly.
+ChalyClip seamlessly.
 
-**Audience:** whoever is implementing the ChalybClip side. The Chalyb side is
+**Audience:** whoever is implementing the ChalyClip side. The Chalyb side is
 already done and waiting — see `src/lib/engines/integrations/chalybclip.ts` in
 the `chalyb` repo for the calling code.
 
@@ -14,19 +14,19 @@ the `chalyb` repo for the calling code.
 
 1. Chalyb is the **identity authority** — users authenticate there with
    Supabase Auth (Google OAuth + email/password).
-2. When a Chalyb user activates ChalybClip, Chalyb calls ChalybClip's admin API
+2. When a Chalyb user activates ChalyClip, Chalyb calls ChalyClip's admin API
    to **provision a tenant** keyed by the Chalyb user id, and stores the
    returned `tenant_id` + `api_token` in its own database.
-3. When the user clicks "Abrir ChalybClip" in Chalyb, Chalyb redirects to
-   `https://chalybclip.chalyb.com/auth/sso?token=<signed>` — ChalybClip verifies the
+3. When the user clicks "Abrir ChalyClip" in Chalyb, Chalyb redirects to
+   `https://chalybclip.chalyb.com/auth/sso?token=<signed>` — ChalyClip verifies the
    signature, creates its own session cookie, and renders its dashboard.
 
-ChalybClip stays independently deployable. No shared database. No CORS gymnastics.
+ChalyClip stays independently deployable. No shared database. No CORS gymnastics.
 The shared secret (HMAC key) is the only coupling.
 
 ---
 
-## Required env vars on the ChalybClip side
+## Required env vars on the ChalyClip side
 
 ```bash
 # Admin API authentication — Chalyb sends this as Bearer on /api/admin/* calls.
@@ -34,10 +34,10 @@ The shared secret (HMAC key) is the only coupling.
 CHALYB_ADMIN_TOKEN=...
 
 # SSO token signing — must MATCH Chalyb's CHALYBCLIP_SSO_SECRET exactly.
-# Same secret on both sides → ChalybClip can verify what Chalyb signed.
+# Same secret on both sides → ChalyClip can verify what Chalyb signed.
 CHALYB_SSO_SECRET=...
 
-# Where ChalybClip's user dashboard lives — used as the post-SSO redirect target.
+# Where ChalyClip's user dashboard lives — used as the post-SSO redirect target.
 CHALYBCLIP_PUBLIC_URL=https://chalybclip.chalyb.com
 ```
 
@@ -54,7 +54,7 @@ CHALYBCLIP_SSO_SECRET=<same as CHALYB_SSO_SECRET above>
 
 `POST {CHALYBCLIP_PUBLIC_URL}/api/admin/tenants`
 
-Called by Chalyb when a user first activates ChalybClip (PRO live-bot
+Called by Chalyb when a user first activates ChalyClip (PRO live-bot
 selection, ALL_ACCESS seed, admin grant, or paid MP upgrade).
 
 ### Request
@@ -71,10 +71,10 @@ Content-Type: application/json
 }
 ```
 
-- `external_user_id` — the Supabase Auth user id from Chalyb. ChalybClip
+- `external_user_id` — the Supabase Auth user id from Chalyb. ChalyClip
   should treat this as an opaque string and use it as the unique key for
   detecting existing tenants.
-- `email` — for the tenant's primary user record. ChalybClip uses this for
+- `email` — for the tenant's primary user record. ChalyClip uses this for
   notifications, billing receipts, etc.
 - `display_name` — friendly name. Optional fallback to email local-part if
   not provided.
@@ -106,7 +106,7 @@ This makes admin re-grants and webhook retries safe.
 `Authorization` header missing or wrong. Body shape free-form. Chalyb logs
 and stops retrying.
 
-### Implementation notes for ChalybClip
+### Implementation notes for ChalyClip
 
 - `tenant_id` should use the `ten_` ULID prefix per CLAUDE.md rule 7.
 - `api_token` should use the `tok_` ULID prefix per the same rule. Store a
@@ -122,7 +122,7 @@ and stops retrying.
 
 `GET {CHALYBCLIP_PUBLIC_URL}/auth/sso?token=<signed>`
 
-Called when the user clicks "Abrir ChalybClip" in Chalyb. ChalybClip verifies
+Called when the user clicks "Abrir ChalyClip" in Chalyb. ChalyClip verifies
 the signed token, creates its own session cookie, and redirects to the
 dashboard.
 
@@ -142,17 +142,17 @@ a JWT but without the JWT header (we don't need algorithm agility).
 }
 ```
 
-- `user_id` — same Supabase Auth id used during provisioning. ChalybClip uses
+- `user_id` — same Supabase Auth id used during provisioning. ChalyClip uses
   this to look up the tenant.
 - `tenant_id` — the value returned by `/api/admin/tenants`. Chalyb sends
-  it so ChalybClip doesn't need a second lookup before validating.
-- `exp` — Unix seconds, **5 minutes from issue time**. ChalybClip MUST reject
+  it so ChalyClip doesn't need a second lookup before validating.
+- `exp` — Unix seconds, **5 minutes from issue time**. ChalyClip MUST reject
   tokens past expiry.
 
 **Signature:** HMAC-SHA256(`payload_base64url`, `CHALYB_SSO_SECRET`),
 encoded as base64url.
 
-### Verification algorithm (ChalybClip side)
+### Verification algorithm (ChalyClip side)
 
 ```python
 import base64, hmac, hashlib, json, time
@@ -180,7 +180,7 @@ def verify_sso_token(token: str, secret: str) -> dict:
 
 ### Response
 
-- **Valid token** → set ChalybClip session cookie scoped to the tenant from
+- **Valid token** → set ChalyClip session cookie scoped to the tenant from
   payload, redirect to `/dashboard`.
 - **Invalid / expired** → render an error page or redirect to a login
   fallback. Don't expose validation details (don't say "expired" vs
@@ -198,8 +198,8 @@ that don't matter for this two-party trust relationship.
 
 ### Webhook back to Chalyb
 
-When ChalybClip wants to tell Chalyb something (job completed, tenant ran
-out of quota, payment failed inside ChalybClip), POST to:
+When ChalyClip wants to tell Chalyb something (job completed, tenant ran
+out of quota, payment failed inside ChalyClip), POST to:
 
 `https://chalyb.com/api/engines/chalybclip/webhook`
 
@@ -220,8 +220,8 @@ the access record in place so re-upgrades are seamless).
 
 1. Pick a strong shared secret (`openssl rand -base64 48`), put the same
    value in both projects' env files as documented above.
-2. Run ChalybClip locally on `http://localhost:8000` (FastAPI's default).
-3. Override `external_url` and `admin_api_base` on the ChalybClip engines row
+2. Run ChalyClip locally on `http://localhost:8000` (FastAPI's default).
+3. Override `external_url` and `admin_api_base` on the ChalyClip engines row
    in Supabase to point at localhost:
    ```sql
    update engines
@@ -229,11 +229,11 @@ the access record in place so re-upgrades are seamless).
          admin_api_base = 'http://localhost:8000/api/admin'
      where slug = 'chalybclip';
    ```
-4. As a PRO user in Chalyb, click "Activar en vivo" on ChalybClip. Chalyb
+4. As a PRO user in Chalyb, click "Activar en vivo" on ChalyClip. Chalyb
    should POST `localhost:8000/api/admin/tenants` and store the returned
    ids. Check `engine_subscriptions` row in Supabase to verify.
-5. Click "Abrir ChalybClip ↗" — should open a new tab to
-   `localhost:8000/auth/sso?token=...` and land in ChalybClip's dashboard.
+5. Click "Abrir ChalyClip ↗" — should open a new tab to
+   `localhost:8000/auth/sso?token=...` and land in ChalyClip's dashboard.
 
 ---
 
@@ -241,7 +241,7 @@ the access record in place so re-upgrades are seamless).
 
 | What happens | How Chalyb reacts |
 |---|---|
-| ChalybClip is down (network error) | Provisioning silently logs the error, subscription row is kept without external_user_id. Admin can retry. |
+| ChalyClip is down (network error) | Provisioning silently logs the error, subscription row is kept without external_user_id. Admin can retry. |
 | `CHALYBCLIP_ADMIN_TOKEN` missing | Provisioning returns `not_configured`, no row written externally. |
 | 409 duplicate response | Treated as success, returned ids are persisted. |
 | 401/403 from admin endpoint | Logged loudly, no retry (will keep failing). |
@@ -250,12 +250,12 @@ the access record in place so re-upgrades are seamless).
 
 ---
 
-## Checklist for "ChalybClip is onboarded"
+## Checklist for "ChalyClip is onboarded"
 
-- [ ] Both env vars set on ChalybClip side (`CHALYB_ADMIN_TOKEN`, `CHALYB_SSO_SECRET`)
+- [ ] Both env vars set on ChalyClip side (`CHALYB_ADMIN_TOKEN`, `CHALYB_SSO_SECRET`)
 - [ ] Same secrets set on Chalyb side (`CHALYBCLIP_ADMIN_TOKEN`, `CHALYBCLIP_SSO_SECRET`)
 - [ ] `POST /api/admin/tenants` implemented per spec above
 - [ ] `GET /auth/sso?token=...` implemented per spec above
-- [ ] ChalybClip deployed to a public URL (Railway/Fly.io/Render — FastAPI + Python)
+- [ ] ChalyClip deployed to a public URL (Railway/Fly.io/Render — FastAPI + Python)
 - [ ] `engines` row in Chalyb's Supabase has `external_url` and `admin_api_base` pointing at the deployed URL
-- [ ] Smoke test: activate as PRO subscriber → `engine_subscriptions.external_user_id` gets populated → "Abrir ChalybClip" opens a working session
+- [ ] Smoke test: activate as PRO subscriber → `engine_subscriptions.external_user_id` gets populated → "Abrir ChalyClip" opens a working session

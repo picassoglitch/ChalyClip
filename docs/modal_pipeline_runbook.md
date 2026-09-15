@@ -14,7 +14,7 @@ Design + rationale: `docs/phase2_offload_design.md`. Dispatcher contract:
 
 ## 1. Create the worker secret (once)
 
-The worker is a full ChalybClip process minus the web server — it needs the
+The worker is a full ChalyClip process minus the web server — it needs the
 same env Railway has, minus web-only bits. Create ONE Modal secret named
 `chalybclip-pipeline-env` containing:
 

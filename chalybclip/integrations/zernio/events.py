@@ -14,7 +14,7 @@ background task:
      and inbox (phase 9) stores consume them from there.
   3. Fan out: record a `zernio.<type>` row in the events table and
      drain the tenant's webhook subscriptions (existing HMAC-signed
-     dispatcher) so ChalybOBS / Chalyb engines get the relay.
+     dispatcher) so ChalyOBS / Chalyb engines get the relay.
 
 Everything here is idempotent: a redelivery never reaches processing
 (dedup at insert), and a re-run of process_event on an already-

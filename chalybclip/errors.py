@@ -1,4 +1,4 @@
-"""Typed exception hierarchy for ChalybClip.
+"""Typed exception hierarchy for ChalyClip.
 
 Per CLAUDE.md: errors are typed; never catch `Exception` broadly except at
 process boundaries. Each step in the pipeline raises one of these.
@@ -8,7 +8,7 @@ from __future__ import annotations
 
 
 class ChalybClipError(Exception):
-    """Base class for all ChalybClip errors."""
+    """Base class for all ChalyClip errors."""
 
 
 class IngestError(ChalybClipError):

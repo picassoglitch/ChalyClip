@@ -54,7 +54,7 @@ class SsoTokenPayload(BaseModel):
     tier: str | None = Field(default=None, max_length=32)
     # Optional. When Chalyb knows the user's Zernio profileId (it
     # provisions the Zernio profile per user), it includes it here so
-    # ChalybClip auto-links it on login — the streamer never has to paste
+    # ChalyClip auto-links it on login — the streamer never has to paste
     # a profileId into the Publish Center. Back-compat: older tokens
     # without it still validate.
     zernio_profile_id: str | None = Field(default=None, max_length=64)
@@ -115,12 +115,12 @@ def verify_sso_token(
 ) -> SsoTokenPayload:
     """Validate a signed token. Returns the payload or raises SsoTokenError.
 
-    `leeway_seconds` accommodates clock skew between Chalyb and ChalybClip.
+    `leeway_seconds` accommodates clock skew between Chalyb and ChalyClip.
     Default 0 (strict) is fine when both are deployed; bump to 5-10 in
     distributed setups if needed.
     """
     if not secret:
-        raise SsoTokenError("chalyb_sso_secret not configured on this ChalybClip instance")
+        raise SsoTokenError("chalyb_sso_secret not configured on this ChalyClip instance")
     if not token:
         raise SsoTokenError("empty token")
 

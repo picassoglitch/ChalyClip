@@ -1,6 +1,6 @@
 # MCP integration — Claude Code, Cursor, Claude Desktop
 
-The ChalybClip MCP server is a thin translation layer over the REST surface
+The ChalyClip MCP server is a thin translation layer over the REST surface
 (P3 #3). It runs locally over stdio so external agents drive the same
 tenant a human would via the dashboard. This doc shows the config snippet
 to register it with the three most common harnesses. No business logic is

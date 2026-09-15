@@ -34,7 +34,7 @@ _PUBLIC_PATHS: frozenset[str] = frozenset(
         "/docs",
         "/redoc",
         # AI / search-bot discovery surface — always public so crawlers
-        # can find ChalybClip without auth (dashboard.html landing page is
+        # can find ChalyClip without auth (dashboard.html landing page is
         # also public via the "/" entry above).
         "/llms.txt",
         "/robots.txt",

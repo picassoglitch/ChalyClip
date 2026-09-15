@@ -1,6 +1,6 @@
 """Canonical subscription tiers — single source of truth.
 
-ChalybClip recognizes exactly three internal tiers, lowest → highest:
+ChalyClip recognizes exactly three internal tiers, lowest → highest:
 
     free        — ingest + clip + DOWNLOAD (watermarked). No publishing.
     pro         — "mid" tier. Adds the paid perks below the top tier
@@ -13,12 +13,12 @@ side — e.g. it sends `partner` in the SSO token for partner accounts.
 Those are ALIASES of our canonical tiers. Before this module existed
 the alias was silently dropped (the provisioning validator only
 accepted the three canonical names), so a `partner` user landed as
-`free` in ChalybClip — losing every paid perk including the upload-post
+`free` in ChalyClip — losing every paid perk including the upload-post
 profile limit. Centralizing the alias map here means a new label from
 Chalyb is a one-line addition, applied everywhere tier is ingested
 or read.
 
-Rule: normalize at every boundary where a tier ENTERS ChalybClip
+Rule: normalize at every boundary where a tier ENTERS ChalyClip
 (provisioning, SSO sync) and at the request-scoped READ choke point
 (auth middleware). Downstream gates then compare against the
 canonical sets without re-normalizing.

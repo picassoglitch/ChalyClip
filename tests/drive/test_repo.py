@@ -12,12 +12,12 @@ async def test_create_and_get(drive_db: Database) -> None:
     with bound_tenant(t.id):
         watch = await DriveWatchesRepo(drive_db).create(
             folder_id="folder_xyz",
-            folder_name="ChalybClip Inbox",
+            folder_name="ChalyClip Inbox",
             refresh_token="rt-1",
         )
         assert watch.id.startswith("drv_")
         assert watch.folder_id == "folder_xyz"
-        assert watch.folder_name == "ChalybClip Inbox"
+        assert watch.folder_name == "ChalyClip Inbox"
         assert watch.refresh_token == "rt-1"
         assert watch.seen_file_ids == []
         assert watch.enabled is True

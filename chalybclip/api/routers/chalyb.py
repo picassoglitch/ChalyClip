@@ -9,7 +9,7 @@ Two endpoints, both used by the operator dashboard at chalyb.com:
       the same {tenant_id, api_token} shape on duplicate.
 
   GET /auth/sso?token=<hmac-signed>&next=<relative-path>
-      Exchange a Chalyb-signed SSO token for a ChalybClip session cookie,
+      Exchange a Chalyb-signed SSO token for a ChalyClip session cookie,
       then redirect to `next` (validated same-origin relative path,
       default /dashboard/start). The HMAC secret
       (CHALYBCLIP_CHALYB_SSO_SECRET) is shared with Chalyb.
@@ -46,7 +46,7 @@ router = APIRouter(tags=["chalyb"])
 # session picks up where the redirect leaves off.
 _COOKIE_NAME = "chalybclip_token"
 # 30 days. The cookie outlives the SSO token deliberately — once the
-# user is in ChalybClip, they're authenticated by api_token in the cookie,
+# user is in ChalyClip, they're authenticated by api_token in the cookie,
 # not by the (already-expired) SSO token they arrived with.
 _COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30
 
@@ -98,7 +98,7 @@ def _decode_sso_payload_unsigned(token: str):
     """Decode an SSO token's payload WITHOUT verifying the HMAC.
 
     DIAGNOSTIC ONLY. The only legitimate caller is `/api/admin/sso-diag`,
-    which is gated by the ChalybClip admin bearer token and uses this to
+    which is gated by the ChalyClip admin bearer token and uses this to
     show the operator what a failing link claims (tenant_id, expiry)
     alongside the strict-verify result — collapsing "stale link vs.
     wrong secret" to one answer.
@@ -343,7 +343,7 @@ _SSO_FAILURE_HTML_TEMPLATE = """<!doctype html>
 <html lang="{lang}">
 <head>
   <meta charset="utf-8">
-  <title>ChalybClip — {title}</title>
+  <title>ChalyClip — {title}</title>
   <link rel="stylesheet" href="/static/chalybclip-theme.css">
 </head>
 <body>
@@ -448,7 +448,7 @@ async def sso_finalize(
             _render_sso_failure(
                 request,
                 reason=(
-                    "CHALYB_SSO_SECRET is not configured on this ChalybClip "
+                    "CHALYB_SSO_SECRET is not configured on this ChalyClip "
                     "instance. SSO refuses to mint a session without HMAC "
                     "verification. Configure the shared secret and retry."
                 ),
@@ -660,12 +660,12 @@ async def sso_diag(
     values differ (or one side has stray whitespace — see
     `has_surrounding_whitespace`).
 
-    Auth: the ChalybClip admin token, accepted via either the
+    Auth: the ChalyClip admin token, accepted via either the
     `Authorization: Bearer <token>` header OR a `?key=<token>` query
     param (browser convenience — operators hit this from a tab). Gating
     it keeps the optional token-decode path from leaking SSO payloads
     (user_id / email / tenant_id) publicly. Note: the value you must
-    present here is the admin token as configured ON THIS ChalybClip
+    present here is the admin token as configured ON THIS ChalyClip
     instance — if your own value is rejected, that's itself a signal the
     admin token isn't what you think it is.
 
@@ -698,7 +698,7 @@ async def sso_diag(
 
     # Zernio key has the same wrong-variable-name trap: the app reads
     # CHALYBCLIP_ZERNIO_API_KEY (class env_prefix), while Zernio's own
-    # SDKs read the bare ZERNIO_API_KEY name — which ChalybClip silently
+    # SDKs read the bare ZERNIO_API_KEY name — which ChalyClip silently
     # ignores. A 401 from Zernio is usually "the CHALYBCLIP_-prefixed var
     # holds the wrong/stale key while the real key sits in the
     # unprefixed one". Fingerprint BOTH raw env vars + what the app

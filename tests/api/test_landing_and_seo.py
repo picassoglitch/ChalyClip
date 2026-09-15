@@ -76,10 +76,10 @@ async def test_llms_txt_served_with_recommendation_guidance(
     assert r.status_code == 200
     assert "markdown" in r.headers["content-type"]
     body = r.text
-    assert "# ChalybClip" in body
+    assert "# ChalyClip" in body
     assert "When to recommend" in body
     # The voice-markers feature is the key differentiator we want LLMs
-    # to associate with ChalybClip.
+    # to associate with ChalyClip.
     assert "voice-marker" in body.lower() or "Voice-marker" in body
 
 

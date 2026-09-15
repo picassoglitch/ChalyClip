@@ -56,7 +56,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         # LANDING PAGE — OpusClip-style outcome copy
         # ============================================================
         "landing.title_tag": (
-            "ChalybClip — turn one stream into 20+ ready-to-post clips"
+            "ChalyClip — turn one stream into 20+ ready-to-post clips"
         ),
 
         # ---- Hero ---------------------------------------------------
@@ -67,12 +67,12 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "Turn a 4-hour stream into 20+ ready-to-post clips in minutes."
         ),
         "landing.hero.sub_line2": (
-            "ChalybClip finds the best moments, creates hooks, subtitles, "
+            "ChalyClip finds the best moments, creates hooks, subtitles, "
             "captions, hashtags, crops for every platform, and schedules "
             "everything automatically."
         ),
         "landing.hero.tagline_a": "You stream.",
-        "landing.hero.tagline_b": "ChalybClip handles the rest.",
+        "landing.hero.tagline_b": "ChalyClip handles the rest.",
         "landing.hero.cta_primary": "Upload my first stream",
         "landing.hero.cta_primary_micro": "Your first stream, free. No card.",
         "landing.hero.cta_secondary": "Watch demo",
@@ -96,8 +96,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "landing.pain.line4": "Or hundreds of dollars a month in editors.",
         "landing.pain.line5": "Meanwhile the stream is already dead.",
 
-        # ---- "ChalybClip fixes that" ---------------------------------
-        "landing.fix.heading": "ChalybClip fixes that.",
+        # ---- "ChalyClip fixes that" ---------------------------------
+        "landing.fix.heading": "ChalyClip fixes that.",
         "landing.fix.s1": "Upload stream.",
         "landing.fix.s2": "Get clips.",
         "landing.fix.s3": "Publish.",
@@ -125,7 +125,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "landing.math.freelancer_price": "$300 – $1,500 / month",
         "landing.math.agency_label": "Agency",
         "landing.math.agency_price": "$1,000 – $5,000 / month",
-        "landing.math.us_label": "ChalybClip",
+        "landing.math.us_label": "ChalyClip",
         # TODO(operator): replace $__ with the real launch price.
         "landing.math.us_price": "$__ / month",
         "landing.math.us_line1": "A fraction of the cost.",
@@ -156,7 +156,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "landing.results.line2": "The problem isn't talent.",
         "landing.results.line3": "The problem is output.",
         "landing.results.line4": (
-            "ChalybClip turns every stream into a content factory."
+            "ChalyClip turns every stream into a content factory."
         ),
 
         # ---- Feature cards (rewritten) -----------------------------
@@ -167,7 +167,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "Finds your viral moments automatically"
         ),
         "landing.features.viral.body": (
-            "ChalybClip analyzes every second of your stream and identifies "
+            "ChalyClip analyzes every second of your stream and identifies "
             "the clips most likely to perform. No manual reviewing."
         ),
         "landing.features.hook.title": "Never write another title again",
@@ -183,7 +183,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "landing.features.voice.title": "Clip moments instantly",
         "landing.features.voice.body_html": (
             "Say: <code>clip that.</code> "
-            "And ChalybClip remembers it automatically."
+            "And ChalyClip remembers it automatically."
         ),
         "landing.features.brand.title": "Your content always looks on-brand",
         "landing.features.brand.body": (
@@ -212,17 +212,17 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         # ---- FAQ ---------------------------------------------------
         "landing.faq.heading": "Frequently asked",
         "landing.faq.q1": (
-            "How is ChalybClip different from a clip editor?"
+            "How is ChalyClip different from a clip editor?"
         ),
         "landing.faq.a1": (
-            "Editors give you a timeline and trim handles. ChalybClip is "
+            "Editors give you a timeline and trim handles. ChalyClip is "
             "upstream: AI scores every clip on viral potential, generates "
             "the hook, applies the right brand kit, and schedules with an "
             "undo window. Your job shifts from 'find and cut clips' to "
             "'pick the AI's top 3 and let it ship'. The editor's still "
             "there when you need it — most mornings you won't."
         ),
-        "landing.faq.q2": "Who is ChalybClip for?",
+        "landing.faq.q2": "Who is ChalyClip for?",
         "landing.faq.a2": (
             "Streamers who want clips ready by morning. Multi-host "
             "collectives that need per-streamer branding within one VOD. "
@@ -236,14 +236,14 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "Whisper + pyannote comfortably for ~4hr VODs. CPU-only works "
             "for short clips but is much slower."
         ),
-        "landing.faq.q4": "Which LLM does ChalybClip use?",
+        "landing.faq.q4": "Which LLM does ChalyClip use?",
         "landing.faq.a4": (
             "Anthropic Claude exclusively for the live surface. The router "
             "supports adding more providers later without code changes."
         ),
-        "landing.faq.q5": "Can AI agents drive ChalybClip?",
+        "landing.faq.q5": "Can AI agents drive ChalyClip?",
         "landing.faq.a5_html": (
-            "Yes. ChalybClip ships an MCP (Model Context Protocol) server "
+            "Yes. ChalyClip ships an MCP (Model Context Protocol) server "
             "for Claude Code, Cursor, and other LLM clients. Technical "
             "details on <a href=\"/agents\">/agents</a>."
         ),
@@ -315,7 +315,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
         # ---- Footer (4-column layout) ----------------------------
         "landing.foot.tagline": (
-            "ChalybClip · turn one stream into 20+ ready-to-post clips"
+            "ChalyClip · turn one stream into 20+ ready-to-post clips"
         ),
         "landing.foot.brand_blurb": (
             "Turn your streams into viral, ready-to-post clips. "
@@ -333,7 +333,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "landing.foot.platform_shorts": "YouTube Shorts",
         "landing.foot.platform_kick": "Kick · Twitch VODs",
         "landing.foot.copyright": (
-            "© 2026 ChalybClip · Quantor. All rights reserved."
+            "© 2026 ChalyClip · Quantor. All rights reserved."
         ),
         "landing.foot.made": "Built in Chalyb World ◇",
         "landing.foot.link_agents": "For agents / agencies",
@@ -346,7 +346,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         # previous version — already lives on /agents with deep tech).
         # ============================================================
         "agents.title_tag": (
-            "ChalybClip for agencies, integrators and AI agents"
+            "ChalyClip for agencies, integrators and AI agents"
         ),
         "agents.hero.eyebrow": "FOR AGENCIES · AGENTS · INTEGRATORS",
         "agents.hero.h1": (
@@ -355,7 +355,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "agents.hero.sub": (
             "Multimodal signal fan-in, per-speaker diarization, local GPU "
             "transcription, MCP-native control surface, fully-typed REST API. "
-            "Drive ChalybClip from a browser, Claude Code, Cursor, or any "
+            "Drive ChalyClip from a browser, Claude Code, Cursor, or any "
             "MCP-aware client."
         ),
         "agents.hero.cta_docs": "OpenAPI docs",
@@ -400,7 +400,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "Half-human, half-agent operator"
         ),
         "agents.persona.body": (
-            "ChalybClip ships assuming the operator is a hybrid: an agent "
+            "ChalyClip ships assuming the operator is a hybrid: an agent "
             "that drafts the batch overnight, a human that approves it in "
             "30 seconds with morning coffee. The undo window is the trust "
             "boundary between those two halves."
@@ -506,7 +506,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "sso.fail.title": "Invalid session",
         "sso.fail.body": (
             "The link you used to enter is invalid or expired. Go back to "
-            "the Chalyb dashboard and open ChalybClip again."
+            "the Chalyb dashboard and open ChalyClip again."
         ),
         "sso.fail.cta": "Go to Chalyb",
     },
@@ -516,7 +516,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     # ================================================================
     "es": {
         "landing.title_tag": (
-            "ChalybClip — convierte un stream en 20+ clips listos para publicar"
+            "ChalyClip — convierte un stream en 20+ clips listos para publicar"
         ),
 
         # ---- Hero ---------------------------------------------------
@@ -528,12 +528,12 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "publicar, en minutos."
         ),
         "landing.hero.sub_line2": (
-            "ChalybClip encuentra los mejores momentos, crea hooks, "
+            "ChalyClip encuentra los mejores momentos, crea hooks, "
             "subtítulos, captions, hashtags, recorta para cada plataforma, "
             "y agenda todo automáticamente."
         ),
         "landing.hero.tagline_a": "Tú transmites.",
-        "landing.hero.tagline_b": "ChalybClip hace el resto.",
+        "landing.hero.tagline_b": "ChalyClip hace el resto.",
         "landing.hero.cta_primary": "Subir mi primer stream",
         "landing.hero.cta_primary_micro": "Tu primer stream, gratis. Sin tarjeta.",
         "landing.hero.cta_secondary": "Ver demo",
@@ -557,8 +557,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "landing.pain.line4": "O cientos de dólares al mes en editores.",
         "landing.pain.line5": "Mientras tanto el stream ya está muerto.",
 
-        # ---- "ChalybClip fixes that" ---------------------------------
-        "landing.fix.heading": "ChalybClip lo arregla.",
+        # ---- "ChalyClip fixes that" ---------------------------------
+        "landing.fix.heading": "ChalyClip lo arregla.",
         "landing.fix.s1": "Sube el stream.",
         "landing.fix.s2": "Recibe los clips.",
         "landing.fix.s3": "Publica.",
@@ -586,7 +586,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "landing.math.freelancer_price": "$300 – $1.500 / mes",
         "landing.math.agency_label": "Agencia",
         "landing.math.agency_price": "$1.000 – $5.000 / mes",
-        "landing.math.us_label": "ChalybClip",
+        "landing.math.us_label": "ChalyClip",
         # TODO(operator): poner el precio real de launch.
         "landing.math.us_price": "$__ / mes",
         "landing.math.us_line1": "Una fracción del costo.",
@@ -621,7 +621,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "landing.results.line2": "El problema no es el talento.",
         "landing.results.line3": "El problema es el output.",
         "landing.results.line4": (
-            "ChalybClip convierte cada stream en una fábrica de contenido."
+            "ChalyClip convierte cada stream en una fábrica de contenido."
         ),
 
         # ---- Feature cards (rewritten) -----------------------------
@@ -634,7 +634,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "Encuentra tus momentos virales solo"
         ),
         "landing.features.viral.body": (
-            "ChalybClip analiza cada segundo de tu stream e identifica los "
+            "ChalyClip analiza cada segundo de tu stream e identifica los "
             "clips con más chances de pegar. Sin revisar nada a mano."
         ),
         "landing.features.hook.title": "No vuelves a escribir un título",
@@ -650,7 +650,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "landing.features.voice.title": "Clipea momentos al instante",
         "landing.features.voice.body_html": (
             "Di: <code>clipea esto.</code> "
-            "Y ChalybClip lo recuerda automáticamente."
+            "Y ChalyClip lo recuerda automáticamente."
         ),
         "landing.features.brand.title": (
             "Tu contenido siempre se ve on-brand"
@@ -682,17 +682,17 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
         # ---- FAQ ---------------------------------------------------
         "landing.faq.heading": "Preguntas frecuentes",
-        "landing.faq.q1": "¿En qué se diferencia ChalybClip de un editor de clips?",
+        "landing.faq.q1": "¿En qué se diferencia ChalyClip de un editor de clips?",
         "landing.faq.a1": (
             "Los editores te dan una línea de tiempo con manijas para "
-            "recortar. ChalybClip va un paso antes: la IA puntúa cada clip "
+            "recortar. ChalyClip va un paso antes: la IA puntúa cada clip "
             "por potencial viral, genera el hook, aplica el brand kit "
             "correcto y lo programa con ventana para deshacer. Tu trabajo "
             "cambia de \"encontrar y cortar\" a \"elegir el top 3 de la IA "
             "y dejar que se publique\". El editor sigue ahí — pero casi "
             "ninguna mañana lo vas a abrir."
         ),
-        "landing.faq.q2": "¿Para quién es ChalybClip?",
+        "landing.faq.q2": "¿Para quién es ChalyClip?",
         "landing.faq.a2": (
             "Streamers que quieren los clips listos para la mañana. "
             "Colectivos multi-host que necesitan branding por streamer "
@@ -706,14 +706,14 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "Whisper + pyannote cómodamente para VODs de ~4 horas. Solo "
             "con CPU funciona para clips cortos, pero bastante más lento."
         ),
-        "landing.faq.q4": "¿Qué LLM usa ChalybClip?",
+        "landing.faq.q4": "¿Qué LLM usa ChalyClip?",
         "landing.faq.a4": (
             "Anthropic Claude en exclusiva para todo lo que ves en vivo. "
             "El router permite sumar más proveedores sin tocar el código."
         ),
-        "landing.faq.q5": "¿Los agentes de IA pueden manejar ChalybClip?",
+        "landing.faq.q5": "¿Los agentes de IA pueden manejar ChalyClip?",
         "landing.faq.a5_html": (
-            "Sí. ChalybClip incluye un servidor MCP para Claude Code, Cursor "
+            "Sí. ChalyClip incluye un servidor MCP para Claude Code, Cursor "
             "y otros clientes LLM. Detalles técnicos en "
             "<a href=\"/agents\">/agents</a>."
         ),
@@ -787,7 +787,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
         # ---- Footer (4-column layout) ----------------------------
         "landing.foot.tagline": (
-            "ChalybClip · convierte un stream en 20+ clips listos para publicar"
+            "ChalyClip · convierte un stream en 20+ clips listos para publicar"
         ),
         "landing.foot.brand_blurb": (
             "Convierte tus streams en clips virales listos para "
@@ -805,7 +805,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "landing.foot.platform_shorts": "YouTube Shorts",
         "landing.foot.platform_kick": "Kick · Twitch VODs",
         "landing.foot.copyright": (
-            "© 2026 ChalybClip · Quantor. Todos los derechos reservados."
+            "© 2026 ChalyClip · Quantor. Todos los derechos reservados."
         ),
         "landing.foot.made": "Construido en Chalyb World ◇",
         "landing.foot.link_agents": "Para agentes / agencias",
@@ -817,7 +817,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         # /agents PAGE — second door technical (unchanged)
         # ============================================================
         "agents.title_tag": (
-            "ChalybClip para agencias, integradores y agentes de IA"
+            "ChalyClip para agencias, integradores y agentes de IA"
         ),
         "agents.hero.eyebrow": "PARA AGENCIAS · AGENTES · INTEGRADORES",
         "agents.hero.h1": (
@@ -827,7 +827,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "agents.hero.sub": (
             "Fan-in de señales multimodales, diarización por speaker, "
             "transcripción GPU local, surface nativa de MCP, REST API "
-            "tipada de punta a punta. Maneja ChalybClip desde un navegador, "
+            "tipada de punta a punta. Maneja ChalyClip desde un navegador, "
             "desde Claude Code, Cursor, o cualquier cliente compatible con MCP."
         ),
         "agents.hero.cta_docs": "Docs OpenAPI",
@@ -875,7 +875,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
             "Operador: mitad humano, mitad agente"
         ),
         "agents.persona.body": (
-            "ChalybClip se diseñó asumiendo que el operador es híbrido: un "
+            "ChalyClip se diseñó asumiendo que el operador es híbrido: un "
             "agente que arma el batch durante la noche, un humano que "
             "lo aprueba en 30 segundos con el café de la mañana. La "
             "ventana para deshacer es el límite de confianza entre las "
@@ -982,7 +982,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "sso.fail.title": "Sesión inválida",
         "sso.fail.body": (
             "El enlace que usaste para entrar no es válido o ya expiró. "
-            "Vuelve al dashboard de Chalyb y abre ChalybClip de nuevo."
+            "Vuelve al dashboard de Chalyb y abre ChalyClip de nuevo."
         ),
         "sso.fail.cta": "Ir a Chalyb",
     },

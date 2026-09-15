@@ -1,7 +1,7 @@
 """Zernio integration — multi-platform publishing layer.
 
-ChalybClip-the-company holds ONE Zernio API key (a `sk_...` bearer
-secret). Each ChalybClip tenant maps to ONE Zernio `profileId` (their
+ChalyClip-the-company holds ONE Zernio API key (a `sk_...` bearer
+secret). Each ChalyClip tenant maps to ONE Zernio `profileId` (their
 multi-tenant primitive). Tenants connect their TikTok / IG / YT / X /
 LinkedIn etc. accounts via Zernio's hosted OAuth (we mint a per-
 platform `authUrl`); Zernio stores tokens; we never see them, never

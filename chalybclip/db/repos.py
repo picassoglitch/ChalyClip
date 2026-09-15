@@ -748,7 +748,7 @@ class StreamsRepo:
         """Backfill the real media duration onto a row created without one.
 
         `upsert` is INSERT OR IGNORE, so it never updates a row inserted
-        earlier — e.g. a live stream the ChalybOBS webhook created with
+        earlier — e.g. a live stream the ChalyOBS webhook created with
         duration 0 (the real length isn't known until the recording is
         processed). The pipeline calls this after ffprobe so the streams
         list shows the actual length instead of 0s. Guarded on

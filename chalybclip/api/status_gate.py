@@ -51,10 +51,10 @@ def require_active_tenant(request: Request) -> None:
             detail={
                 "reason": "tenant_paused",
                 "message": (
-                    "Tu cuenta ChalybClip está en pausa. Esto pasa cuando "
+                    "Tu cuenta ChalyClip está en pausa. Esto pasa cuando "
                     "activas otro engine (ChalybStream, ChalybTrade, etc.) en "
                     "Chalyb con un plan Pro. Vuelve a Chalyb y selecciona "
-                    "ChalybClip como tu engine en vivo para reanudar."
+                    "ChalyClip como tu engine en vivo para reanudar."
                 ),
             },
         )
@@ -98,7 +98,7 @@ def require_paid_tier(request: Request) -> None:
             "current_tier": tier,
             "message": (
                 "Esta función requiere el plan Pro o All-Access. Puedes "
-                "descargar el clip con la marca de agua de ChalybClip, o subir "
+                "descargar el clip con la marca de agua de ChalyClip, o subir "
                 "tu plan."
             ),
             "upgrade_url": "https://chalyb.com/app/subscription",

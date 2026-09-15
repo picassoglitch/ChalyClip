@@ -10,7 +10,7 @@ Each route renders a standalone HTML page that:
     @font-faces itself.
 
 The first overlay is the Kick repost-page banner — the same brand
-treatment ChalybClip burns into MP4 exports, but as a live HTML layer
+treatment ChalyClip burns into MP4 exports, but as a live HTML layer
 operators can use directly on their OBS scene or in a 3rd-party clip
 viewer that supports browser sources.
 
@@ -23,7 +23,7 @@ USAGE (OBS Browser Source):
 
 Optional query params:
   channelId    user's Kick channel id (drives "KICK.COM/<channelId>")
-  handle       follow-card @handle override (defaults to ChalybClip's
+  handle       follow-card @handle override (defaults to ChalyClip's
                own Kick handle — "reelonkick")
   followLabel  text on the green pill (defaults to "Follow")
   scale        overall scale factor, 0.5–2.0 (defaults to 1.0)
@@ -72,7 +72,7 @@ async def overlay_kick(
     handle: str = Query(
         default=_CHALYBCLIP_DEFAULT_HANDLE,
         description=(
-            "Follow-card @handle. Defaults to ChalybClip's own Kick "
+            "Follow-card @handle. Defaults to ChalyClip's own Kick "
             "handle so the card always reads correctly even when the "
             "operator hasn't set their own."
         ),

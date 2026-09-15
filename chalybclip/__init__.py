@@ -1,4 +1,4 @@
-"""ChalybClip — multi-tenant SaaS for VOD-to-clips pipeline.
+"""ChalyClip — multi-tenant SaaS for VOD-to-clips pipeline.
 
 See README.md for getting started, CLAUDE.md for coding rules,
 docs/chalybclip_spec.md for the full architectural spec, and

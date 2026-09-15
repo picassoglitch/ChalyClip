@@ -108,7 +108,7 @@ def create_app(
         else:
             yield
 
-    app = FastAPI(title="ChalybClip API", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="ChalyClip API", version="0.1.0", lifespan=lifespan)
     app.state.db = db
 
     # Slice F.8 — JobDispatcher abstraction. The legacy
@@ -135,7 +135,7 @@ def create_app(
     if _static_dir.exists():
         app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
 
-    # Public-facing landing — what ChalybClip is, who it's for, how the
+    # Public-facing landing — what ChalyClip is, who it's for, how the
     # loop works. Crawlable by search bots and AI assistants (see
     # /static/llms.txt + /static/robots.txt). Authenticated dashboard
     # is one click away via /dashboard/login.
@@ -257,7 +257,7 @@ def create_app(
     # HMAC on a signed URL; the bearer-cookie middleware skips
     # /api/internal/* (see auth.py allowlist).
     app.include_router(internal_router.router)
-    # Hub phase 3 — service-token publish API for ChalybOBS / Chalyb.
+    # Hub phase 3 — service-token publish API for ChalyOBS / Chalyb.
     # Same /api/internal/ middleware exemption; each route enforces
     # its own bearer check against CHALYBCLIP_HUB_SERVICE_TOKENS.
     app.include_router(internal_publish_router.router)

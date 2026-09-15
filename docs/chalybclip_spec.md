@@ -1,4 +1,4 @@
-# ChalybClip — System Specification (v0.5)
+# ChalyClip — System Specification (v0.5)
 
 **Changes from v0.4:**
 - Vision AI added as a fourth signal class alongside voice / chat / audio

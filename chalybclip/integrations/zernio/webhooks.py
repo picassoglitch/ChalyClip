@@ -80,7 +80,7 @@ def parse_post_event(payload: dict[str, Any]) -> dict[str, Any]:
 
 # Display name of the hub's webhook on Zernio — the idempotency key
 # for register_zernio_webhook (one hub == one webhook config).
-WEBHOOK_NAME: Final = "ChalybClip Hub"
+WEBHOOK_NAME: Final = "ChalyClip Hub"
 
 
 async def register_zernio_webhook(

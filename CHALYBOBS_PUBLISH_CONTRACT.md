@@ -1,8 +1,8 @@
-# ChalybOBS → Hub Publish Contract
+# ChalyOBS → Hub Publish Contract
 
-Standalone spec for the ChalybOBS repo. ChalybOBS Auto-Clip Mode publishes
+Standalone spec for the ChalyOBS repo. ChalyOBS Auto-Clip Mode publishes
 finished clips through the Quantor Publish & Engagement Hub (inside the
-ChalybClip backend). ChalybOBS never talks to Zernio directly — only this
+ChalyClip backend). ChalyOBS never talks to Zernio directly — only this
 internal API, with a service token.
 
 ## Auth
@@ -94,7 +94,7 @@ per-platform results once they land.
   "accounts": [{ "platform": "tiktok", "account_id": "acct_..." }] }
 ```
 
-Call this before offering publish targets in ChalybOBS.
+Call this before offering publish targets in ChalyOBS.
 
 ---
 
@@ -120,7 +120,7 @@ scheduled, failed }`. Per-clip failures don't abort the batch.
 
 ## Event relay (optional, push)
 
-The hub can relay Zernio events to a ChalybOBS webhook (per-tenant
+The hub can relay Zernio events to a ChalyOBS webhook (per-tenant
 subscription) signed with `X-Chalybclip-Signature` (hex HMAC-SHA256 of the
 body). Bodies are `{id, tenant_id, type:"zernio.post.published", payload:
 {post_id, status, …}, ts}` — ids/status only, no user content.

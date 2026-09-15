@@ -9,7 +9,7 @@
 #
 # What this config does:
 #   - Listens for RTMP on :1935
-#   - Validates publishes via webhook to ChalybClip's /api/internal/live/authorize
+#   - Validates publishes via webhook to ChalyClip's /api/internal/live/authorize
 #   - On publish-start, fires /api/internal/live/started
 #   - On publish-end, fires /api/internal/live/ended
 #   - Records every accepted publish to /data/live/<stream_id>/source.mp4
@@ -36,17 +36,17 @@ rtmpAddress: :1935
 ###############################################################################
 # Useful for the operator's status checks but NOT exposed to the public
 # Railway URL — bind to localhost only. Use Railway's private network if
-# you need to scrape from ChalybClip.
+# you need to scrape from ChalyClip.
 api: yes
 apiAddress: 127.0.0.1:9997
 metrics: yes
 metricsAddress: 127.0.0.1:9998
 
 ###############################################################################
-# External authentication — gate every publish through ChalybClip
+# External authentication — gate every publish through ChalyClip
 ###############################################################################
 # MediaMTX POSTs to this URL before accepting any publish. The body
-# includes path / action / ip. ChalybClip extracts the stream key from
+# includes path / action / ip. ChalyClip extracts the stream key from
 # the path, validates against live_stream_keys, returns 200 or 401.
 externalAuthenticationURL: ${CHALYBCLIP_AUTH_URL}
 
@@ -75,7 +75,7 @@ pathDefaults:
 # Webhook hooks for stream lifecycle
 ###############################################################################
 # Fired when the publish handshake succeeds + recording starts.
-# ChalybClip uses this to create the streams row + flip is_live=1.
+# ChalyClip uses this to create the streams row + flip is_live=1.
 hooks:
   - hook: publishReady
     runOnPublishRestart: no
@@ -99,7 +99,7 @@ hooks:
 # Allow any path that matches the live/<stream_key> shape.
 ###############################################################################
 paths:
-  # Regex: live/ followed by a ChalybClip-shaped stream key. Rejects
+  # Regex: live/ followed by a ChalyClip-shaped stream key. Rejects
   # anything else (no random paths land on disk).
   ~^live/slk_[A-Za-z0-9_\-]+$:
     {} # Inherits from pathDefaults.

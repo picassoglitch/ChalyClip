@@ -362,7 +362,7 @@ def _hex_to_ass_color(hex_color: str | None) -> str | None:
 
     Examples:
       `#FFD700` → `&H0000D7FF`  (gold)
-      `#C8FF5C` → `&H005CFFC8`  (ChalybClip lime)
+      `#C8FF5C` → `&H005CFFC8`  (ChalyClip lime)
     """
     if not hex_color:
         return None

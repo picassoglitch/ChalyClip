@@ -8,7 +8,7 @@ system should optimize for attention retention, not template
 correctness."
 
 This module is the single source of truth for those decisions. It
-reads the signals ChalybClip already computes (face_presence,
+reads the signals ChalyClip already computes (face_presence,
 speaking_intensity, reaction_confidence, heuristic_reason from the
 ClipBreakdown; face_zone from the framing verdict; clip duration)
 and emits an `AIDecisions` object. The editor uses it to:

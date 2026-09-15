@@ -84,7 +84,7 @@ def _build_client() -> ZernioClient:
         raise HTTPException(
             status_code=503,
             detail=(
-                "ZERNIO_API_KEY is not configured on this ChalybClip "
+                "ZERNIO_API_KEY is not configured on this ChalyClip "
                 "instance. Add CHALYBCLIP_ZERNIO_API_KEY to Railway env "
                 "and redeploy."
             ),
@@ -463,7 +463,7 @@ async def _publish_clip(
             status_code=503,
             detail=(
                 "CHALYBCLIP_INTERNAL_SIGNING_SECRET is not configured on "
-                "this ChalybClip instance. Add it to Railway env (same "
+                "this ChalyClip instance. Add it to Railway env (same "
                 "secret used for the Modal Whisper audio fetch) and "
                 "redeploy. Zernio needs a signed URL to download your "
                 "clip MP4."
@@ -896,7 +896,7 @@ async def zernio_connect(
     redirect-back parameter — after OAuth it lands the browser on
     Zernio's own dashboard. Navigating our whole tab away would strand
     the operator on Zernio. Opening Zernio in a separate tab keeps the
-    ChalybClip tab alive; when the operator returns to it, the dashboard
+    ChalyClip tab alive; when the operator returns to it, the dashboard
     refreshes and shows the newly connected account.
 
     JSON body: {"platform": "tiktok"}. Requires the tenant's Zernio
@@ -959,7 +959,7 @@ async def zernio_connect(
     # Facebook needs a post-OAuth page selection. headless=true makes
     # Zernio's redirect carry the selection state (tempToken & co)
     # instead of showing Zernio's own picker, and /connected renders
-    # OUR picker — the operator never leaves ChalybClip's UI.
+    # OUR picker — the operator never leaves ChalyClip's UI.
     headless = platform in _HEADLESS_SELECTION_PLATFORMS
     try:
         link = await client.connect_url(
@@ -996,7 +996,7 @@ async def zernio_connect(
 _CONNECTED_CLOSE_HTML = """<!doctype html>
 <html><head><meta charset="utf-8"><title>Cuenta conectada</title></head>
 <body style="font-family:system-ui,sans-serif;padding:24px;color:#333">
-<p>Cuenta conectada ✓ — volviendo a ChalybClip…</p>
+<p>Cuenta conectada ✓ — volviendo a ChalyClip…</p>
 <script>
   var znPlatform = new URLSearchParams(window.location.search).get("platform")
     || new URLSearchParams(window.location.search).get("connected") || "";
@@ -1130,7 +1130,7 @@ async def zernio_connected_landing(request: Request) -> Response:
     popup after the account connects.
 
     Same-origin, so `window.close()` works on the script-opened popup:
-    notify the opener (main ChalybClip tab) via postMessage (with the
+    notify the opener (main ChalyClip tab) via postMessage (with the
     platform, read client-side from the query string), then close. If
     the page was somehow opened as a full navigation (no opener), fall
     back to the dashboard. The operator never sees Zernio's UI.
@@ -3015,7 +3015,7 @@ async def zernio_calendar_json(
 ) -> Response:
     """Unified content calendar: entries from THREE sources merged and
     labeled —
-      - `hub`: clips published through ChalybClip (zernio_publishes)
+      - `hub`: clips published through ChalyClip (zernio_publishes)
       - `scheduled`: hub posts with a future scheduled_for
       - `external`: posts the streamer authored natively, detected via
         post.external.* webhooks (zernio_calendar), resolved to this
@@ -3291,7 +3291,7 @@ async def _reprocess_failed_rows(
         if not row.clip_id or not platforms:
             results.append({
                 "post_id": row.post_id, "ok": False,
-                "error": "no es un clip de ChalybClip reprocesable",
+                "error": "no es un clip de ChalyClip reprocesable",
             })
             continue
         # Re-schedule ONLY to platforms still connected on Zernio. The
@@ -3926,7 +3926,7 @@ async def zernio_disconnect_account(
     db: Database = Depends(get_db),
 ) -> Response:
     """Disconnect ONE connected account on Zernio (DELETE /accounts/{id}),
-    so the operator manages connections without leaving ChalybClip."""
+    so the operator manages connections without leaving ChalyClip."""
     # Ownership gate BEFORE the vendor call: the Zernio API key is
     # company-wide, so DELETE /accounts/{id} would happily disconnect
     # ANOTHER tenant's account. `_account_platform` resolves the id
@@ -3963,7 +3963,7 @@ async def zernio_claim_existing(
     """Bind an EXISTING Zernio profileId to this tenant.
 
     Use case: an operator who already created connections under a
-    specific profileId on Zernio wants ChalybClip to reuse it instead of
+    specific profileId on Zernio wants ChalyClip to reuse it instead of
     deriving a fresh `ten_<ulid>` one. We validate the profileId has at
     least one connected account (so a typo surfaces immediately), then
     persist it on the tenant row.
@@ -4072,9 +4072,9 @@ async def zernio_mark_published(
     """Manually flip an approved clip to 'published' so it leaves the
     ready-to-publish grid.
 
-    For clips that already went out — either published before ChalybClip
+    For clips that already went out — either published before ChalyClip
     started recording publishes locally (pre-migration-030), or posted
-    manually outside ChalybClip. Local state only; nothing is sent to
+    manually outside ChalyClip. Local state only; nothing is sent to
     Zernio. Records a synthetic `manual_<clip_id>` history row so the
     clip shows on the Published tab with the time it was marked.
     """

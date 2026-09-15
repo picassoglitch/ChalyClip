@@ -5,7 +5,7 @@ tenants from a typo'd tier label.
 Background: Chalyb sends `partner` for the top tier. Before
 chalybclip.tiers existed, the provisioning validator + SSO sync only
 accepted {free, pro, all_access} and silently dropped `partner`, so
-a partner tenant landed as `free` in ChalybClip — losing every paid
+a partner tenant landed as `free` in ChalyClip — losing every paid
 perk (including the upload-post profile limit that 403'd the
 operator). These tests pin the alias map + the two normalization
 modes.

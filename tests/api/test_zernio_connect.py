@@ -75,7 +75,7 @@ async def test_dashboard_autoprovisions_profile_so_tabs_appear(
         )
         mock.post(f"{_ZBASE}/profiles").mock(
             return_value=httpx.Response(
-                201, json={"profile": {"_id": "prof_auto", "name": f"ChalybClip {tid}"}}
+                201, json={"profile": {"_id": "prof_auto", "name": f"ChalyClip {tid}"}}
             )
         )
         mock.get(f"{_ZBASE}/accounts").mock(

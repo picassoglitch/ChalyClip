@@ -1,4 +1,4 @@
-"""ChalybClip CLI entry point.
+"""ChalyClip CLI entry point.
 
 Phase 0 commands (see PHASE_0.md):
     chalybclip ingest <vod_url>
@@ -1365,7 +1365,7 @@ def channel_add_cmd(
     ),
     db_path: Path | None = typer.Option(None, "--db-path"),
 ) -> None:
-    """Connect a creator channel so new VODs auto-ingest into ChalybClip."""
+    """Connect a creator channel so new VODs auto-ingest into ChalyClip."""
     from chalybclip.db import ChannelWatchesRepo, TenantsRepo, apply_migrations
     from chalybclip.ingest.service import detect_platform
     from chalybclip.tenancy import bound_tenant

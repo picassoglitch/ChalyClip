@@ -1,4 +1,4 @@
-"""Boot the ChalybClip dashboard locally with auto-drains on.
+"""Boot the ChalyClip dashboard locally with auto-drains on.
 
 Convenience launcher so you can `python run.py` from the project root
 instead of typing the uvicorn factory invocation. Reads `CHALYBCLIP_DB_PATH`
@@ -386,7 +386,7 @@ def _resolve_python_check() -> None:
     """
     if sys.version_info >= (3, 13):
         print(
-            f"ERROR: ChalybClip requires Python 3.11 or 3.12, got {sys.version_info.major}."
+            f"ERROR: ChalyClip requires Python 3.11 or 3.12, got {sys.version_info.major}."
             f"{sys.version_info.minor}.\n"
             f"Activate the venv first:\n"
             f"  PowerShell:  .venv\\Scripts\\Activate.ps1\n"
@@ -590,7 +590,7 @@ async def _boot() -> None:
     await apply_migrations(db)
     app = create_app(db=db, enable_background_drains=True)
 
-    print(f"\nChalybClip dashboard: http://{host}:{port}/dashboard/login\n")
+    print(f"\nChalyClip dashboard: http://{host}:{port}/dashboard/login\n")
     config = uvicorn.Config(app, host=host, port=port, log_level="info")
     await uvicorn.Server(config).serve()
 
@@ -609,7 +609,7 @@ def main() -> None:
     except KeyboardInterrupt:
         # Ctrl+C is the documented way to stop the dev server; exit
         # cleanly so the user doesn't see a scary-looking traceback.
-        print("\nChalybClip dashboard stopped.")
+        print("\nChalyClip dashboard stopped.")
         sys.exit(0)
 
 

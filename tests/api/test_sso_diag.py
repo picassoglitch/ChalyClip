@@ -200,7 +200,7 @@ async def test_sso_diag_token_signed_with_different_secret_fails_bad_sig(
     sso_env: dict[str, str],
 ) -> None:
     """The actual operator scenario: the SSO link was signed by Chalyb
-    with a DIFFERENT secret than ChalybClip loaded. strict_verify must
+    with a DIFFERENT secret than ChalyClip loaded. strict_verify must
     report 'bad signature' — but the payload still decodes (unsigned) so
     the operator sees the tenant_id + that the link itself is well-formed
     and not expired. That distinguishes 'wrong key' from 'stale link'."""

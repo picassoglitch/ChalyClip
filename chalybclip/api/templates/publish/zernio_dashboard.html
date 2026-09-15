@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Centro de publicación - ChalybClip{% endblock %}
+{% block title %}Centro de publicación - ChalyClip{% endblock %}
 {% block content %}
 
 <style>
@@ -1094,7 +1094,7 @@
           </td>
           <td>
             {% if h.kind == "manual" %}
-            <span class="nc-chip nc-chip--muted" title="Lo marcaste como publicado — se subió fuera de ChalybClip o antes de que existiera el historial">manual</span>
+            <span class="nc-chip nc-chip--muted" title="Lo marcaste como publicado — se subió fuera de ChalyClip o antes de que existiera el historial">manual</span>
             {% else %}
               {% for p in h.platforms %}
               <span class="nc-chip nc-chip--code">{{ p }}</span>
@@ -1703,7 +1703,7 @@
         w.document.write(
           "<p style='font-family:system-ui,sans-serif;padding:24px;color:#333'>" +
           "Abriendo la autorización de " + platform + "… puedes cerrar esta ventana " +
-          "cuando termines — ChalybClip se actualiza solo.</p>"
+          "cuando termines — ChalyClip se actualiza solo.</p>"
         );
       } catch (e2) { /* ignore */ }
     }
@@ -1723,7 +1723,7 @@
         if (w) { w.location.href = body.auth_url; }
         else { window.open(body.auth_url, "zernio_connect"); }
         // Poll our backend (~75s); when the account appears, close the
-        // popup + refresh chips so the operator stays on ChalybClip.
+        // popup + refresh chips so the operator stays on ChalyClip.
         znPollUntilConnected(w, platform, 30);
       })
       .catch(function (err) {

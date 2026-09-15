@@ -1,4 +1,4 @@
-"""Internal Publish API tests (Hub phase 3) — the ChalybOBS contract.
+"""Internal Publish API tests (Hub phase 3) — the ChalyOBS contract.
 
 Covers service-token auth, idempotency replay, the mode→payload matrix
 (now/queue/schedule/draft, best-time, per-platform captions, first

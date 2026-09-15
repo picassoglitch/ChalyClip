@@ -1,6 +1,6 @@
 ## Phase 3 - cloud + earned automation (backlog stub)
 
-**Goal:** turn the local single-machine ChalybClip into a deployable
+**Goal:** turn the local single-machine ChalyClip into a deployable
 multi-tenant SaaS, then — *only after* engagement metrics show our scoring
 predicts performance — earn the right to auto-publish high-confidence
 clips at scale.

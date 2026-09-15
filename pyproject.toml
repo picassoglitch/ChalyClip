@@ -58,7 +58,7 @@ dependencies = [
     # Object storage for live-ingest recordings (Phase L.2 / Path B). The
     # `chalybclip-live` MediaMTX service uploads recordings to an S3-compatible
     # bucket (Cloudflare R2 by default — $0 egress, cheapest for video;
-    # Supabase/MinIO/S3 also work) and ChalybClip pulls them with boto3. Only
+    # Supabase/MinIO/S3 also work) and ChalyClip pulls them with boto3. Only
     # used when CHALYBCLIP_LIVE_STORAGE_BUCKET is set; imported lazily so it's
     # not loaded on the shared-disk (Path A) path.
     "boto3>=1.34",

@@ -2,7 +2,7 @@
 
 Wraps the existing `_run_whisper` and `_run_whisper_subprocess` paths
 from `chalybclip.transcribe.service` so behavior is unchanged for
-operators running ChalybClip on their own hardware.
+operators running ChalyClip on their own hardware.
 
 For Stage 1 of the chalyb deployment plan this is what runs both
 locally (dev laptop with RTX 4060) AND on Modal (when wrapped in a

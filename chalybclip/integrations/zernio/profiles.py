@@ -65,7 +65,7 @@ def _auto_profile_name(tenant_id: str) -> str:
     """Deterministic name for an auto-provisioned profile, so the
     ensure step can find-or-create idempotently (survives DB resets and
     concurrent first-loads without duplicating)."""
-    return f"ChalybClip {tenant_id}"
+    return f"ChalyClip {tenant_id}"
 
 
 async def ensure_zernio_profile_for_tenant(
@@ -78,7 +78,7 @@ async def ensure_zernio_profile_for_tenant(
     and return its profileId. Idempotent + safe:
 
       1. tenant already linked → return the stored id (no Zernio call).
-      2. else look for an existing profile named `ChalybClip <tenant_id>`
+      2. else look for an existing profile named `ChalyClip <tenant_id>`
          (a prior auto-create whose local link was lost) → re-link it.
       3. else create one with that deterministic name → link it.
 

@@ -1,6 +1,6 @@
 # Quantor Publish & Engagement Hub — Final Report
 
-13 phases, one commit each, built on the existing ChalybClip Zernio
+13 phases, one commit each, built on the existing ChalyClip Zernio
 integration without breaking what was there.
 
 ## Quality gate (held every phase)
@@ -50,7 +50,7 @@ privacy, YouTube title · see status live via webhooks · retry failures
 no fake zeros) · see a unified calendar (hub + scheduled + native
 posts) · manage comments + DMs of their clips · run comment-to-DM
 funnels with contacts / sequences / broadcasts (Pro) · auto-notify
-their Discord/Telegram community. ChalybOBS publishes end-to-end through
+their Discord/Telegram community. ChalyOBS publishes end-to-end through
 `/api/internal/v1/publish` with only a service token.
 
 ## Migrations added
@@ -71,4 +71,4 @@ growth (Pro) · 11 community · 12 feature flags · 13 docs + hardening.
 - `ZERNIO_INTEGRATION.md` — env, connect flow, webhooks, feature→
   endpoint map, hardening, CLI.
 - `CHALYBOBS_PUBLISH_CONTRACT.md` — standalone internal-API spec for the
-  ChalybOBS repo.
+  ChalyOBS repo.

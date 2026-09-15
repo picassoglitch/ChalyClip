@@ -2,7 +2,7 @@
 
 The live-ingest service (the separate `chalybclip-live` MediaMTX deployment)
 uploads each finished recording to an S3-compatible bucket under
-`<prefix>/<stream_id>/<file>.mp4`. ChalybClip pulls it from there to run the
+`<prefix>/<stream_id>/<file>.mp4`. ChalyClip pulls it from there to run the
 clip pipeline — so the two services share object storage instead of a
 Railway volume, and scale independently.
 

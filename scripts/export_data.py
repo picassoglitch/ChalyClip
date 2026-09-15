@@ -1,4 +1,4 @@
-"""Export ChalybClip's SQLite DB + on-disk artifacts to a folder for external
+"""Export ChalyClip's SQLite DB + on-disk artifacts to a folder for external
 analysis (pandas / Excel / BI tools) or for archival before a schema migration.
 
 Usage:

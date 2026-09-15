@@ -1,5 +1,5 @@
 """StreamsRepo.set_duration — backfill the real length onto a row that
-was created without one (e.g. a live stream the ChalybOBS webhook inserted
+was created without one (e.g. a live stream the ChalyOBS webhook inserted
 with duration 0)."""
 
 from __future__ import annotations

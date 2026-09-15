@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}En vivo · ChalybClip{% endblock %}
+{% block title %}En vivo · ChalyClip{% endblock %}
 {% block content %}
 
 {# Phase L.1 — live dashboard.
@@ -17,23 +17,23 @@
 <div class="nc-page-header">
   <div>
     <h2>En vivo</h2>
-    <small>Transmite con ChalybOBS — multistream + preview. ChalybClip recibe la grabación y genera los clips automáticamente.</small>
+    <small>Transmite con ChalyOBS — multistream + preview. ChalyClip recibe la grabación y genera los clips automáticamente.</small>
   </div>
 </div>
 
-{# Section 1 — ChalybOBS connection. The raw RTMP push lives in ChalybOBS now.
-   The switch below is the SAME connection toggle that lives in ChalybOBS's
+{# Section 1 — ChalyOBS connection. The raw RTMP push lives in ChalyOBS now.
+   The switch below is the SAME connection toggle that lives in ChalyOBS's
    header — flipping it on either side updates the one shared connection.
-   When ON, ChalybOBS forwards each stream's lifecycle here so the live stream
+   When ON, ChalyOBS forwards each stream's lifecycle here so the live stream
    shows below and clips generate when it ends. Full-access only. -#}
 <div class="nc-panel">
   <div class="nc-panel__header">
     <i class="ti ti-broadcast" aria-hidden="true" style="color: var(--nc-blue-bright);"></i>
-    <span class="nc-panel__title">Conexión con ChalybOBS</span>
+    <span class="nc-panel__title">Conexión con ChalyOBS</span>
   </div>
   <div class="nc-panel__body">
     <p style="margin-top: 0; font-size: 13px; line-height: 1.6; color: var(--nc-text);">
-      El streaming vive en <strong>ChalybOBS</strong>: conectas tu encoder (OBS,
+      El streaming vive en <strong>ChalyOBS</strong>: conectas tu encoder (OBS,
       Osmo, teléfono), eliges a qué plataformas multistream y ves el preview en
       vivo. Con esta conexión <strong>activada</strong>, cada stream aparece
       aquí en vivo y se convierte en clips al terminar.
@@ -44,7 +44,7 @@
       <div class="nc-empty__icon"><i class="ti ti-lock" aria-hidden="true"></i></div>
       <div class="nc-empty__title">Requiere Full Access</div>
       <p class="nc-empty__body">
-        La conexión ChalybOBS ↔ ChalybClip es una función de All-Access. Sube tu
+        La conexión ChalyOBS ↔ ChalyClip es una función de All-Access. Sube tu
         plan para activarla.
       </p>
     </div>
@@ -54,7 +54,7 @@
         <input type="hidden" name="enabled" value="{{ '0' if connection_on else '1' }}">
         <button type="submit"
                 aria-pressed="{{ 'true' if connection_on else 'false' }}"
-                title="{{ 'Desconectar de ChalybClip' if connection_on else 'Conectar con ChalybClip' }}"
+                title="{{ 'Desconectar de ChalyClip' if connection_on else 'Conectar con ChalyClip' }}"
                 style="position: relative; display: inline-flex; align-items: center; width: 46px; height: 26px; border: none; border-radius: 999px; cursor: pointer; transition: background .15s; background: {{ 'var(--nc-blue-bright, #4ea1ff)' if connection_on else 'rgba(255,255,255,0.15)' }};">
           <span style="position: absolute; left: {{ '22px' if connection_on else '3px' }}; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: left .15s;"></span>
         </button>
@@ -64,7 +64,7 @@
           {{ 'Conectado — los streams generan clips' if connection_on else 'Desconectado' }}
         </div>
         <div style="font-size: 11px; color: var(--nc-text-muted);">
-          {{ 'ChalybOBS envía cada transmisión a ChalybClip.' if connection_on else 'Actívalo para recibir streams de ChalybOBS aquí.' }}
+          {{ 'ChalyOBS envía cada transmisión a ChalyClip.' if connection_on else 'Actívalo para recibir streams de ChalyOBS aquí.' }}
         </div>
       </div>
     </div>
@@ -72,7 +72,7 @@
     <a href="{{ chalybobs_url }}" target="_blank" rel="noopener noreferrer"
        class="nc-btn nc-btn--primary">
       <i class="ti ti-broadcast" aria-hidden="true"></i>
-      <span>Abrir ChalybOBS →</span>
+      <span>Abrir ChalyOBS →</span>
     </a>
     <small style="display: block; margin-top: 10px; color: var(--nc-text-muted);">
       Misma cuenta de Chalyb World — la sesión se mantiene entre apps.

@@ -1,6 +1,6 @@
 """Google Drive folder watches — voice-markers spec slice E.4.
 
-The automation path: a streamer connects a Drive folder once; ChalybClip
+The automation path: a streamer connects a Drive folder once; ChalyClip
 polls it on a schedule and auto-ingests any new VOD files that land.
 
 Layered like the rest of the codebase:

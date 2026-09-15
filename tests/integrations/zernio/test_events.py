@@ -155,7 +155,7 @@ def _client(http: httpx.AsyncClient) -> ZernioClient:
 
 @pytest.mark.asyncio
 async def test_register_creates_when_absent() -> None:
-    created = {"webhook": {"_id": "wh_1", "name": "ChalybClip Hub"}}
+    created = {"webhook": {"_id": "wh_1", "name": "ChalyClip Hub"}}
     async with httpx.AsyncClient() as http:
         with respx.mock(assert_all_called=True) as mock:
             mock.get(f"{_ZBASE}/webhooks/settings").mock(
@@ -172,7 +172,7 @@ async def test_register_creates_when_absent() -> None:
     assert result["action"] == "created"
     assert result["webhook_id"] == "wh_1"
     payload = json.loads(post.calls.last.request.content.decode())
-    assert payload["name"] == "ChalybClip Hub"
+    assert payload["name"] == "ChalyClip Hub"
     assert payload["url"] == "https://hub.test/api/webhooks/zernio"
     assert payload["secret"] == "whsec_1"
     assert payload["isActive"] is True
@@ -183,7 +183,7 @@ async def test_register_creates_when_absent() -> None:
 async def test_register_updates_in_place_when_present() -> None:
     existing = {
         "webhooks": [
-            {"_id": "wh_9", "name": "ChalybClip Hub",
+            {"_id": "wh_9", "name": "ChalyClip Hub",
              "url": "https://old.test/hook", "isActive": False},
         ]
     }
