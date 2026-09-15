@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from nexoclip.clip.overlay_defaults import default_overlay_config, source_banner
+from chalybclip.clip.overlay_defaults import default_overlay_config, source_banner
 
 
 def test_captions_and_hook_on_by_default() -> None:

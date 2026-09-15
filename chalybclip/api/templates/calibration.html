@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Calibración - ChalybClip{% endblock %}
+{% block content %}
+
+<div class="nc-page-header">
+  <div>
+    <h2>¿Qué tan bien acierta tu IA?</h2>
+    <small>
+      Aquí ves qué tanto coincide la nota que tu IA le pone a un clip con las vistas que de verdad consigue, en los últimos 30 días y por plataforma.
+      El piloto automático no se enciende hasta que tu IA acierte lo suficiente con datos reales.
+    </small>
+  </div>
+</div>
+
+<div hx-get="/dashboard/calibration" hx-trigger="every 5m" hx-swap="none"></div>
+
+<div class="nc-metric-grid">
+  {% for r in reports %}
+  <div class="nc-metric">
+    <div class="nc-metric__label">{{ r.platform }} <small>· n_paired = {{ r.n_paired }}</small></div>
+    {% if r.pearson_r is not none %}
+      <div class="nc-metric__value">r = {{ "%+.3f"|format(r.pearson_r) }}</div>
+      {% if r.pearson_r >= 0.6 %}
+      <div class="nc-metric__sub" style="color: var(--nc-success);">muy bien — tu IA le atina a lo que funciona</div>
+      {% elif r.pearson_r >= 0.3 %}
+      <div class="nc-metric__sub" style="color: var(--nc-warn);">más o menos — falta juntar más datos</div>
+      {% else %}
+      <div class="nc-metric__sub" style="color: var(--nc-danger);">todavía no — tu IA aún no le atina</div>
+      {% endif %}
+    {% else %}
+      <div class="nc-metric__value" style="font-size: 14px; color: var(--nc-text-muted);">aún faltan datos</div>
+      <div class="nc-metric__sub">necesitas al menos 3 clips medidos</div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+{% for r in reports %}
+{% if r.rows %}
+<div class="nc-panel">
+  <div class="nc-panel__header">
+    <i class="ti ti-table" aria-hidden="true" style="color: var(--nc-blue-bright);"></i>
+    <span class="nc-panel__title">{{ r.platform }} — cómo le fue a cada clip</span>
+  </div>
+  <div class="nc-panel__body" style="padding: 0;">
+    <table class="nc-table">
+      <thead>
+        <tr>
+          <th>Clip</th>
+          <th class="nc-num">Nota de tu IA</th>
+          <th class="nc-num">Vistas</th>
+          <th class="nc-num">Likes</th>
+          <th>Última medición</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in r.rows %}
+        <tr>
+          <td><a href="/dashboard/clips/{{ row.clip_id }}" class="nc-mono">{{ row.clip_id }}</a></td>
+          <td class="nc-num nc-mono">{% if row.rescore_score is not none %}{{ "%.3f"|format(row.rescore_score) }}{% else %}—{% endif %}</td>
+          <td class="nc-num nc-mono">{% if row.views is not none %}{{ "{:,}".format(row.views) }}{% else %}—{% endif %}</td>
+          <td class="nc-num nc-mono">{% if row.likes is not none %}{{ "{:,}".format(row.likes) }}{% else %}—{% endif %}</td>
+          <td><span class="nc-mono nc-mono--muted">{% if row.fetched_at %}<span data-localtime="{{ row.fetched_at }}">{{ row.fetched_at[:19] }}</span>{% else %}—{% endif %}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endfor %}
+{% endblock %}

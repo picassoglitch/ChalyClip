@@ -6,9 +6,9 @@ import datetime as _dt
 
 import httpx
 
-from nexoclip.db import Database, LLMCallsRepo
-from nexoclip.db.models import LLMCallRow
-from nexoclip.tenancy import bound_tenant
+from chalybclip.db import Database, LLMCallsRepo
+from chalybclip.db.models import LLMCallRow
+from chalybclip.tenancy import bound_tenant
 
 from .conftest import auth
 

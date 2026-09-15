@@ -33,17 +33,17 @@ import datetime as dt
 import os
 import sys
 
-from nexoclip.clip.overlay_defaults import default_overlay_config
-from nexoclip.db import (
+from chalybclip.clip.overlay_defaults import default_overlay_config
+from chalybclip.db import (
     ClipsRepo,
     Database,
     StreamsRepo,
     VariantsRepo,
     ZernioPublishesRepo,
 )
-from nexoclip.integrations.zernio.client import ZernioClient, ZernioError
-from nexoclip.publish.compose import generate_hook_line
-from nexoclip.tenancy import bound_tenant
+from chalybclip.integrations.zernio.client import ZernioClient, ZernioError
+from chalybclip.publish.compose import generate_hook_line
+from chalybclip.tenancy import bound_tenant
 
 
 def is_degenerate(content: str) -> bool:
@@ -63,8 +63,8 @@ async def main() -> None:
     db = Database(os.environ["DATABASE_URL"])
     await db.connect()
     client = ZernioClient(
-        api_key=os.environ["NEXOCLIP_ZERNIO_API_KEY"],
-        base_url=os.environ.get("NEXOCLIP_ZERNIO_BASE_URL")
+        api_key=os.environ["CHALYBCLIP_ZERNIO_API_KEY"],
+        base_url=os.environ.get("CHALYBCLIP_ZERNIO_BASE_URL")
         or "https://zernio.com/api/v1",
     )
     now_iso = dt.datetime.now(dt.UTC).isoformat()

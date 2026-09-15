@@ -4,7 +4,7 @@
 !.env.example
 
 # Personal config copies (keep examples checked in)
-config/nexoclip.yaml
+config/chalybclip.yaml
 config/personas.yaml
 config/llm.yaml
 config/accounts.yaml
@@ -41,7 +41,7 @@ out/
 demo/
 # ...but the landing hero ships real clip thumbnails from this static
 # folder — keep it tracked despite the broad demo/ scratch rule above.
-!nexoclip/api/static/demo/
+!chalybclip/api/static/demo/
 scratch/
 tmp/
 export/
@@ -57,9 +57,9 @@ export/
 .claude/
 
 # One-time starter archive + the duplicate spec at the repo root
-# (canonical lives at docs/nexoclip_spec.md)
-/nexoclip-starter.zip
-/nexoclip_spec.md
+# (canonical lives at docs/chalybclip_spec.md)
+/chalybclip-starter.zip
+/chalybclip_spec.md
 
 # Models / large binaries
 *.bin
@@ -70,7 +70,7 @@ models/
 # VODs / clips (any video files we accidentally commit)
 *.mp4
 # ...except bundled brand assets that ship with the app (the end-card outro).
-!nexoclip/clip/assets/outro.mp4
+!chalybclip/clip/assets/outro.mp4
 *.mov
 *.mkv
 *.webm

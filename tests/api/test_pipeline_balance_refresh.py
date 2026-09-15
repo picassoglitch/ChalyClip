@@ -12,8 +12,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from nexoclip.api import _pipeline
-from nexoclip.db import Database, apply_migrations
+from chalybclip.api import _pipeline
+from chalybclip.db import Database, apply_migrations
 
 
 def _kickoff(tmp_path: Path) -> SimpleNamespace:
@@ -37,10 +37,10 @@ async def test_default_runner_refreshes_balance_on_success(
         return None
 
     monkeypatch.setattr(
-        "nexoclip.pipeline.process_vod", fake_process_vod, raising=False,
+        "chalybclip.pipeline.process_vod", fake_process_vod, raising=False,
     )
     monkeypatch.setattr(
-        "nexoclip.settings.get_settings", lambda: _stub_settings(tmp_path),
+        "chalybclip.settings.get_settings", lambda: _stub_settings(tmp_path),
     )
     called: list[dict] = []
 
@@ -62,10 +62,10 @@ async def test_default_runner_skips_refresh_on_failure(
         raise RuntimeError("pipeline blew up")
 
     monkeypatch.setattr(
-        "nexoclip.pipeline.process_vod", boom, raising=False,
+        "chalybclip.pipeline.process_vod", boom, raising=False,
     )
     monkeypatch.setattr(
-        "nexoclip.settings.get_settings", lambda: _stub_settings(tmp_path),
+        "chalybclip.settings.get_settings", lambda: _stub_settings(tmp_path),
     )
 
     # Don't hit a real DB on the failure-event path.
@@ -101,7 +101,7 @@ async def test_refresh_helper_calls_fetch_balance(
     await apply_migrations(db)
     await db.close()
     monkeypatch.setattr(
-        "nexoclip.settings.get_settings",
+        "chalybclip.settings.get_settings",
         lambda: SimpleNamespace(db_path=str(tmp_path / "real.db")),
     )
 
@@ -112,7 +112,7 @@ async def test_refresh_helper_calls_fetch_balance(
         return True
 
     monkeypatch.setattr(
-        "nexoclip.integrations.nexo_ai.balance.fetch_balance_now", fake_fetch,
+        "chalybclip.integrations.chalyb.balance.fetch_balance_now", fake_fetch,
     )
 
     await _pipeline._refresh_balance_after_run(
@@ -126,9 +126,9 @@ async def test_base_fee_reported_with_configured_cost(
 ) -> None:
     """Token T3 — a completed run reports a per-run base charge
     (engine.base) at the configured cost, idempotent per stream."""
-    from nexoclip.settings import get_settings
+    from chalybclip.settings import get_settings
 
-    monkeypatch.setenv("NEXOCLIP_PIPELINE_BASE_CHARGE_USD_MICROS", "50000")
+    monkeypatch.setenv("CHALYBCLIP_PIPELINE_BASE_CHARGE_USD_MICROS", "50000")
     get_settings.cache_clear()
 
     db = Database(tmp_path / "b.db")
@@ -140,7 +140,7 @@ async def test_base_fee_reported_with_configured_cost(
         calls.append(dict(kwargs))
 
     monkeypatch.setattr(
-        "nexoclip.integrations.nexo_ai.reporter.report_usage",
+        "chalybclip.integrations.chalyb.reporter.report_usage",
         fake_report_usage,
     )
     try:
@@ -154,7 +154,7 @@ async def test_base_fee_reported_with_configured_cost(
     assert c["kind"] == "engine.base"
     assert c["cost_usd_micros"] == 50_000
     assert c["amount"] == 1
-    assert c["provider"] == "nexoclip"
+    assert c["provider"] == "chalybclip"
     assert c["source_id"] == "base_str_xyz"   # idempotent per stream
     assert c["operation"] == "pipeline_run"
 
@@ -163,9 +163,9 @@ async def test_base_fee_skipped_when_zero(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """Setting the base charge to 0 disables it — no event reported."""
-    from nexoclip.settings import get_settings
+    from chalybclip.settings import get_settings
 
-    monkeypatch.setenv("NEXOCLIP_PIPELINE_BASE_CHARGE_USD_MICROS", "0")
+    monkeypatch.setenv("CHALYBCLIP_PIPELINE_BASE_CHARGE_USD_MICROS", "0")
     get_settings.cache_clear()
 
     db = Database(tmp_path / "b.db")
@@ -177,7 +177,7 @@ async def test_base_fee_skipped_when_zero(
         calls.append(dict(kwargs))
 
     monkeypatch.setattr(
-        "nexoclip.integrations.nexo_ai.reporter.report_usage",
+        "chalybclip.integrations.chalyb.reporter.report_usage",
         fake_report_usage,
     )
     try:
@@ -200,10 +200,10 @@ async def test_refresh_helper_swallows_errors(
     await db.close()
 
     async def boom_fetch(db_arg: object, *, tenant_id: str) -> bool:
-        raise RuntimeError("nexo down")
+        raise RuntimeError("chalyb down")
 
     monkeypatch.setattr(
-        "nexoclip.integrations.nexo_ai.balance.fetch_balance_now", boom_fetch,
+        "chalybclip.integrations.chalyb.balance.fetch_balance_now", boom_fetch,
     )
 
     # Must NOT raise.

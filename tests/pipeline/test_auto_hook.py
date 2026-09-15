@@ -8,8 +8,8 @@ from typing import Any
 
 import pytest
 
-from nexoclip.pipeline import _auto_hook_for_clip
-from nexoclip.variants.hooks import Hook, HookBatch
+from chalybclip.pipeline import _auto_hook_for_clip
+from chalybclip.variants.hooks import Hook, HookBatch
 
 
 class _FakeRouter:

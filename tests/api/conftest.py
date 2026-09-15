@@ -17,20 +17,20 @@ from pathlib import Path
 import httpx
 import pytest_asyncio
 
-from nexoclip.api import create_app
-from nexoclip.db import (
+from chalybclip.api import create_app
+from chalybclip.db import (
     ApiTokensRepo,
     Database,
     TenantsRepo,
 )
-from nexoclip.tenancy import bound_tenant, hash_token, mint_token
+from chalybclip.tenancy import bound_tenant, hash_token, mint_token
 
 from .._db_backend import migrated_database
 
 
 @pytest_asyncio.fixture
 async def db(tmp_path: Path) -> AsyncIterator[Database]:
-    """Migrated DB per test — Postgres when NEXOCLIP_TEST_PG_DSN is set
+    """Migrated DB per test — Postgres when CHALYBCLIP_TEST_PG_DSN is set
     (truncate-isolated), else a fresh SQLite file. The "api.db" name matches
     the db_path some background-task tests hand the renderer."""
     async for d in migrated_database(tmp_path, name="api.db"):

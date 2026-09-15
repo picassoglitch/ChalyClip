@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from nexoclip.clip import encoders
-from nexoclip.config import ClipConfig
+from chalybclip.clip import encoders
+from chalybclip.config import ClipConfig
 
 
 @pytest.fixture(autouse=True)

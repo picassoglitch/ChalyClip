@@ -11,8 +11,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from nexoclip.detect.models import Candidate
-from nexoclip.pipeline import _handsfree_clip_scores
+from chalybclip.detect.models import Candidate
+from chalybclip.pipeline import _handsfree_clip_scores
 
 
 def test_candidate_has_no_id_attr() -> None:

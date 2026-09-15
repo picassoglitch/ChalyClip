@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest_asyncio
 
-from nexoclip.db import Database
+from chalybclip.db import Database
 
 from .._db_backend import migrated_database
 
@@ -34,7 +34,7 @@ async def db(db_path: Path) -> AsyncIterator[Database]:
 
 @pytest_asyncio.fixture
 async def migrated_db(tmp_path: Path) -> AsyncIterator[Database]:
-    """A migrated database — Postgres when NEXOCLIP_TEST_PG_DSN is set, else
+    """A migrated database — Postgres when CHALYBCLIP_TEST_PG_DSN is set, else
     a fresh SQLite file. Repo tests run against the real engine on PG."""
     async for d in migrated_database(tmp_path):
         yield d

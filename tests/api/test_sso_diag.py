@@ -23,8 +23,8 @@ from collections.abc import Iterator
 import httpx
 import pytest
 
-from nexoclip.integrations.nexo_ai.sso import sign_sso_token
-from nexoclip.settings import get_settings
+from chalybclip.integrations.chalyb.sso import sign_sso_token
+from chalybclip.settings import get_settings
 
 _ADMIN = "admintok_correct_value"
 _SECRET = "sso_shared_secret_value"
@@ -40,8 +40,8 @@ def sso_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[dict[str, str]]:
     lru_cache so the handler's get_settings() sees them. Clears the
     cache again on teardown so the test values don't leak into the next
     test."""
-    monkeypatch.setenv("NEXO_AI_ADMIN_TOKEN", _ADMIN)
-    monkeypatch.setenv("NEXO_AI_SSO_SECRET", _SECRET)
+    monkeypatch.setenv("CHALYB_ADMIN_TOKEN", _ADMIN)
+    monkeypatch.setenv("CHALYB_SSO_SECRET", _SECRET)
     get_settings.cache_clear()
     try:
         yield {"admin": _ADMIN, "secret": _SECRET}
@@ -95,7 +95,7 @@ async def test_sso_diag_fingerprint_matches_known_hash(
     sso_env: dict[str, str],
 ) -> None:
     """The reported fingerprint is exactly SHA256(secret)[:12], so the
-    operator can compute the same on the Nexo AI side."""
+    operator can compute the same on the Chalyb side."""
     r = await client.get(f"/api/admin/sso-diag?key={_ADMIN}")
     body = r.json()
     assert body["sso_secret"]["configured"] is True
@@ -114,8 +114,8 @@ async def test_sso_diag_detects_trailing_newline(
     'bad signature') must be flagged: has_surrounding_whitespace True and
     fingerprint != stripped_fingerprint."""
     secret_with_nl = _SECRET + "\n"
-    monkeypatch.setenv("NEXO_AI_ADMIN_TOKEN", _ADMIN)
-    monkeypatch.setenv("NEXO_AI_SSO_SECRET", secret_with_nl)
+    monkeypatch.setenv("CHALYB_ADMIN_TOKEN", _ADMIN)
+    monkeypatch.setenv("CHALYB_SSO_SECRET", secret_with_nl)
     get_settings.cache_clear()
     try:
         r = await client.get(f"/api/admin/sso-diag?key={_ADMIN}")
@@ -142,30 +142,30 @@ async def test_sso_diag_zernio_flags_wrong_variable(
 ) -> None:
     """The classic Zernio 401: the real key is in the bare
     ZERNIO_API_KEY (Zernio's own SDK env name) while the app reads
-    only the NEXOCLIP_-prefixed var. The diag must surface both env
+    only the CHALYBCLIP_-prefixed var. The diag must surface both env
     fingerprints + what the app actually loaded so the operator sees
     the mismatch at a glance."""
     real_key = "real_zernio_key_value"
     stale_key = "stale_or_placeholder_value"
-    monkeypatch.setenv("NEXO_AI_ADMIN_TOKEN", _ADMIN)
-    # App reads the NEXOCLIP_-prefixed var — set it to the STALE value.
-    monkeypatch.setenv("NEXOCLIP_ZERNIO_API_KEY", stale_key)
+    monkeypatch.setenv("CHALYB_ADMIN_TOKEN", _ADMIN)
+    # App reads the CHALYBCLIP_-prefixed var — set it to the STALE value.
+    monkeypatch.setenv("CHALYBCLIP_ZERNIO_API_KEY", stale_key)
     # Operator put the REAL key in the unprefixed var (ignored by app).
     monkeypatch.setenv("ZERNIO_API_KEY", real_key)
     get_settings.cache_clear()
     try:
         r = await client.get(f"/api/admin/sso-diag?key={_ADMIN}")
         zn = r.json()["zernio"]
-        # The app loaded the NEXOCLIP_-prefixed (stale) value.
+        # The app loaded the CHALYBCLIP_-prefixed (stale) value.
         assert zn["loaded_by_app"]["fingerprint"] == _fp(stale_key)
-        assert zn["env_NEXOCLIP_ZERNIO_API_KEY"]["fingerprint"] == _fp(
+        assert zn["env_CHALYBCLIP_ZERNIO_API_KEY"]["fingerprint"] == _fp(
             stale_key
         )
         assert zn["env_ZERNIO_API_KEY"]["fingerprint"] == _fp(real_key)
         # The whole point: the two env vars DISAGREE → operator put the
         # key in the wrong name.
         assert (
-            zn["env_NEXOCLIP_ZERNIO_API_KEY"]["fingerprint"]
+            zn["env_CHALYBCLIP_ZERNIO_API_KEY"]["fingerprint"]
             != zn["env_ZERNIO_API_KEY"]["fingerprint"]
         )
     finally:
@@ -199,8 +199,8 @@ async def test_sso_diag_token_signed_with_different_secret_fails_bad_sig(
     client: httpx.AsyncClient,
     sso_env: dict[str, str],
 ) -> None:
-    """The actual operator scenario: the SSO link was signed by Nexo AI
-    with a DIFFERENT secret than NexoClip loaded. strict_verify must
+    """The actual operator scenario: the SSO link was signed by Chalyb
+    with a DIFFERENT secret than ChalybClip loaded. strict_verify must
     report 'bad signature' — but the payload still decodes (unsigned) so
     the operator sees the tenant_id + that the link itself is well-formed
     and not expired. That distinguishes 'wrong key' from 'stale link'."""

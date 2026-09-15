@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import pytest
 
-from nexoclip.db import (
+from chalybclip.db import (
     ClipsRepo,
     Database,
     ZernioPublishesRepo,
     apply_migrations,
 )
-from nexoclip.publish.reprocess import reprocess_scheduled_queue
-from nexoclip.settings import Settings
-from nexoclip.tenancy import bound_tenant
+from chalybclip.publish.reprocess import reprocess_scheduled_queue
+from chalybclip.settings import Settings
+from chalybclip.tenancy import bound_tenant
 
 
 class _FakeClient:

@@ -1,4 +1,4 @@
-"""Internal Publish API tests (Hub phase 3) — the NexoOBS contract.
+"""Internal Publish API tests (Hub phase 3) — the ChalybOBS contract.
 
 Covers service-token auth, idempotency replay, the mode→payload matrix
 (now/queue/schedule/draft, best-time, per-platform captions, first
@@ -20,21 +20,21 @@ import pytest
 import pytest_asyncio
 import respx
 
-from nexoclip.db import Database, TenantsRepo, ZernioEventsRepo
-from nexoclip.integrations.zernio.events import process_zernio_event
-from nexoclip.settings import get_settings
+from chalybclip.db import Database, TenantsRepo, ZernioEventsRepo
+from chalybclip.integrations.zernio.events import process_zernio_event
+from chalybclip.settings import get_settings
 
 _ZBASE = "https://zernio.com/api/v1"
-_TOKEN_OBS = "tok_hub_nexoobs_1"
+_TOKEN_OBS = "tok_hub_chalybobs_1"
 _MEDIA = "https://cdn.test/clip.mp4"
 
 
 @pytest.fixture
 def hub_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    monkeypatch.setenv("NEXOCLIP_ZERNIO_API_KEY", "sk_test_hub")
+    monkeypatch.setenv("CHALYBCLIP_ZERNIO_API_KEY", "sk_test_hub")
     monkeypatch.setenv(
-        "NEXOCLIP_HUB_SERVICE_TOKENS",
-        f"nexoobs:{_TOKEN_OBS},nexoai:tok_hub_nexoai_1",
+        "CHALYBCLIP_HUB_SERVICE_TOKENS",
+        f"chalybobs:{_TOKEN_OBS},chalyb:tok_hub_chalyb_1",
     )
     get_settings.cache_clear()
     try:
@@ -96,7 +96,7 @@ def _publish_body(tenant_id: str, **overrides: Any) -> dict[str, Any]:
         },
         "targets": ["tiktok", "youtube"],
         "mode": "now",
-        "source": "nexoobs",
+        "source": "chalybobs",
         "idempotency_key": "11111111-1111-1111-1111-111111111111",
     }
     body.update(overrides)
@@ -110,7 +110,7 @@ def _publish_body(tenant_id: str, **overrides: Any) -> dict[str, Any]:
 async def test_no_tokens_configured_is_503(
     client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.delenv("NEXOCLIP_HUB_SERVICE_TOKENS", raising=False)
+    monkeypatch.delenv("CHALYBCLIP_HUB_SERVICE_TOKENS", raising=False)
     get_settings.cache_clear()
     try:
         resp = await client.post(
@@ -566,7 +566,7 @@ async def test_batch_distributes_under_daily_cap(
                 "tenant_id": alice["id"],
                 "clips": clips,
                 "targets": ["tiktok"],
-                "source": "nexoobs",
+                "source": "chalybobs",
                 "idempotency_key": "batch-1",
             },
             headers=_auth(),
@@ -601,7 +601,7 @@ async def test_batch_replay_is_idempotent_per_clip(
             "tenant_id": alice["id"],
             "clips": clips,
             "targets": ["tiktok"],
-            "source": "nexoobs",
+            "source": "chalybobs",
             "idempotency_key": "batch-replay",
         }
         first = await client.post(

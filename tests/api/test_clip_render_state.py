@@ -21,10 +21,10 @@ from pathlib import Path
 import httpx
 import pytest
 
-from nexoclip.api import create_app
-from nexoclip.db import ClipsRepo, Database
-from nexoclip.db.models import ClipRow
-from nexoclip.tenancy import bound_tenant
+from chalybclip.api import create_app
+from chalybclip.db import ClipsRepo, Database
+from chalybclip.db.models import ClipRow
+from chalybclip.tenancy import bound_tenant
 
 from .conftest import auth
 
@@ -89,7 +89,7 @@ async def test_render_status_idle_when_no_cache(
 ) -> None:
     """Fresh clip → state=idle, no download URL, progress=0."""
     monkeypatch.setattr(
-        "nexoclip.settings.get_settings",
+        "chalybclip.settings.get_settings",
         lambda: type("S", (), {
             "default_output_dir": str(tmp_path),
             "db_path": str(tmp_path / "x.db"),
@@ -122,7 +122,7 @@ async def test_render_status_ready_when_cache_on_disk(
     on disk takes precedence over the DB state column. UI gets a
     download_url and renders the "Download MP4" link."""
     monkeypatch.setattr(
-        "nexoclip.settings.get_settings",
+        "chalybclip.settings.get_settings",
         lambda: type("S", (), {
             "default_output_dir": str(tmp_path),
             "db_path": str(tmp_path / "x.db"),
@@ -165,7 +165,7 @@ async def test_download_cache_hit_returns_mp4(
     directly. Same behavior whether DB state column says 'idle' or
     'ready' — disk truth wins."""
     monkeypatch.setattr(
-        "nexoclip.settings.get_settings",
+        "chalybclip.settings.get_settings",
         lambda: type("S", (), {
             "default_output_dir": str(tmp_path),
             "db_path": str(tmp_path / "x.db"),
@@ -205,7 +205,7 @@ async def test_download_idle_state_kicks_off_background_and_returns_202(
     rendered clip flips state to 'rendering' + returns 202 with the
     status_url IMMEDIATELY instead of blocking on Playwright."""
     monkeypatch.setattr(
-        "nexoclip.settings.get_settings",
+        "chalybclip.settings.get_settings",
         lambda: type("S", (), {
             "default_output_dir": str(tmp_path),
             "db_path": str(tmp_path / "x.db"),
@@ -223,7 +223,7 @@ async def test_download_idle_state_kicks_off_background_and_returns_202(
         scheduled.append(kwargs)
 
     monkeypatch.setattr(
-        "nexoclip.api._clip_render.render_clip_in_background", fake_runner,
+        "chalybclip.api._clip_render.render_clip_in_background", fake_runner,
     )
 
     r = await client.get(
@@ -258,7 +258,7 @@ async def test_download_failed_state_returns_409_with_retry_url(
     the error inline + a "Try again" button that POSTs to the retry
     endpoint."""
     monkeypatch.setattr(
-        "nexoclip.settings.get_settings",
+        "chalybclip.settings.get_settings",
         lambda: type("S", (), {
             "default_output_dir": str(tmp_path),
             "db_path": str(tmp_path / "x.db"),
@@ -297,7 +297,7 @@ async def test_render_retry_resets_state(
     """POST /render-retry clears the error + flips state to idle. The
     operator's next Download click kicks off a fresh background task."""
     monkeypatch.setattr(
-        "nexoclip.settings.get_settings",
+        "chalybclip.settings.get_settings",
         lambda: type("S", (), {
             "default_output_dir": str(tmp_path),
             "db_path": str(tmp_path / "x.db"),
@@ -335,7 +335,7 @@ async def test_download_in_flight_returns_202_without_double_dispatch(
     going does NOT spawn a second background task — it just returns
     the current status. Prevents the thundering-herd render storm."""
     monkeypatch.setattr(
-        "nexoclip.settings.get_settings",
+        "chalybclip.settings.get_settings",
         lambda: type("S", (), {
             "default_output_dir": str(tmp_path),
             "db_path": str(tmp_path / "x.db"),
@@ -354,7 +354,7 @@ async def test_download_in_flight_returns_202_without_double_dispatch(
         scheduled.append(kwargs)
 
     monkeypatch.setattr(
-        "nexoclip.api._clip_render.render_clip_in_background", fake_runner,
+        "chalybclip.api._clip_render.render_clip_in_background", fake_runner,
     )
 
     r = await client.get(

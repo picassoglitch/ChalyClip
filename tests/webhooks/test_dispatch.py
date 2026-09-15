@@ -13,21 +13,21 @@ import httpx
 import pytest_asyncio
 import respx
 
-from nexoclip.db import (
+from chalybclip.db import (
     Database,
     EventsRepo,
     TenantsRepo,
     WebhookSubscriptionsRepo,
     apply_migrations,
 )
-from nexoclip.tenancy import bound_tenant
-from nexoclip.webhooks import (
+from chalybclip.tenancy import bound_tenant
+from chalybclip.webhooks import (
     HMAC_HEADER,
     SIGNED_TS_HEADER,
     run_webhook_dispatch,
     sign_payload,
 )
-from nexoclip.webhooks.service import MAX_FAILURES_BEFORE_DISABLE
+from chalybclip.webhooks.service import MAX_FAILURES_BEFORE_DISABLE
 
 
 def _now() -> str:

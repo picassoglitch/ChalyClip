@@ -48,13 +48,13 @@ it doesn't refactor the editor / publish / billing surfaces.
 ```
                   ┌────────────────────────────────────────────┐
                   │   Streamer's OBS / Streamlabs              │
-                  │   RTMP push: rtmp://live.nexoclip.nexo-ai.world/live│
+                  │   RTMP push: rtmp://live.chalybclip.chalyb.com/live│
                   │   /<stream_key>                             │
                   └────────────────────┬───────────────────────┘
                                        │ RTMP
                   ┌────────────────────▼───────────────────────┐
                   │   MediaMTX (Railway sidecar service)       │
-                  │   - Auth via webhook → NexoClip            │
+                  │   - Auth via webhook → ChalybClip            │
                   │   - HLS muxer: 6s segments                 │
                   │   - MP4 recorder: appending file on disk   │
                   │   - Webhooks on publish-start / -end       │
@@ -63,7 +63,7 @@ it doesn't refactor the editor / publish / billing surfaces.
                                        │ + MP4 mirror
                                        │ + webhook events
                   ┌────────────────────▼───────────────────────┐
-                  │   NexoClip live runner (FastAPI + worker)  │
+                  │   ChalybClip live runner (FastAPI + worker)  │
                   │                                            │
                   │   on RTMP start:                           │
                   │     create stream row (is_live=True)       │
@@ -159,12 +159,12 @@ and are NOT affected by the live retention sweep.
 
 ## RTMP authentication
 
-OBS hits `rtmp://live.nexoclip.nexo-ai.world/live/<stream_key>`. MediaMTX is
-configured to POST to NexoClip's auth webhook before accepting:
+OBS hits `rtmp://live.chalybclip.chalyb.com/live/<stream_key>`. MediaMTX is
+configured to POST to ChalybClip's auth webhook before accepting:
 
 ```
 POST /api/internal/live/authorize
-Authorization: Bearer <NEXOCLIP_INTERNAL_SIGNING_SECRET>
+Authorization: Bearer <CHALYBCLIP_INTERNAL_SIGNING_SECRET>
 {
   "stream_key": "slk_01XXXXX",
   "client_ip": "..."
@@ -174,14 +174,14 @@ Authorization: Bearer <NEXOCLIP_INTERNAL_SIGNING_SECRET>
 401     → MediaMTX rejects
 ```
 
-NexoClip looks up the key in `live_stream_keys`, validates it's not
+ChalybClip looks up the key in `live_stream_keys`, validates it's not
 revoked, creates the `streams` row with `is_live=1`, returns the
 `stream_id` MediaMTX should use for the recording path.
 
 ## Pipeline runner — the new piece
 
 This is the only genuinely new long-running process. Lives in
-`nexoclip/live/runner.py` (new module). Started as a background task
+`chalybclip/live/runner.py` (new module). Started as a background task
 when a `live.started` event fires for a stream; stops when
 `live.ended` fires.
 
@@ -228,7 +228,7 @@ On `live.ended`:
 | **Total per live hour** | **~$1.70** |
 
 For the 10 active users currently on the platform doing 2-hour
-streams a few times a week, that's ~$15-30/mo aggregate extra. nexo-ai
+streams a few times a week, that's ~$15-30/mo aggregate extra. chalyb
 charges these to the operator's token balance via the existing usage
 reporter — no new billing code.
 
@@ -256,7 +256,7 @@ Each one only matters once — picking now avoids rework.
 
 4. **Whisper input format**: feed Modal raw HLS .ts segments
    directly (Modal's whisper container handles it) or pre-mux to
-   WAV in NexoClip? **Recommendation**: pre-mux to WAV. .ts is
+   WAV in ChalybClip? **Recommendation**: pre-mux to WAV. .ts is
    container-y; WAV makes Modal's job a pure decode, ~30% faster.
 
 5. **Auto-publish kill-switch**: per-tenant "pause auto-publish
@@ -292,7 +292,7 @@ What works after L.1:
 ### L.2 — Live transcription only (rough size: M)
 
 Deliverables:
-- `nexoclip/live/runner.py` with the tick loop
+- `chalybclip/live/runner.py` with the tick loop
 - Background task that starts on `live.started`, stops on `live.ended`
 - Every 30s: read new segments, Modal Whisper, append transcript
 - Dashboard live page surfaces the rolling transcript so the
@@ -353,7 +353,7 @@ Explicitly NOT covered:
   Whisper, mid-segment transcript stitching. Order of magnitude
   more complex. Defer to a future Phase M.
 - **Multi-camera live mixing** — operator brings a switched feed
-  via OBS, we treat it as one source. If they want NexoClip to do
+  via OBS, we treat it as one source. If they want ChalybClip to do
   the switching, that's a different product.
 - **Live captions burned into the live stream** — that's
   re-streaming territory + extra infra. Out of scope.
@@ -376,5 +376,5 @@ Each slice ships with:
 
 `docker compose up mediamtx` in the repo gives the operator a local
 MediaMTX bound to `rtmp://localhost:1935/live`. OBS can push to it,
-the local NexoClip dev server receives the webhooks the same way
+the local ChalybClip dev server receives the webhooks the same way
 prod would. Reproducing a production bug locally is one command.

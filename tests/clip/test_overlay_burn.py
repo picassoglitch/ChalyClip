@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
-from nexoclip.clip.overlay_burn import (
+from chalybclip.clip.overlay_burn import (
     PLATFORM_COLORS,
     _ass_ts,
     _ff_escape_path,
@@ -22,7 +22,7 @@ from nexoclip.clip.overlay_burn import (
     burn_overlays,
     captions_artifact_for_clip,
 )
-from nexoclip.clip.word_captions import chunk_words_to_lines
+from chalybclip.clip.word_captions import chunk_words_to_lines
 
 # ---- text + color escaping --------------------------------------
 
@@ -502,7 +502,7 @@ def test_burn_overlays_invokes_ffmpeg_with_filter_graph(
         Path(cmd[-1]).write_bytes(b"burned")
         return subprocess.CompletedProcess(args=cmd, returncode=0, stdout=b"", stderr=b"")
 
-    with patch("nexoclip.clip.overlay_burn.subprocess.run", fake_run):
+    with patch("chalybclip.clip.overlay_burn.subprocess.run", fake_run):
         out = burn_overlays(
             source_path=src,
             target_path=target,
@@ -566,7 +566,7 @@ def test_burn_overlays_composites_platform_glyph_via_filter_complex(
             args=cmd, returncode=0, stdout=b"", stderr=b""
         )
 
-    with patch("nexoclip.clip.overlay_burn.subprocess.run", fake_run):
+    with patch("chalybclip.clip.overlay_burn.subprocess.run", fake_run):
         out = burn_overlays(
             source_path=src,
             target_path=target,
@@ -614,7 +614,7 @@ def test_burn_overlays_propagates_ffmpeg_failure(tmp_path: Path) -> None:
         )
 
     with (
-        patch("nexoclip.clip.overlay_burn.subprocess.run", fake_run),
+        patch("chalybclip.clip.overlay_burn.subprocess.run", fake_run),
         pytest.raises(RuntimeError, match="ffmpeg burn failed"),
     ):
         burn_overlays(

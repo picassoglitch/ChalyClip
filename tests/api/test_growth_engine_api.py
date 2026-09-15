@@ -8,16 +8,16 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from nexoclip.db import AutopublishSettingsRepo, Database, PlatformPacingRulesRepo, TenantsRepo
-from nexoclip.integrations.nexo_ai.service import sync_tenant_tier
-from nexoclip.settings import get_settings
+from chalybclip.db import AutopublishSettingsRepo, Database, PlatformPacingRulesRepo, TenantsRepo
+from chalybclip.integrations.chalyb.service import sync_tenant_tier
+from chalybclip.settings import get_settings
 
 from .conftest import auth
 
 
 @pytest.fixture
 def zernio_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    monkeypatch.setenv("NEXOCLIP_ZERNIO_API_KEY", "sk_test_ge")
+    monkeypatch.setenv("CHALYBCLIP_ZERNIO_API_KEY", "sk_test_ge")
     get_settings.cache_clear()
     try:
         yield

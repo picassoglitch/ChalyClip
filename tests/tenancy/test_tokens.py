@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from nexoclip.errors import TenancyError
-from nexoclip.tenancy import hash_token, mint_token, verify_scope
+from chalybclip.errors import TenancyError
+from chalybclip.tenancy import hash_token, mint_token, verify_scope
 
 
 def test_mint_token_returns_raw_and_hash() -> None:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from nexoclip.score.growth import GrowthInput, fallback_card, score_clip
+from chalybclip.score.growth import GrowthInput, fallback_card, score_clip
 
 
 def test_fallback_uses_publishability() -> None:

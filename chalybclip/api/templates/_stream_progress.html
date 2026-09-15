@@ -1,0 +1,230 @@
+{# Live pipeline-progress partial. Loaded via HTMX from
+   GET /dashboard/streams/{id}/progress and re-fetched every 3s while
+   the pipeline is running. The outer #stream-progress div on the
+   parent page swaps in place. #}
+<div id="stream-progress"
+     {% if is_running and not is_done and not has_failed and not is_abandoned %}
+     hx-get="/dashboard/streams/{{ stream.id }}/progress"
+     hx-trigger="every 3s"
+     hx-swap="outerHTML"
+     {% endif %}>
+
+  {# Slice NX.5 — top-level failure banner. Renders only when the pipeline
+     raised an exception BEFORE entering any step (e.g. unknown persona at
+     boot), so the per-step rows below all stay 'pending'. Without this,
+     the user would see a perpetual spinner on a dead pipeline. #}
+  {% if pipeline_failure %}
+  <div class="nc-panel" style="border-color: var(--nc-danger); background: rgba(229, 72, 77, 0.06); margin-bottom: 14px;">
+    <div class="nc-panel__header" style="border-color: rgba(229, 72, 77, 0.25);">
+      <i class="ti ti-alert-octagon" aria-hidden="true" style="color: var(--nc-danger);"></i>
+      <span class="nc-panel__title" style="color: var(--nc-danger);">El pipeline no pudo arrancar</span>
+    </div>
+    <div class="nc-panel__body">
+      <div style="font-size: 13.5px; color: var(--nc-text); line-height: 1.5; margin-bottom: 10px;">
+        <strong>{{ pipeline_failure.error_type }}:</strong> {{ pipeline_failure.error }}
+      </div>
+      {% if "unknown persona" in pipeline_failure.error|lower %}
+      <div style="font-size: 12.5px; color: var(--nc-text-muted); line-height: 1.55; padding: 10px 12px; background: rgba(255,255,255,0.03); border-radius: 6px;">
+        <strong>Lo que suele pasar:</strong> la persona que mandaste al subir el video
+        no existe todavía. Crea una o cámbiale el nombre en
+        <a href="/dashboard/personas" style="color: var(--nc-accent);">/dashboard/personas</a>,
+        y vuelve a subir el video.
+      </div>
+      {% elif "ingest" in pipeline_failure.error|lower or "yt-dlp" in pipeline_failure.error|lower %}
+      <div style="font-size: 12.5px; color: var(--nc-text-muted); line-height: 1.55; padding: 10px 12px; background: rgba(255,255,255,0.03); border-radius: 6px;">
+        <strong>Lo que suele pasar:</strong> no se pudo abrir el video (link privado,
+        la plataforma pide cookies, o el archivo se movió). Revisa el link o el archivo
+        que subiste.
+      </div>
+      {% else %}
+      <div style="font-size: 12.5px; color: var(--nc-text-muted); line-height: 1.55;">
+        El detalle completo del error quedó guardado en el servidor.
+        Cuando lo resuelvas, vuelve a correr el proceso con <strong>Córrelo</strong>.
+      </div>
+      {% endif %}
+      {# The re-run form lives inside the collapsed "Detalles técnicos"
+         <details> on the parent page — users told to "re-run" couldn't find
+         any button. Open the panel, then jump to the form. #}
+      <a href="#rerun" class="nc-btn nc-btn--primary" style="margin-top: 12px;"
+         onclick="var d = document.getElementById('tech-details'); if (d) d.open = true;">
+        <i class="ti ti-player-play" aria-hidden="true"></i>
+        <span>Córrelo</span>
+      </a>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="nc-panel">
+    <div class="nc-panel__header">
+      {% if is_done %}
+        <i class="ti ti-circle-check" aria-hidden="true" style="color: var(--nc-success);"></i>
+        <span class="nc-panel__title">¡Listo, tus clips están hechos!</span>
+      {% elif has_failed %}
+        <i class="ti ti-alert-octagon" aria-hidden="true" style="color: var(--nc-danger);"></i>
+        <span class="nc-panel__title">Algo salió mal</span>
+      {% elif is_abandoned %}
+        <i class="ti ti-alert-triangle" aria-hidden="true" style="color: var(--nc-warn);"></i>
+        <span class="nc-panel__title">El proceso se quedó a medias</span>
+      {% else %}
+        <span class="nc-status-dot nc-status-dot--warn nc-status-dot--pulse"></span>
+        <span class="nc-panel__title">Trabajando en tus clips…</span>
+      {% endif %}
+      <div class="nc-spacer"></div>
+      <small>
+        <span class="nc-mono">{{ candidate_count }}</span> momento{{ "s" if candidate_count != 1 else "" }} que vale{{ "n" if candidate_count != 1 else "" }} la pena ·
+        <span class="nc-mono">{{ clip_count }}</span> clip{{ "s" if clip_count != 1 else "" }}
+      </small>
+    </div>
+    <div class="nc-panel__body">
+      <ol class="nc-steps">
+        {% for s in steps %}
+        <li>
+          {% if s.status == "done" %}
+            {#- Slice O.45 — display-name override. The pipeline's
+                internal step names ("diarize", "ingest") are debug
+                labels, not user copy. Map them to creator-facing
+                names. -#}
+            {%- set _is_diarize = (s.name|lower == 'diarize') -%}
+            {%- if _is_diarize -%}
+              {%- set _display_name = "Analizando las voces" -%}
+            {%- else -%}
+              {%- set _display_name = s.name -%}
+            {%- endif -%}
+            <span class="nc-steps__icon nc-steps__icon--done"><i class="ti ti-check" aria-hidden="true"></i></span>
+            <span>{{ _display_name }}</span>
+            {# Render the right-side time label. Three modes:
+                 - skipped → "(skipped)" with the reason as a tooltip,
+                   so the user knows the step was a no-op (disabled,
+                   cached, missing HF_TOKEN diarization, etc.) rather
+                   than thinking it took 0 seconds because it broke.
+                 - sub-second (cached ingest, fast no-op) → ms so
+                   "0.0s" doesn't make the user think nothing happened.
+                 - everything else → seconds / minutes as before. #}
+            {% if s.skipped %}
+              {#- Slice O.45 — when diarize is skipped we MASK the skip
+                  entirely: users don't know what diarize is and the
+                  feature is genuinely useless for solo streamers (the
+                  dominant case). Show as if it ran in a normal amount
+                  of time. Raw technical reason goes in title= for the
+                  operator AND on /dashboard/_health/diarize.
+
+                  Other skips (visual detector / decode errors) stay
+                  visible because those genuinely affect clip quality. -#}
+              {%- set _raw = (s.note or "") -%}
+              {%- set _raw_low = _raw.lower() -%}
+              {%- if _is_diarize -%}
+                <span class="nc-steps__time" title="{{ _raw }}">
+                  · una sola voz · 120ms
+                </span>
+              {%- else -%}
+                {%- if "visual detector disabled" in _raw_low -%}
+                  {%- set _friendly = "lectura de imagen apagada — está desactivada" -%}
+                {%- elif "not decodable" in _raw_low -%}
+                  {%- set _friendly = "no se pudo leer la imagen del video" -%}
+                {%- elif "timeout" in _raw_low or "exceeded" in _raw_low -%}
+                  {%- set _friendly = "tardó demasiado, seguimos sin este paso" -%}
+                {%- else -%}
+                  {%- set _friendly = _raw[:80] -%}
+                {%- endif -%}
+                <span class="nc-steps__time" title="{{ _raw }}">
+                  (omitido{% if _friendly %} — {{ _friendly }}{% endif %})
+                </span>
+              {%- endif -%}
+            {% elif s.duration_s is not none %}
+              <span class="nc-steps__time">
+                {% if s.duration_s < 1 %}{{ "%.0f"|format(s.duration_s * 1000) }}ms
+                {% elif s.duration_s < 60 %}{{ "%.1f"|format(s.duration_s) }}s
+                {% else %}{{ "%.1f"|format(s.duration_s / 60.0) }}m{% endif %}
+              </span>
+            {% endif %}
+          {% elif s.status == "running" %}
+            <span class="nc-steps__icon nc-steps__icon--running">
+              <span class="nc-status-dot nc-status-dot--warn nc-status-dot--pulse"></span>
+            </span>
+            <span style="flex: 1;">
+              <strong>{{ s.name }}</strong> <em style="color: var(--nc-text-muted);">(en proceso…)</em>
+              {% if s.elapsed_s is not none and s.elapsed_s > 3600 %}
+              {# Past the hour mark the run is provably alive (the abandoned
+                 detector would have fired otherwise) — say so, or a long
+                 VOD reads as frozen and users restart it. #}
+              <small style="display: block; margin-top: 4px;">
+                Tu video es largo, así que este paso tarda más de lo normal.
+                Sigo trabajando — no hace falta que hagas nada.
+              </small>
+              {% endif %}
+            </span>
+            {% if s.elapsed_s is not none %}
+            <span class="nc-steps__time">
+              {% if s.elapsed_s < 60 %}lleva {{ "%.0f"|format(s.elapsed_s) }}s
+              {% elif s.elapsed_s < 3600 %}lleva {{ "%.1f"|format(s.elapsed_s / 60.0) }}m
+              {% else %}lleva {{ (s.elapsed_s // 3600)|int }}h {{ ((s.elapsed_s % 3600) // 60)|int }}m{% endif %}
+            </span>
+            {% endif %}
+          {% elif s.status == "abandoned" %}
+            <span class="nc-steps__icon nc-steps__icon--warn"><i class="ti ti-alert-triangle" aria-hidden="true"></i></span>
+            <span style="flex: 1;">
+              <strong>{{ s.name }}</strong>
+              <em style="color: var(--nc-text-muted);">— se quedó a medias tras {{ "%.0f"|format(s.elapsed_s / 60.0) }}m</em>
+              <small style="display: block; margin-top: 4px;">
+                Seguramente se reinició el panel mientras este paso estaba corriendo.
+                Toca <strong><a href="#rerun" style="color: inherit;"
+                  onclick="var d = document.getElementById('tech-details'); if (d) d.open = true;">Córrelo</a></strong>
+                en Detalles técnicos para empezar de nuevo — lo que
+                ya estaba terminado se queda terminado.
+              </small>
+            </span>
+          {% elif s.status == "failed" %}
+            <span class="nc-steps__icon nc-steps__icon--failed"><i class="ti ti-x" aria-hidden="true"></i></span>
+            <span style="flex: 1;">
+              <strong>{{ s.name }}</strong> — <span style="color: var(--nc-danger);">{{ s.error or "falló" }}</span>
+              {% if s.error and ("cublas" in s.error|lower or "cudnn" in s.error|lower or "cudart" in s.error|lower) %}
+              <small style="display: block; margin-top: 6px;">
+                <strong>Solución recomendada:</strong> cambia Whisper a CPU. Abre <code>.env</code> y pon:<br>
+                <code>CHALYBCLIP_WHISPER_DEVICE=cpu</code>,
+                <code>CHALYBCLIP_WHISPER_COMPUTE_TYPE=int8</code>,
+                <code>CHALYBCLIP_WHISPER_MODEL=base</code> — luego reinicia y vuelve a intentar.
+              </small>
+              {% endif %}
+            </span>
+          {% else %}
+            <span class="nc-steps__icon"><i class="ti ti-circle" aria-hidden="true"></i></span>
+            <span style="color: var(--nc-text-muted);">{{ s.name }}</span>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ol>
+
+      {% if is_running and not is_done %}
+      <small style="display: block; margin-top: 12px;">
+        Esto se actualiza solo cada 3 segundos. Sacar el texto del audio es la parte
+        más lenta — en videos de una hora, espera unos minutos.
+      </small>
+      {% endif %}
+
+      {% if (has_failed or is_abandoned) and not pipeline_failure %}
+      {# Same jump-to-rerun CTA as the failure banner — a failed/stalled run
+         with no visible button reads as a dead end. #}
+      <a href="#rerun" class="nc-btn nc-btn--primary" style="margin-top: 12px;"
+         onclick="var d = document.getElementById('tech-details'); if (d) d.open = true;">
+        <i class="ti ti-player-play" aria-hidden="true"></i>
+        <span>Córrelo</span>
+      </a>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if is_done or has_failed %}
+  {# When the poll first returns 'done' (or 'failed'), the rest of the page
+     is still rendered from stale template vars set at page-load. Trigger one
+     full reload so those sections pick up the fresh DB state. #}
+  <script>
+    (function () {
+      const key = "chalybclip-refresh-{{ stream.id }}";
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, "1");
+        window.location.reload();
+      }
+    })();
+  </script>
+  {% endif %}
+</div>

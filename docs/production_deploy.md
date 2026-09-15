@@ -14,7 +14,7 @@ This file is the contract every intermediate commit gets evaluated against.
 | Area | Today (localhost dev) | Production target | Already ready? |
 |---|---|---|---|
 | HTTP server | uvicorn single-process, port 8000 | uvicorn behind nginx/Caddy + TLS | ✅ uvicorn is prod-grade; just front it |
-| Database | SQLite file at `./nexoclip.db` | Postgres 15+ (managed: Neon/Supabase/RDS) | ⚠️ aiosqlite hardcoded; need driver abstraction |
+| Database | SQLite file at `./chalybclip.db` | Postgres 15+ (managed: Neon/Supabase/RDS) | ⚠️ aiosqlite hardcoded; need driver abstraction |
 | Storage (videos, clips, manifests) | `./out/` local dir | S3 / Cloudflare R2 | ❌ local-FS-only today; needs storage abstraction |
 | Auth | Dashboard cookie + bearer tokens | Same + (eventually) email/password + OAuth | ✅ token model is already multi-tenant |
 | LLM | Anthropic direct, cost-tracked | Same — Anthropic only | ✅ done |
@@ -33,14 +33,14 @@ Every PR / commit lands closer to or further from prod. These rules keep us
 from accidentally adding tech debt that has to be unwound later:
 
 1. **No hardcoded file paths.** Everything that touches disk reads
-   `Settings.default_output_dir` (env: `NEXOCLIP_DEFAULT_OUTPUT_DIR`) or a
+   `Settings.default_output_dir` (env: `CHALYBCLIP_DEFAULT_OUTPUT_DIR`) or a
    tenant-scoped subdir of it. The eventual S3 client will swap in here.
 
 2. **No raw SQL in service code.** Service functions go through repos
-   (`nexoclip.db.repos`). The repos hide aiosqlite vs asyncpg. When we swap
+   (`chalybclip.db.repos`). The repos hide aiosqlite vs asyncpg. When we swap
    drivers, only the repo layer changes.
 
-3. **Secrets via `nexoclip.settings`.** Never `os.getenv` directly in
+3. **Secrets via `chalybclip.settings`.** Never `os.getenv` directly in
    business logic. The Settings class is the abstraction; in production the
    same class reads from environment vars set by the secret store.
 
@@ -79,11 +79,11 @@ serves files directly with `FileResponse`. Production needs:
 
 **Migration path** (not yet executed):
 
-1. Introduce `nexoclip.storage.Storage` protocol: `put(key, data) → url`,
+1. Introduce `chalybclip.storage.Storage` protocol: `put(key, data) → url`,
    `get(key) → bytes`, `presigned_upload(key) → url`.
 2. Implement `LocalStorage` (today's behavior) and `S3Storage` (boto3).
 3. `Settings.storage_backend` picks one. Default `local` in dev, `s3` in
-   prod (env var `NEXOCLIP_STORAGE=s3` + `NEXOCLIP_S3_BUCKET=...`).
+   prod (env var `CHALYBCLIP_STORAGE=s3` + `CHALYBCLIP_S3_BUCKET=...`).
 4. Every place that writes to `out/<stream_id>/` swaps to
    `storage.put(f"streams/{stream_id}/...")`.
 5. Every place that reads switches from `FileResponse(Path)` to
@@ -98,14 +98,14 @@ just before public launch). Until then, keep file paths going through
 SQLite is sufficient through "small SaaS." Postgres becomes mandatory when:
 - N tenants > ~100 with concurrent writes
 - Aurora-style read replicas needed for analytics
-- We want point-in-time-recovery beyond `cp nexoclip.db nexoclip.db.bak`
+- We want point-in-time-recovery beyond `cp chalybclip.db chalybclip.db.bak`
 
 **Migration path:**
 
 1. The repo layer already hides driver specifics. Each repo method uses
    parameter-substituted SQL (`?` placeholders for SQLite, `$1` for asyncpg
    — automatable with a small wrapper).
-2. Add `nexoclip/db/postgres.py` mirroring the aiosqlite path but using
+2. Add `chalybclip/db/postgres.py` mirroring the aiosqlite path but using
    asyncpg.
 3. `Database(path_or_dsn)` decides driver based on scheme: `sqlite:///path`
    or `postgresql://user@host/db`.

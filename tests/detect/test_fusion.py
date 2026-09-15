@@ -7,16 +7,16 @@ from pathlib import Path
 
 import numpy as np
 
-from nexoclip.config import (
+from chalybclip.config import (
     AudioEnergyConfig,
     ChatHeatConfig,
     DetectionConfig,
     VisualConfig,
     VoiceDetectorConfig,
 )
-from nexoclip.detect import detect_candidates
-from nexoclip.ingest import ChatMessage, ChatReplay, Stream
-from nexoclip.vision import VisualSignal, VisualSignalTrack
+from chalybclip.detect import detect_candidates
+from chalybclip.ingest import ChatMessage, ChatReplay, Stream
+from chalybclip.vision import VisualSignal, VisualSignalTrack
 
 from ._fixtures import make_stream, make_transcript
 

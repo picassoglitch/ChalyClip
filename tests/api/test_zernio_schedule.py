@@ -16,9 +16,9 @@ import pytest
 import pytest_asyncio
 import respx
 
-from nexoclip.db import Database, TenantsRepo, ZernioPublishesRepo
-from nexoclip.integrations.nexo_ai.service import sync_tenant_tier
-from nexoclip.settings import get_settings
+from chalybclip.db import Database, TenantsRepo, ZernioPublishesRepo
+from chalybclip.integrations.chalyb.service import sync_tenant_tier
+from chalybclip.settings import get_settings
 
 from .conftest import auth
 
@@ -27,7 +27,7 @@ _ZBASE = "https://zernio.com/api/v1"
 
 @pytest.fixture
 def zernio_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    monkeypatch.setenv("NEXOCLIP_ZERNIO_API_KEY", "sk_test_sched")
+    monkeypatch.setenv("CHALYBCLIP_ZERNIO_API_KEY", "sk_test_sched")
     get_settings.cache_clear()
     try:
         yield
@@ -337,9 +337,9 @@ async def test_cancel_returns_clip_to_approved_pool(
     with no surface able to ever schedule it again."""
     import datetime as _dt
 
-    from nexoclip.db import ClipsRepo, StreamsRepo
-    from nexoclip.db.models import ClipRow, StreamRow
-    from nexoclip.tenancy import bound_tenant
+    from chalybclip.db import ClipsRepo, StreamsRepo
+    from chalybclip.db.models import ClipRow, StreamRow
+    from chalybclip.tenancy import bound_tenant
 
     tid = alice["id"]
     now = _dt.datetime.now(_dt.UTC).isoformat()

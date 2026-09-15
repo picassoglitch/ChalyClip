@@ -11,9 +11,9 @@ from typing import Any
 import httpx
 import pytest
 
-from nexoclip.integrations.modal_http import poll_until_terminal
-from nexoclip.jobs.base import PipelineKickoff
-from nexoclip.workers import create_worker_app
+from chalybclip.integrations.modal_http import poll_until_terminal
+from chalybclip.jobs.base import PipelineKickoff
+from chalybclip.workers import create_worker_app
 
 _TOKEN = "wtok_test"
 
@@ -44,11 +44,11 @@ def _kickoff_body(stream_id: str = "str_w1") -> dict[str, Any]:
 
 @pytest.fixture
 def worker_env(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
-    monkeypatch.setenv("NEXOCLIP_WORKER_TOKEN", _TOKEN)
+    monkeypatch.setenv("CHALYBCLIP_WORKER_TOKEN", _TOKEN)
     monkeypatch.setenv("DATABASE_URL", "postgresql://x/test")
-    monkeypatch.setenv("NEXOCLIP_OBJECT_STORAGE_BUCKET", "bucket")
-    monkeypatch.setenv("NEXOCLIP_DEFAULT_OUTPUT_DIR", str(tmp_path))
-    from nexoclip.settings import get_settings
+    monkeypatch.setenv("CHALYBCLIP_OBJECT_STORAGE_BUCKET", "bucket")
+    monkeypatch.setenv("CHALYBCLIP_DEFAULT_OUTPUT_DIR", str(tmp_path))
+    from chalybclip.settings import get_settings
 
     get_settings.cache_clear()
     yield
@@ -177,7 +177,7 @@ async def test_concurrency_cap_queues_second_job(
 ) -> None:
     """Default cap is 1: a second stream's job waits for the slot instead of
     running concurrently (one GPU — parallel pipelines starve each other)."""
-    monkeypatch.setenv("NEXOCLIP_WORKER_MAX_JOBS", "1")
+    monkeypatch.setenv("CHALYBCLIP_WORKER_MAX_JOBS", "1")
     release = asyncio.Event()
     running: list[str] = []
 
@@ -236,7 +236,7 @@ async def test_preflight_refuses_without_shared_db(
     worker_env: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.delenv("DATABASE_URL", raising=False)
-    monkeypatch.delenv("NEXOCLIP_DATABASE_URL", raising=False)
+    monkeypatch.delenv("CHALYBCLIP_DATABASE_URL", raising=False)
 
     async def runner(kickoff: PipelineKickoff) -> None:  # pragma: no cover
         raise AssertionError("must not run")
@@ -252,16 +252,16 @@ async def test_preflight_refuses_without_shared_db(
 async def test_prefixed_database_url_reaches_settings(
     worker_env: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A worker configured only with NEXOCLIP_DATABASE_URL must end up with
+    """A worker configured only with CHALYBCLIP_DATABASE_URL must end up with
     Settings.database_url set — Settings binds the un-prefixed DATABASE_URL
     alias, and without normalization the run passes preflight yet writes to
     a worker-local SQLite the dashboard never sees."""
     import os
 
-    from nexoclip.settings import get_settings
+    from chalybclip.settings import get_settings
 
     monkeypatch.delenv("DATABASE_URL", raising=False)
-    monkeypatch.setenv("NEXOCLIP_DATABASE_URL", "postgresql://u:p@shared/db")
+    monkeypatch.setenv("CHALYBCLIP_DATABASE_URL", "postgresql://u:p@shared/db")
 
     async def runner(kickoff: PipelineKickoff) -> None:  # pragma: no cover
         raise AssertionError("must not run")

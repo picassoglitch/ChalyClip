@@ -9,9 +9,9 @@ import pytest
 import pytest_asyncio
 import respx
 
-from nexoclip.db import AutopublishSettingsRepo, Database, TenantsRepo
-from nexoclip.integrations.nexo_ai.service import sync_tenant_tier
-from nexoclip.settings import get_settings
+from chalybclip.db import AutopublishSettingsRepo, Database, TenantsRepo
+from chalybclip.integrations.chalyb.service import sync_tenant_tier
+from chalybclip.settings import get_settings
 
 from .conftest import auth
 
@@ -20,7 +20,7 @@ _ZBASE = "https://zernio.com/api/v1"
 
 @pytest.fixture
 def zernio_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    monkeypatch.setenv("NEXOCLIP_ZERNIO_API_KEY", "sk_test_ap")
+    monkeypatch.setenv("CHALYBCLIP_ZERNIO_API_KEY", "sk_test_ap")
     get_settings.cache_clear()
     try:
         yield
@@ -119,7 +119,7 @@ async def test_engine_no_op_when_disabled(
 ) -> None:
     """maybe_autopublish_on_approve returns None (and never raises) when
     auto-publish is off — the common case must not touch Zernio."""
-    from nexoclip.api.routers.zernio import maybe_autopublish_on_approve
+    from chalybclip.api.routers.zernio import maybe_autopublish_on_approve
 
     tid = tenants["alice"]["id"]
     # No settings row at all → disabled by default.
@@ -136,7 +136,7 @@ async def test_handsfree_sweep_no_op_when_disabled(
 ) -> None:
     """The hands-free sweep returns 0 and never raises when auto-publish is
     off — the pipeline calls it unconditionally and must not be affected."""
-    from nexoclip.api.routers.zernio import autopublish_hands_free_sweep
+    from chalybclip.api.routers.zernio import autopublish_hands_free_sweep
 
     n = await autopublish_hands_free_sweep(
         db=db, tenant_id=tenants["alice"]["id"], base_url="https://x.test",
@@ -150,7 +150,7 @@ async def test_handsfree_sweep_no_op_in_on_approve_mode(
     db: Database, tenants: dict[str, dict[str, str]]
 ) -> None:
     """Enabled but mode=on_approve → the hands-free sweep stays out of it."""
-    from nexoclip.api.routers.zernio import autopublish_hands_free_sweep
+    from chalybclip.api.routers.zernio import autopublish_hands_free_sweep
 
     tid = tenants["alice"]["id"]
     await AutopublishSettingsRepo(db).upsert(

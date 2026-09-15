@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from nexoclip.db import Database, apply_migrations, schema_version
-from nexoclip.db.migrations import MigrationError, _discover_migrations
+from chalybclip.db import Database, apply_migrations, schema_version
+from chalybclip.db.migrations import MigrationError, _discover_migrations
 
 from .._db_backend import pg_enabled
 

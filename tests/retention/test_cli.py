@@ -1,4 +1,4 @@
-"""CLI smoke tests for `nexoclip retention sweep` + `tenants set-retention`."""
+"""CLI smoke tests for `chalybclip retention sweep` + `tenants set-retention`."""
 
 from __future__ import annotations
 
@@ -7,15 +7,15 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from nexoclip.cli import app
-from nexoclip.db import (
+from chalybclip.cli import app
+from chalybclip.db import (
     Database,
     StreamsRepo,
     TenantsRepo,
     apply_migrations,
 )
-from nexoclip.db.models import StreamRow
-from nexoclip.tenancy import bound_tenant
+from chalybclip.db.models import StreamRow
+from chalybclip.tenancy import bound_tenant
 
 
 def _seed_aged_stream(db_path: Path, *, tenant_id: str, days_old: int) -> Path:

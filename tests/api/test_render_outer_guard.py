@@ -27,9 +27,9 @@ from pathlib import Path
 
 import pytest
 
-from nexoclip.api._clip_render import render_clip_in_background
-from nexoclip.db import ClipsRepo, Database
-from nexoclip.tenancy import bound_tenant
+from chalybclip.api._clip_render import render_clip_in_background
+from chalybclip.db import ClipsRepo, Database
+from chalybclip.tenancy import bound_tenant
 
 from .._db_backend import pg_enabled
 
@@ -112,14 +112,14 @@ async def test_runner_catches_filenotfound_from_hybrid(
         raise FileNotFoundError("simulated ffmpeg silent-failure stat()")
 
     async def fake_legacy(**kwargs: object) -> None:
-        from nexoclip.clip.preview_recorder import PreviewRecordingError
+        from chalybclip.clip.preview_recorder import PreviewRecordingError
         raise PreviewRecordingError("legacy also failed")
 
     monkeypatch.setattr(
-        "nexoclip.clip.hybrid_recorder.record_clip_hybrid", fake_hybrid,
+        "chalybclip.clip.hybrid_recorder.record_clip_hybrid", fake_hybrid,
     )
     monkeypatch.setattr(
-        "nexoclip.clip.preview_recorder.record_clip_to_mp4", fake_legacy,
+        "chalybclip.clip.preview_recorder.record_clip_to_mp4", fake_legacy,
     )
 
     # Must NOT raise — that was the bug.
@@ -161,14 +161,14 @@ async def test_runner_catches_attributeerror_from_hybrid(
         raise AttributeError("simulated typo somewhere")
 
     async def fake_legacy(**kwargs: object) -> None:
-        from nexoclip.clip.preview_recorder import PreviewRecordingError
+        from chalybclip.clip.preview_recorder import PreviewRecordingError
         raise PreviewRecordingError("legacy also failed")
 
     monkeypatch.setattr(
-        "nexoclip.clip.hybrid_recorder.record_clip_hybrid", fake_hybrid,
+        "chalybclip.clip.hybrid_recorder.record_clip_hybrid", fake_hybrid,
     )
     monkeypatch.setattr(
-        "nexoclip.clip.preview_recorder.record_clip_to_mp4", fake_legacy,
+        "chalybclip.clip.preview_recorder.record_clip_to_mp4", fake_legacy,
     )
 
     await render_clip_in_background(
@@ -216,10 +216,10 @@ async def test_runner_falls_back_to_legacy_on_unexpected_hybrid_crash(
         )
 
     monkeypatch.setattr(
-        "nexoclip.clip.hybrid_recorder.record_clip_hybrid", fake_hybrid,
+        "chalybclip.clip.hybrid_recorder.record_clip_hybrid", fake_hybrid,
     )
     monkeypatch.setattr(
-        "nexoclip.clip.preview_recorder.record_clip_to_mp4", fake_legacy,
+        "chalybclip.clip.preview_recorder.record_clip_to_mp4", fake_legacy,
     )
 
     await render_clip_in_background(

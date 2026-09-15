@@ -11,10 +11,10 @@ import httpx
 import pytest
 import respx
 
-from nexoclip.db import Database, TenantsRepo
-from nexoclip.db.migrations import apply_migrations
-from nexoclip.integrations.zernio import ZernioClient, ZernioError, create_profile_for_tenant
-from nexoclip.tenancy import bound_tenant
+from chalybclip.db import Database, TenantsRepo
+from chalybclip.db.migrations import apply_migrations
+from chalybclip.integrations.zernio import ZernioClient, ZernioError, create_profile_for_tenant
+from chalybclip.tenancy import bound_tenant
 
 _BASE = "https://zernio.com/api/v1"
 

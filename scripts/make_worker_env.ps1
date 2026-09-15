@@ -14,22 +14,22 @@
 
 $ErrorActionPreference = "Stop"
 
-$app = railway variables --service NexoClip --json | ConvertFrom-Json
+$app = railway variables --service ChalybClip --json | ConvertFrom-Json
 $pg  = railway variables --service Postgres --json | ConvertFrom-Json
 
 # Everything the pipeline needs on the worker side, copied verbatim.
 $copyKeys = @(
-    "NEXOCLIP_OBJECT_STORAGE_ACCESS_KEY_ID",
-    "NEXOCLIP_OBJECT_STORAGE_SECRET_ACCESS_KEY",
-    "NEXOCLIP_OBJECT_STORAGE_BUCKET",
-    "NEXOCLIP_OBJECT_STORAGE_ENDPOINT",
-    "NEXOCLIP_OBJECT_STORAGE_REGION",
-    "NEXOCLIP_MODAL_TOKEN",
-    "NEXOCLIP_INTERNAL_SIGNING_SECRET",
-    "NEXOCLIP_ZERNIO_API_KEY",
-    "NEXOCLIP_PUBLIC_URL",
-    "NEXOCLIP_NEXO_AI_BASE_URL",
-    "NEXOCLIP_NEXO_AI_ADMIN_TOKEN"
+    "CHALYBCLIP_OBJECT_STORAGE_ACCESS_KEY_ID",
+    "CHALYBCLIP_OBJECT_STORAGE_SECRET_ACCESS_KEY",
+    "CHALYBCLIP_OBJECT_STORAGE_BUCKET",
+    "CHALYBCLIP_OBJECT_STORAGE_ENDPOINT",
+    "CHALYBCLIP_OBJECT_STORAGE_REGION",
+    "CHALYBCLIP_MODAL_TOKEN",
+    "CHALYBCLIP_INTERNAL_SIGNING_SECRET",
+    "CHALYBCLIP_ZERNIO_API_KEY",
+    "CHALYBCLIP_PUBLIC_URL",
+    "CHALYBCLIP_CHALYB_BASE_URL",
+    "CHALYBCLIP_CHALYB_ADMIN_TOKEN"
 )
 
 $lines = @(
@@ -43,14 +43,14 @@ foreach ($k in $copyKeys) {
 }
 $lines += @(
     "# PC-local settings.",
-    "NEXOCLIP_TRANSCRIBE_PROVIDER=local",
-    "NEXOCLIP_WHISPER_DEVICE=cuda",
+    "CHALYBCLIP_TRANSCRIBE_PROVIDER=local",
+    "CHALYBCLIP_WHISPER_DEVICE=cuda",
     # small+int8 fits alongside the resident Ollama LLM on an 8GB card;
     # medium+float16 (the code default) OOM-crashed the whisper worker.
-    "NEXOCLIP_WHISPER_MODEL=small",
-    "NEXOCLIP_WHISPER_COMPUTE_TYPE=int8_float16",
-    "NEXOCLIP_DEFAULT_OUTPUT_DIR=$env:LOCALAPPDATA\nexoclip-worker\out",
-    "NEXOCLIP_JOB_DISPATCHER=in_process"
+    "CHALYBCLIP_WHISPER_MODEL=small",
+    "CHALYBCLIP_WHISPER_COMPUTE_TYPE=int8_float16",
+    "CHALYBCLIP_DEFAULT_OUTPUT_DIR=$env:LOCALAPPDATA\chalybclip-worker\out",
+    "CHALYBCLIP_JOB_DISPATCHER=in_process"
 )
 
 Set-Content -Path "worker.env" -Value ($lines -join "`n") -Encoding utf8 -NoNewline

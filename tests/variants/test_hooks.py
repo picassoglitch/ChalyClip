@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from nexoclip.llm import LLMRouter
-from nexoclip.llm.config import ProviderConfig
-from nexoclip.variants.hooks import (
+from chalybclip.llm import LLMRouter
+from chalybclip.llm.config import ProviderConfig
+from chalybclip.variants.hooks import (
     HookBatch,
     _user_prompt,
     generate_hooks,

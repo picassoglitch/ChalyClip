@@ -8,8 +8,8 @@ from typing import Any
 
 import pytest
 
-from nexoclip.ingest import ingest_vod
-from nexoclip.ingest import service as ingest_service
+from chalybclip.ingest import ingest_vod
+from chalybclip.ingest import service as ingest_service
 
 
 def _stub_download(
@@ -41,7 +41,7 @@ def _stub_audio(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 class _RecordingDB:
-    """Stand-in for nexoclip.db.Database — emit() in events.log accepts a Database
+    """Stand-in for chalybclip.db.Database — emit() in events.log accepts a Database
     instance and calls EventsRepo(db).emit(...). We patch the emit at the events
     module level instead so we don't have to fake the full DB stack."""
 

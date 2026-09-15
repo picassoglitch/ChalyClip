@@ -11,7 +11,7 @@ import datetime as _dt
 
 import pytest
 
-from nexoclip.db import (
+from chalybclip.db import (
     CandidatesRepo,
     ConnectedAccountsRepo,
     Database,
@@ -21,14 +21,14 @@ from nexoclip.db import (
     TenantsRepo,
     WebhookSubscriptionsRepo,
 )
-from nexoclip.db.models import (
+from chalybclip.db.models import (
     CandidateRow,
     ClipRow,
     LLMCallRow,
     StreamRow,
 )
-from nexoclip.errors import TenancyError
-from nexoclip.tenancy import bound_tenant
+from chalybclip.errors import TenancyError
+from chalybclip.tenancy import bound_tenant
 
 
 def _now() -> str:
@@ -215,8 +215,8 @@ async def test_candidate_update_rescore_persists(migrated_db: Database) -> None:
 
 async def _seed_clip_for_publish(db: Database, tenant_id: str) -> str:
     """Minimum scaffolding so a publish_job can FK into clips."""
-    from nexoclip.db import ClipsRepo, PersonasRepo, VariantsRepo
-    from nexoclip.db.models import VariantRow
+    from chalybclip.db import ClipsRepo, PersonasRepo, VariantsRepo
+    from chalybclip.db.models import VariantRow
 
     with bound_tenant(tenant_id):
         await StreamsRepo(db).upsert(

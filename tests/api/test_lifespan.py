@@ -16,8 +16,8 @@ from pathlib import Path
 import httpx
 import pytest_asyncio
 
-from nexoclip.api import create_app
-from nexoclip.db import Database, apply_migrations
+from chalybclip.api import create_app
+from chalybclip.db import Database, apply_migrations
 
 
 @pytest_asyncio.fixture
@@ -34,7 +34,7 @@ async def test_default_does_not_spin_background_loops(db: Database) -> None:
     """Default `enable_background_drains=False` keeps the lifespan a no-op.
 
     A lingering task at the end would fail this. We assert that hitting
-    `/healthz` works and no NexoClip-named tasks survive.
+    `/healthz` works and no ChalybClip-named tasks survive.
     """
     app = create_app(db=db)
     transport = httpx.ASGITransport(app=app)
@@ -43,10 +43,10 @@ async def test_default_does_not_spin_background_loops(db: Database) -> None:
         assert r.status_code == 200
 
     # No drain tasks should be running after the lifespan exits.
-    nexoclip_tasks = [
-        t for t in asyncio.all_tasks() if (t.get_name() or "").startswith("nexoclip-")
+    chalybclip_tasks = [
+        t for t in asyncio.all_tasks() if (t.get_name() or "").startswith("chalybclip-")
     ]
-    assert nexoclip_tasks == []
+    assert chalybclip_tasks == []
 
 
 async def test_background_drains_lifespan_starts_named_loops(
@@ -58,7 +58,7 @@ async def test_background_drains_lifespan_starts_named_loops(
     because the latter doesn't drive ASGI lifespan by default."""
     from fastapi import FastAPI
 
-    from nexoclip.api.lifespan import background_drains_lifespan
+    from chalybclip.api.lifespan import background_drains_lifespan
 
     app = FastAPI()
     app.state.db = db
@@ -72,18 +72,18 @@ async def test_background_drains_lifespan_starts_named_loops(
         names = {t.get_name() for t in asyncio.all_tasks()}
         # The legacy publish_jobs drain loop was removed (Etapa A) —
         # publishing goes through Zernio now, not the per-platform worker.
-        assert "nexoclip-publish-loop" not in names
-        assert "nexoclip-webhook-loop" in names
-        assert "nexoclip-metrics-loop" in names
-        assert "nexoclip-retention-loop" in names
+        assert "chalybclip-publish-loop" not in names
+        assert "chalybclip-webhook-loop" in names
+        assert "chalybclip-metrics-loop" in names
+        assert "chalybclip-retention-loop" in names
 
     # Cancellation completes synchronously inside the lifespan's __aexit__.
-    nexoclip_tasks = [
+    chalybclip_tasks = [
         t
         for t in asyncio.all_tasks()
-        if (t.get_name() or "").startswith("nexoclip-") and not t.done()
+        if (t.get_name() or "").startswith("chalybclip-") and not t.done()
     ]
-    assert nexoclip_tasks == []
+    assert chalybclip_tasks == []
 
 
 async def test_retention_loop_runs_sweep_shortly_after_boot(
@@ -97,7 +97,7 @@ async def test_retention_loop_runs_sweep_shortly_after_boot(
     Without this loop nothing ever enforced the retention windows —
     `sweep_retention` was only reachable via the CLI.
     """
-    from nexoclip.api.lifespan import _retention_loop
+    from chalybclip.api.lifespan import _retention_loop
 
     calls: list[Path] = []
     swept = asyncio.Event()
@@ -107,7 +107,7 @@ async def test_retention_loop_runs_sweep_shortly_after_boot(
         swept.set()
         return []
 
-    monkeypatch.setattr("nexoclip.retention.sweep_retention", _fake_sweep)
+    monkeypatch.setattr("chalybclip.retention.sweep_retention", _fake_sweep)
 
     out = tmp_path / "out"
     task = asyncio.create_task(

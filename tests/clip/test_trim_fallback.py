@@ -14,13 +14,13 @@ from pathlib import Path
 
 import pytest
 
-from nexoclip.clip import service as clip_service
-from nexoclip.clip import trim as trim_mod
-from nexoclip.clip.trim import (
+from chalybclip.clip import service as clip_service
+from chalybclip.clip import trim as trim_mod
+from chalybclip.clip.trim import (
     auto_trim_around_integrity,
     revert_trim,
 )
-from nexoclip.errors import ClipError
+from chalybclip.errors import ClipError
 
 
 @pytest.fixture(autouse=True)
@@ -108,7 +108,7 @@ def _stub_ffmpeg(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
     # Force the encoder picker down the libx264 path so the unit test never
     # shells out to probe for NVENC (a real subprocess + log that's flaky
     # under the full-suite's shared structlog/encoder-cache state).
-    monkeypatch.setattr("nexoclip.clip.encoders.has_nvenc", lambda: False)
+    monkeypatch.setattr("chalybclip.clip.encoders.has_nvenc", lambda: False)
     return calls
 
 

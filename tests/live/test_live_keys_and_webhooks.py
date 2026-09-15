@@ -20,18 +20,18 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 
-from nexoclip.db import (
+from chalybclip.db import (
     Database,
     LiveStreamKeysRepo,
     StreamsRepo,
     TenantsRepo,
     apply_migrations,
 )
-from nexoclip.db.repos import (
+from chalybclip.db.repos import (
     _streams_repo_mark_live_ended,
     _streams_repo_mark_live_started,
 )
-from nexoclip.tenancy import bound_tenant
+from chalybclip.tenancy import bound_tenant
 
 
 @pytest_asyncio.fixture
@@ -113,7 +113,7 @@ async def test_touch_last_used_updates_timestamp(db: Database) -> None:
 
 async def _seed_stream_for_tenant(db: Database, *, tenant_id: str, stream_id: str) -> None:
     """Insert a barebones streams row for the tenant in question."""
-    from nexoclip.db.models import StreamRow
+    from chalybclip.db.models import StreamRow
     now = _dt.datetime.now(_dt.UTC).isoformat()
     with bound_tenant(tenant_id):
         await StreamsRepo(db).upsert(

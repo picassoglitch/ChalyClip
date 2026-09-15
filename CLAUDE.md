@@ -1,11 +1,11 @@
-# NexoClip — Claude Code Project Rules
+# ChalybClip — Claude Code Project Rules
 
 ## What this is
 
-NexoClip is a multi-tenant SaaS that turns a streamer's VOD into a multi-platform short-form clip pipeline. Voice cues + chat heat + audio peaks + visual signals detect clip-worthy moments; an LLM generates persona-flavored captions, hooks, and viral-moment selections (self-hosted open models by default — see rule 3); local Whisper handles transcription on the user's GPU.
+ChalybClip is a multi-tenant SaaS that turns a streamer's VOD into a multi-platform short-form clip pipeline. Voice cues + chat heat + audio peaks + visual signals detect clip-worthy moments; an LLM generates persona-flavored captions, hooks, and viral-moment selections (self-hosted open models by default — see rule 3); local Whisper handles transcription on the user's GPU.
 
 **Read these first, in this order:**
-1. `docs/nexoclip_spec.md` — full architectural spec (v0.5)
+1. `docs/chalybclip_spec.md` — full architectural spec (v0.5)
 2. `PHASE_0.md` — concrete first-week tasks (the spike we're building)
 3. This file — coding rules and conventions
 
@@ -17,9 +17,9 @@ The spec is the source of truth for *what* to build. PHASE_0.md is the source of
 
 1. **Tenant isolation.** Every query against a domain table filters on `tenant_id` first. Every service function takes `tenant_id` as the first non-self argument. No exceptions. *(Phase 0 is single-tenant — but write the function signatures with `tenant_id` from day 1 even if it defaults to `"default"`.)*
 
-2. **No business logic in route handlers.** FastAPI routes and MCP tool handlers both delegate to the same service functions in `nexoclip/<module>/service.py`. Routes are thin: parse inputs, call service, return response.
+2. **No business logic in route handlers.** FastAPI routes and MCP tool handlers both delegate to the same service functions in `chalybclip/<module>/service.py`. Routes are thin: parse inputs, call service, return response.
 
-3. **All LLM calls go through `LLMRouter`.** Never call a vendor SDK or LLM HTTP endpoint directly outside `nexoclip/llm/`. The router handles cost tracking, retries, fallback, structured output validation. Bypassing it breaks billing and reliability. Default routing is the `openllm` / `openllm_vision` providers (any OpenAI-compatible self-hosted runtime — Ollama, vLLM, LM Studio — zero per-token cost, keyless). Anthropic remains a configured-but-unrouted provider; pointing a purpose back at it (or adding it as a fallback) is a deliberate config change in `config/llm.example.yaml`, never a code change. Do NOT route anything at a paid API by default.
+3. **All LLM calls go through `LLMRouter`.** Never call a vendor SDK or LLM HTTP endpoint directly outside `chalybclip/llm/`. The router handles cost tracking, retries, fallback, structured output validation. Bypassing it breaks billing and reliability. Default routing is the `openllm` / `openllm_vision` providers (any OpenAI-compatible self-hosted runtime — Ollama, vLLM, LM Studio — zero per-token cost, keyless). Anthropic remains a configured-but-unrouted provider; pointing a purpose back at it (or adding it as a fallback) is a deliberate config change in `config/llm.example.yaml`, never a code change. Do NOT route anything at a paid API by default.
 
 4. **Idempotent pipeline steps.** Every step in the VOD pipeline must be safely re-runnable. If `transcribe` is run twice on the same stream, the second run is a no-op (or produces identical output). State is in DB + filesystem, not in memory.
 
@@ -44,15 +44,15 @@ The spec is the source of truth for *what* to build. PHASE_0.md is the source of
 - **`pytest` + `pytest-asyncio`.** Tests live next to the module they test under `tests/<module>/`.
 - **Dependency injection via constructor args**, not module-level singletons. Easier to test and swap.
 - **Config via Pydantic Settings.** Environment variables override YAML; YAML overrides defaults. No `os.getenv` scattered through code.
-- **Errors are typed.** Use custom exception classes (`NexoClipError`, `LLMError`, `QuotaExceeded`, etc.). Don't catch `Exception` broadly except at process boundaries.
-- **Format with `ruff` (which now does both linting and formatting).** Type-check with `mypy --strict` on `nexoclip/` (tests can be looser).
+- **Errors are typed.** Use custom exception classes (`ChalybClipError`, `LLMError`, `QuotaExceeded`, etc.). Don't catch `Exception` broadly except at process boundaries.
+- **Format with `ruff` (which now does both linting and formatting).** Type-check with `mypy --strict` on `chalybclip/` (tests can be looser).
 
 ---
 
 ## Directory layout
 
 ```
-nexoclip/
+chalybclip/
 ├── ingest/        # VOD download, chat replay, audio extraction, platform detection
 ├── transcribe/    # STT — AssemblyAI (default) + local faster-whisper provider
 ├── diarize/       # speaker diarization (pyannote subprocess, optional extra)
@@ -78,10 +78,10 @@ nexoclip/
 ├── tenancy/       # tenant context + enforcement
 ├── api/           # FastAPI REST + HTMX dashboard + Pydantic schemas
 ├── mcp_server/    # MCP server — thin translation layer over the REST surface
-└── integrations/  # external systems — nexo_ai (auth/tiers), zernio, storage, nexoobs
+└── integrations/  # external systems — chalyb (auth/tiers), zernio, storage, chalybobs
 ```
 
-Still phase-pending (no directory yet): `auth/` (Phase 3+ — nexo-ai SSO covers it today), `billing/` (Phase 5), `workers/` (Phase 3+ GPU/CPU workers).
+Still phase-pending (no directory yet): `auth/` (Phase 3+ — chalyb SSO covers it today), `billing/` (Phase 5), `workers/` (Phase 3+ GPU/CPU workers).
 
 Each module has:
 - `__init__.py` — re-exports the public surface
@@ -114,8 +114,8 @@ Dev: `pytest`, `pytest-asyncio`, `ruff`, `mypy`.
 ## Working with this codebase
 
 When adding a new feature:
-1. Read the relevant section of `docs/nexoclip_spec.md` first.
-2. If the feature touches LLM calls, the path is always: schema in `nexoclip/llm/schemas.py` → method in `LLMRouter` → call from a service function. Not the other way around.
+1. Read the relevant section of `docs/chalybclip_spec.md` first.
+2. If the feature touches LLM calls, the path is always: schema in `chalybclip/llm/schemas.py` → method in `LLMRouter` → call from a service function. Not the other way around.
 3. Write the service function with a typed signature before the route/CLI/MCP wrapper. The wrapper should be 5–10 lines.
 4. Add a test that hits the service function with a fake LLM router (`tests/_fakes/fake_llm.py`).
 5. Update `PHASE_X.md` if you've completed an exit criterion.

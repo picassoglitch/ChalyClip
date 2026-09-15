@@ -1,4 +1,4 @@
-"""Tests for the end-of-clip nexoclip splash (`nexoclip.clip.outro`).
+"""Tests for the end-of-clip chalybclip splash (`chalybclip.clip.outro`).
 
 The outro is the bundled `assets/outro.mp4` concatenated after each
 exported clip. These cover the (pure) command builder across the audio
@@ -11,7 +11,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from nexoclip.clip.outro import (
+from chalybclip.clip.outro import (
     append_outro,
     build_outro_command,
     outro_asset_path,
@@ -117,11 +117,11 @@ def test_append_outro_replaces_file_on_success(tmp_path: Path, monkeypatch) -> N
 
     monkeypatch.setattr(shutil, "which", lambda _name: "/usr/bin/ffmpeg")
     monkeypatch.setattr(
-        "nexoclip.clip.outro.outro_asset_path", lambda: tmp_path / "asset.mp4"
+        "chalybclip.clip.outro.outro_asset_path", lambda: tmp_path / "asset.mp4"
     )
     (tmp_path / "asset.mp4").write_bytes(b"asset")
     monkeypatch.setattr(
-        "nexoclip.clip.outro._ffprobe_meta",
+        "chalybclip.clip.outro._ffprobe_meta",
         lambda _p: (1080, 1920, 30, True, 5.0),
     )
 
@@ -132,7 +132,7 @@ def test_append_outro_replaces_file_on_success(tmp_path: Path, monkeypatch) -> N
         Path(cmd[-1]).write_bytes(b"with-outro")  # pretend ffmpeg wrote it
         return subprocess.CompletedProcess(args=cmd, returncode=0, stdout=b"", stderr=b"")
 
-    monkeypatch.setattr("nexoclip.clip.outro.subprocess.run", fake_run)
+    monkeypatch.setattr("chalybclip.clip.outro.subprocess.run", fake_run)
 
     assert append_outro(video) is True
     assert video.read_bytes() == b"with-outro"
@@ -145,7 +145,7 @@ def test_append_outro_no_asset_is_noop(tmp_path: Path, monkeypatch) -> None:
     video.write_bytes(b"original")
     monkeypatch.setattr(shutil, "which", lambda _name: "/usr/bin/ffmpeg")
     monkeypatch.setattr(
-        "nexoclip.clip.outro.outro_asset_path", lambda: tmp_path / "missing.mp4"
+        "chalybclip.clip.outro.outro_asset_path", lambda: tmp_path / "missing.mp4"
     )
 
     assert append_outro(video) is False
@@ -157,11 +157,11 @@ def test_append_outro_ffmpeg_failure_leaves_original(tmp_path: Path, monkeypatch
     video.write_bytes(b"original")
     monkeypatch.setattr(shutil, "which", lambda _name: "/usr/bin/ffmpeg")
     monkeypatch.setattr(
-        "nexoclip.clip.outro.outro_asset_path", lambda: tmp_path / "asset.mp4"
+        "chalybclip.clip.outro.outro_asset_path", lambda: tmp_path / "asset.mp4"
     )
     (tmp_path / "asset.mp4").write_bytes(b"asset")
     monkeypatch.setattr(
-        "nexoclip.clip.outro._ffprobe_meta",
+        "chalybclip.clip.outro._ffprobe_meta",
         lambda _p: (1080, 1920, 30, True, 5.0),
     )
 
@@ -170,7 +170,7 @@ def test_append_outro_ffmpeg_failure_leaves_original(tmp_path: Path, monkeypatch
             args=cmd, returncode=1, stdout=b"", stderr=b"boom"
         )
 
-    monkeypatch.setattr("nexoclip.clip.outro.subprocess.run", fake_run)
+    monkeypatch.setattr("chalybclip.clip.outro.subprocess.run", fake_run)
 
     assert append_outro(video) is False
     assert video.read_bytes() == b"original"

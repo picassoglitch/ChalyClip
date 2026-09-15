@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from nexoclip.db import (
+from chalybclip.db import (
     CandidatesRepo,
     ClipsRepo,
     Database,
@@ -12,20 +12,20 @@ from nexoclip.db import (
     TenantsRepo,
     TranscriptsRepo,
 )
-from nexoclip.db.models import (
+from chalybclip.db.models import (
     CandidateRow,
     ClipRow,
     StreamRow,
     TranscriptRow,
 )
-from nexoclip.retention import (
+from chalybclip.retention import (
     DEFAULT_RETENTION_CLIP_DAYS,
     DEFAULT_RETENTION_TRANSCRIPT_DAYS,
     DEFAULT_RETENTION_VOD_DAYS,
     RetentionPolicy,
     sweep_retention,
 )
-from nexoclip.tenancy import bound_tenant
+from chalybclip.tenancy import bound_tenant
 
 from .conftest import days_ago_iso
 

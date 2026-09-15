@@ -12,14 +12,14 @@ import pytest
 import pytest_asyncio
 import respx
 
-from nexoclip.db import (
+from chalybclip.db import (
     Database,
     TenantsRepo,
     ZernioPublishSnapshotsRepo,
     apply_migrations,
 )
-from nexoclip.integrations.zernio.client import ZernioClient
-from nexoclip.publish.analytics_service import (
+from chalybclip.integrations.zernio.client import ZernioClient
+from chalybclip.publish.analytics_service import (
     internal_analytics,
     performance_for_tenant,
     snapshot_tenant,

@@ -1,0 +1,495 @@
+{# ============================================================
+   Single source of truth for .nc-pv-* overlay CSS.
+   Included by BOTH clip_render.html (headless capture) and
+   clip_detail.html (editor preview) so a CSS change here
+   propagates to both without manual mirroring.
+
+   Drift this fixes:
+     - Caption transitions + animation rules existed only in
+       editor — export silently dropped them on operator
+       "slide" / "fade" / "typewriter" picks.
+     - Banner variants `kick_green_block` + `kick_minimal_url`
+       existed only in editor — export rendered them as the
+       default green bar.
+     - Banner BASE rule diverged structurally: editor sat at
+       bottom:0 inside the social-UI unsafe zone; export sat
+       in the safe zone above. Merged here: safe-zone position
+       (from export, correct for publication) + text styling
+       (from editor, missing in export).
+     - `data-face-zone` rules existed in both templates but
+       export's handler never SET the attribute — so the
+       face-aware position shifts never fired in export.
+       Handler now computes face_zone for both routes via a
+       shared helper.
+
+   Cqw/cqh units are container-query-relative. .nc-preview is
+   the named container (declared in the consuming template's
+   own CSS, NOT here, because the container sizing differs
+   between editor (520px) and export (1080px)). All overlay
+   dimensions below resolve proportionally — same visible
+   layout at 520px and 1080px.
+   ============================================================ #}
+<style>
+  /* ---------- Title hook ---------- */
+  .nc-pv-title {
+    position: absolute;
+    top: 18%;
+    /* 80% wide — 10% margin each side. */
+    left: 10%;
+    right: 10%;
+    background: rgba(255, 255, 255, 0.96);
+    color: #000;
+    font-family: "Inter", sans-serif;
+    font-weight: 800;
+    /* 17/520*100 = 3.269cqw */
+    font-size: 3.269cqw;
+    line-height: 1.22;
+    /* 10/924*100 = 1.082cqh ; 14/520*100 = 2.692cqw */
+    padding: 1.082cqh 2.692cqw;
+    /* 12/520*100 = 2.308cqw */
+    border-radius: 2.308cqw;
+    text-align: center;
+    box-shadow:
+      0 0.325cqh 1.923cqw rgba(0, 0, 0, 0.55),
+      0 0.108cqh 0 rgba(0, 0, 0, 0.18) inset;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    z-index: 3;
+    pointer-events: none;
+  }
+  .nc-pv-title.is-empty { display: none; }
+
+  /* Kick-target clips have a shorter top unsafe band → hook
+     can sit higher. Handler computes `_zone_profile` using
+     the brand_kit-aware fallback chain in both editor + export. */
+  .nc-preview[data-zone-profile="kick"] .nc-pv-title { top: 14%; }
+
+  /* Face-aware position shifts (Slice L.4b).
+     Handler maps framing.safe_crop_box.y → face_zone ∈
+     {top, mid, lower}. With `top`, the hook would land on
+     the face → drop it below to ~46%. With `lower`, the
+     captions would crowd the face → lift the lower_third
+     position from 68% up to 52%. `mid` falls through to the
+     static defaults (attribute absent → these selectors
+     don't match). */
+  .nc-preview[data-face-zone="top"] .nc-pv-title { top: 46%; }
+  .nc-preview[data-face-zone="lower"] .nc-pv-caption--lower_third { top: 52%; }
+
+  /* Face-aware "AI moved this" flash — runs once on render
+     when a face-zone shift fired so the operator sees the
+     decision was intentional. Decorative; runs in editor
+     preview and on the first paint of the headless capture
+     (the recorder catches frames after the animation has
+     finished, so this is editor-only in practice — but the
+     CSS is here so both surfaces share the same rule set). */
+  .nc-preview[data-face-zone="top"] .nc-pv-title,
+  .nc-preview[data-face-zone="lower"] .nc-pv-caption {
+    animation: nc-face-aware-flash 1.4s ease-out 1;
+  }
+  @keyframes nc-face-aware-flash {
+    0%   { box-shadow: 0 0 0 0.385cqw rgba(200, 255, 92, 0.85), 0 0.325cqh 1.923cqw rgba(0,0,0,0.55); }
+    100% { box-shadow: 0 0.325cqh 1.923cqw rgba(0,0,0,0.55); }
+  }
+
+  /* ---------- Top hook (secondary, above main hook) ---------- */
+  .nc-pv-top-hook {
+    position: absolute;
+    top: 11%;
+    left: 14%;
+    right: 14%;
+    text-align: center;
+    font-family: "Inter", sans-serif;
+    font-weight: 800;
+    /* 11/520*100 = 2.115cqw */
+    font-size: 2.115cqw;
+    letter-spacing: 0.02em;
+    line-height: 1.15;
+    padding: 0.433cqh 1.923cqw;
+    border-radius: 999px;
+    box-shadow: 0 0.216cqh 1.154cqw rgba(0, 0, 0, 0.35);
+    pointer-events: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    z-index: 3;
+  }
+  .nc-preview[data-zone-profile="kick"] .nc-pv-top-hook { top: 8%; }
+  .nc-pv-top-hook--white_rounded {
+    background: rgba(255, 255, 255, 0.72);
+    color: #000;
+    backdrop-filter: blur(0.769cqw);
+  }
+  .nc-pv-top-hook--black_solid {
+    background: rgba(0, 0, 0, 0.62);
+    color: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(0.769cqw);
+  }
+  .nc-pv-top-hook--subtle {
+    background: rgba(255, 255, 255, 0.55);
+    color: #111;
+    backdrop-filter: blur(1.154cqw);
+  }
+
+  /* ---------- Banner (base + variants) ---------- */
+  /*
+     MERGED RULE: position from clip_render.html (Slice O.55 —
+     sits in the social-platform safe zone, ABOVE the bottom
+     360px chunk TikTok / Reels / Shorts cover with their
+     UI), text styling from clip_detail.html (the editor had
+     all of: font-family, font-weight, text-transform,
+     letter-spacing, font-size, padding, space-between; export
+     had none of these).
+
+     Variant rules below override `bottom` for the special
+     positions (kick_repost_page sits higher; kick_minimal_url
+     hugs the bottom safety pad).
+  */
+  .nc-pv-banner {
+    position: absolute;
+    /* SAFE-ZONE POSITION — from export. The Slice O.55 work
+       lifted the default banner above the social-UI lower band
+       (y ≈ 1500 / 1920 = 21.875cqh from bottom). The editor's
+       legacy bottom:0 sat IN the unsafe zone and got clipped
+       by every platform on upload. Editor preview now shows
+       the banner where it'll actually publish. */
+    left: 7.4cqw;
+    right: 7.4cqw;
+    bottom: 21.875cqh;
+    /* 38/924*100 = 4.113cqh */
+    height: 4.113cqh;
+    background: var(--pv-banner-color, #53FC18);
+    color: #000;
+    display: flex;
+    align-items: center;
+    /* TEXT STYLING — from editor. Export had no font config
+       so the banner inherited the body font (no caps, no
+       weight). Now both surfaces render text identically. */
+    justify-content: space-between;
+    padding: 0 14px;
+    font-family: "Inter", -apple-system, sans-serif;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    font-size: 12px;
+    box-shadow: none;
+    z-index: 4;
+  }
+  .nc-pv-banner.is-hidden { display: none; }
+  .nc-pv-banner__platform { color: #000; }
+  .nc-pv-banner__url { font-size: 11px; opacity: 0.85; }
+  .nc-pv-banner__live-pill {
+    background: #e62b20;
+    color: #fff;
+    font-weight: 800;
+    font-size: 1.731cqw;
+    letter-spacing: 0.04em;
+    padding: 0.216cqh 1.154cqw;
+    border-radius: 0.577cqw;
+    margin-left: 0;
+  }
+
+  /* kick_repost_page variant — black bar with Kick wordmark
+     and centered URL. Position lifted further into the safe
+     zone (export's value) so the bar sits well above the
+     social-UI band. */
+  .nc-pv-banner--kick_repost_page {
+    top: auto;
+    /* SAFE-ZONE POSITION from export (Slice O.55) — sits at
+       ~y=1380 on a 1920 canvas. Editor previously rendered
+       this at bottom:18% (= y≈1574, intentionally INSIDE the
+       caution band as a teaching aid); we now show it where
+       it ACTUALLY publishes. */
+    bottom: 28.125cqh;
+    transform: none;
+    left: 7.4cqw;
+    right: 7.4cqw;
+    background: #000;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    color: #fff;
+    /* LAYOUT — anchor the URL to the right of the absolutely-positioned
+       KICK logo and extend rightward. Before this, the variant used
+       padding:0 + justify-content:center on the full banner width;
+       the KICK logo doesn't take flex space (position:absolute), so a
+       long username like KICK.COM/ALDOV1LLANUEVA bled left and
+       crashed into the green wordmark. padding-left clears the logo
+       (1.538cqw offset + 26.923cqw width + 2.3cqw gap = 30.769cqw);
+       justify-content:flex-start pins the URL at that boundary so it
+       grows rightward only. Short URLs sit just past the logo, long
+       ones extend toward the right edge of the banner. */
+    padding: 0 1.538cqw 0 30.769cqw;
+    /* 6.25cqh from export ≈ 120px on 1920 — taller bar
+       so the KICK wordmark has breathing room. */
+    height: 6.25cqh;
+    min-height: 6.25cqh;
+    max-height: 6.25cqh;
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
+    overflow: visible;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    animation: none;
+    z-index: 4;
+  }
+  .nc-pv-banner--kick_repost_page .nc-pv-banner__platform {
+    position: absolute;
+    left: 1.538cqw;
+    top: 50%;
+    transform: translateY(-62%);
+    width: 26.923cqw;
+    height: 4.762cqh;
+    color: transparent;
+    font-size: 0;
+    line-height: 0;
+    overflow: visible;
+    flex: none;
+    padding: 0;
+    background-image: url("/static/kick-logo.svg");
+    background-repeat: no-repeat;
+    background-position: left center;
+    background-size: contain;
+    image-rendering: auto;
+    filter:
+      drop-shadow(0.385cqw 0 0 #000)
+      drop-shadow(-0.385cqw 0 0 #000)
+      drop-shadow(0 0.216cqh 0 #000)
+      drop-shadow(0 -0.216cqh 0 #000)
+      drop-shadow(0 0.325cqh 0.769cqw rgba(0, 0, 0, 0.55));
+  }
+  .nc-pv-banner--kick_repost_page .nc-pv-banner__url {
+    position: relative;
+    color: #fff;
+    font-family: "Inter Tight", "Inter", sans-serif;
+    font-size: 2.115cqw;
+    font-weight: 900;
+    letter-spacing: 0.038cqw;
+    line-height: 1;
+    text-transform: uppercase;
+    text-shadow: 0 0.108cqh 0.192cqw rgba(0, 0, 0, 0.9);
+    flex: none;
+    overflow: visible;
+    white-space: nowrap;
+    padding: 0;
+    opacity: 1;
+    text-align: center;
+  }
+  .nc-pv-banner--kick_repost_page .nc-pv-banner__live-pill {
+    display: none !important;
+  }
+
+  /* kick_green_block variant — existed ONLY in editor before.
+     Operators picking this variant exported as the green
+     default bar because clip_render.html didn't ship this rule. */
+  .nc-pv-banner--kick_green_block {
+    background: #000;
+    color: #fff;
+    padding: 0;
+    height: 8%;
+    min-height: 4.762cqh;
+    max-height: 7.359cqh;
+    overflow: hidden;
+    box-shadow: none;
+  }
+  .nc-pv-banner--kick_green_block .nc-pv-banner__platform {
+    background: var(--pv-banner-color, #53FC18);
+    color: #000;
+    padding: 0 3.077cqw;
+    height: 100%;
+    display: inline-flex;
+    align-items: center;
+    font-weight: 900;
+    font-size: 3.077cqw;
+    letter-spacing: 0.02em;
+  }
+  .nc-pv-banner--kick_green_block .nc-pv-banner__url {
+    padding: 0 2.308cqw;
+    color: #fff;
+    font-size: 2.308cqw;
+    font-weight: 700;
+    flex: 1;
+    text-align: center;
+    letter-spacing: 0.02em;
+  }
+
+  /* kick_minimal_url variant — also editor-only previously. */
+  .nc-pv-banner--kick_minimal_url {
+    background: transparent;
+    box-shadow: none;
+    padding: 0;
+    height: auto;
+    bottom: 1.515cqh;
+  }
+  .nc-pv-banner--kick_minimal_url .nc-pv-banner__platform { display: none; }
+  .nc-pv-banner--kick_minimal_url .nc-pv-banner__url {
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    padding: 0.433cqh 1.538cqw;
+    font-size: 1.923cqw;
+    border-radius: 0.769cqw;
+  }
+
+  /* platform_band variant — branded source-credit band for the NON-kick
+     stream platforms (YouTube / Twitch / X). Full-width bar in the
+     platform brand color (via --pv-banner-color, set by the handler
+     from platform_colors[platform]) with a white monochrome glyph on the
+     left + the source URL centered. Mirrors overlay_burn._banner_platform_band
+     so the editor preview matches the burned MP4. Inherits the base
+     .nc-pv-banner safe-zone position (bottom: 21.875cqh). */
+  .nc-pv-banner--platform_band {
+    background: var(--pv-banner-color, #111);
+    color: #fff;
+    /* Clear the absolutely-positioned glyph on the left so the centered
+       URL never crashes into it. */
+    padding: 0 1.538cqw 0 11cqw;
+    justify-content: center;
+  }
+  .nc-pv-banner--platform_band .nc-pv-banner__platform {
+    /* Hide the platform NAME text; the glyph carries the identity. */
+    position: absolute;
+    left: 2.2cqw;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 6cqw;
+    height: 62%;
+    color: transparent;
+    font-size: 0;
+    line-height: 0;
+    background-repeat: no-repeat;
+    background-position: left center;
+    background-size: contain;
+    filter: drop-shadow(0 0.216cqh 0.385cqw rgba(0, 0, 0, 0.5));
+  }
+  .nc-pv-banner--platform_band[data-platform="youtube"] .nc-pv-banner__platform {
+    background-image: url("/static/glyph-youtube.png");
+  }
+  .nc-pv-banner--platform_band[data-platform="twitch"] .nc-pv-banner__platform {
+    background-image: url("/static/glyph-twitch.png");
+  }
+  .nc-pv-banner--platform_band[data-platform="x"] .nc-pv-banner__platform,
+  .nc-pv-banner--platform_band[data-platform="twitter"] .nc-pv-banner__platform {
+    background-image: url("/static/glyph-x.png");
+  }
+  .nc-pv-banner--platform_band .nc-pv-banner__url {
+    color: #fff;
+    font-weight: 800;
+    font-size: 2.115cqw;
+    letter-spacing: 0.02em;
+    opacity: 1;
+    text-align: center;
+    white-space: nowrap;
+    text-shadow: 0 0.108cqh 0.192cqw rgba(0, 0, 0, 0.6);
+  }
+  .nc-pv-banner--platform_band .nc-pv-banner__live-pill { display: none !important; }
+
+  /* ---------- Captions (karaoke word-highlight) ---------- */
+  .nc-pv-caption {
+    position: absolute;
+    left: 8%;
+    right: 8%;
+    text-align: center;
+    font-family: "Inter", sans-serif;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    color: #fff;
+    -webkit-text-stroke: 0.481cqw #000;
+    paint-order: stroke fill;
+    text-shadow:
+      0 0.325cqh 1.538cqw rgba(0, 0, 0, 0.85),
+      0 0.108cqh 0 rgba(0, 0, 0, 0.6);
+    /* 22/520*100 = 4.231cqw base × operator-set scale. */
+    font-size: calc(4.231cqw * var(--pv-caption-scale, 1));
+    line-height: 1.05;
+    pointer-events: none;
+    z-index: 3;
+  }
+  .nc-pv-caption--upper_third  { top: 24%; transform: translateY(0); }
+  .nc-pv-caption--centered     { top: 50%; transform: translateY(-50%); }
+  .nc-pv-caption--lower_third  { top: 68%; transform: translateY(-50%); }
+  .nc-pv-caption--bottom       { top: 78%; transform: translateY(-50%); }
+
+  .nc-pv-caption__word {
+    display: inline-block;
+    margin: 0 0.12em;
+    color: #fff;
+    /* Transitions existed only in editor — export snapped
+       between word states. Now both fade smoothly. */
+    transition: color 90ms linear, transform 90ms linear;
+    opacity: 0.55;
+  }
+  .nc-pv-caption__word.is-active {
+    color: var(--pv-highlight, #ffd84a);
+    transform: scale(1.10);
+    opacity: 1;
+  }
+  .nc-pv-caption__word[data-emphasis="shout"].is-active {
+    font-size: 1.35em;
+    color: #ff3b30;
+    -webkit-text-stroke-width: 0.673cqw;
+    transform: scale(1.25);
+  }
+  .nc-pv-caption__word[data-emphasis="reaction"].is-active {
+    font-size: 1.18em;
+    color: #ffd66b;
+    transform: scale(1.15);
+  }
+  .nc-pv-caption__word[data-emphasis="emphasis"].is-active {
+    font-size: 1.10em;
+    color: var(--pv-highlight, #ffd84a);
+    transform: scale(1.12);
+  }
+  .nc-pv-caption__word.is-past     { opacity: 0.40; }
+  .nc-pv-caption__word.is-upcoming { opacity: 0.85; }
+
+  /* Caption animation variants — existed only in editor.
+     Operator picks "slide" / "fade" / "typewriter" for the
+     active-word entrance; export silently used the default
+     "pop" because these rules weren't shipped to it. */
+  .nc-pv-caption[data-animation="slide"] .nc-pv-caption__word.is-active {
+    animation: nc-caption-slide 0.18s ease-out;
+  }
+  .nc-pv-caption[data-animation="typewriter"] .nc-pv-caption__word.is-active {
+    animation: none;
+    border-right: 0.385cqw solid var(--pv-highlight, #FFD700);
+  }
+  .nc-pv-caption[data-animation="fade"] .nc-pv-caption__word.is-active {
+    animation: nc-caption-fade 0.25s ease-in;
+  }
+  @keyframes nc-caption-slide {
+    from { transform: translateY(0.866cqh) scale(1.0); opacity: 0; }
+    to   { transform: translateY(0)        scale(1.15); opacity: 1; }
+  }
+  @keyframes nc-caption-fade {
+    from { opacity: 0.2; }
+    to   { opacity: 1; }
+  }
+
+  /* ---------- Watermark (CHALYBCLIP brand stamp) ---------- */
+  .nc-pv-watermark {
+    position: absolute;
+    top: 2.4%;
+    right: 3.0%;
+    z-index: 5;
+    pointer-events: none;
+    font-family: "Archivo Black", "Inter", sans-serif;
+    font-weight: 900;
+    font-size: 3.2cqw;
+    line-height: 1;
+    letter-spacing: 0.04em;
+    color: rgba(200, 255, 92, 0.78);
+    text-shadow: 0.385cqw 0.216cqh 0 rgba(0, 0, 0, 0.55);
+    user-select: none;
+  }
+  /* Hide watermark in modes that don't burn it (editor "raw"
+     mode + the per-tenant brand-kit `show_chalybclip_credit=false`
+     toggle that the handler maps to data-watermark="off"). */
+  .nc-preview[data-preview-mode="raw"] .nc-pv-watermark,
+  .nc-preview[data-watermark="off"] .nc-pv-watermark {
+    display: none !important;
+  }
+</style>

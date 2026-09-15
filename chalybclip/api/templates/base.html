@@ -1,0 +1,169 @@
+{# Base layout — every page extends this.
+
+   Cyberpunk navy + electric-lime. The single source of truth for
+   styles is /static/chalybclip-theme.css (tokens + components) plus
+   /static/chalybclip-shell.css (the left sidebar + ingest hub).
+   No page-level color/layout inline anywhere.
+
+   Site shell: a persistent 236px left sidebar (collapses to a 64px
+   icon rail < 860px). Active nav highlighting compares
+   {{ request.url.path }} against each link's prefix — FastAPI's
+   Jinja2Templates auto-injects `request`, so this works without
+   per-endpoint plumbing.
+#}
+{% set _path = (request.url.path if request else '') %}
+{% macro side_link(href, label, icon, prefix=None) -%}
+  {%- set match = prefix or href -%}
+  {%- set active = _path.startswith(match) -%}
+  <li>
+    <a class="nc-side__link {% if active %}is-active{% endif %}"
+       href="{{ href }}"{% if active %} aria-current="page"{% endif %}>
+      <i class="ti ti-{{ icon }}" aria-hidden="true"></i><span>{{ label }}</span>
+    </a>
+  </li>
+{%- endmacro %}
+<!doctype html>
+<html lang="{{ locale() }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}ChalybClip{% endblock %}</title>
+  <meta name="description"
+        content="{% block meta_description %}ChalybClip — the AI growth engine for streamers. Viral scoring, hook generator, per-clip intelligence timeline, per-speaker brand kits, auto-publish with undo.{% endblock %}">
+  {# Authenticated dashboard pages opt out of search-engine indexing
+     so crawlers don't waste budget on auth-walled content. The public
+     landing at / is the discoverable surface (see /llms.txt, /robots.txt). #}
+  <meta name="robots" content="noindex, nofollow">
+  {#- Slice O.10 — favicon. SVG primary; apple-touch-icon same file. -#}
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="apple-touch-icon" href="/static/favicon.svg">
+  <link rel="stylesheet" href="/static/chalybclip-theme.css">
+  <link rel="stylesheet" href="/static/chalybclip-shell.css">
+  <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.17.0/dist/tabler-icons.min.css">
+  <script src="https://unpkg.com/htmx.org@2.0.3"></script>
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <aside class="nc-side">
+    <a href="/dashboard/streams" class="nc-side__brand">
+      <span class="nc-side__brand-prefix">CHALYB</span><span class="nc-side__brand-accent">CLIP</span>
+      <span class="nc-side__brand-mini" aria-hidden="true">C</span>
+    </a>
+    <nav aria-label="Main">
+      <ul class="nc-side__nav">
+        {#- "New clip" is the obvious entry for new operators — one Start
+            page surfaces every ingest method (URL · upload · live · Drive). -#}
+        {{ side_link("/dashboard/start", t("nav.new_clip"), "plus", prefix="/dashboard/start") }}
+        {#- Slice O.9/O.24 — labels go through t() so es/en switch. The
+            /dashboard/streams route keeps its path (bookmarks). The legacy
+            /dashboard/inbox "Clips" surface was removed; clips are reached
+            by drilling into a stream. -#}
+        {{ side_link("/dashboard/streams", t("nav.clips"), "movie") }}
+        {{ side_link("/dashboard/live", "Live", "broadcast", prefix="/dashboard/live") }}
+        {{ side_link("/dashboard/personas", t("nav.personas"), "user") }}
+        {{ side_link("/dashboard/brand-kits", t("nav.brand_kits"), "palette") }}
+        {{ side_link("/dashboard/publish/zernio", t("nav.publish"), "send") }}
+        {#- Connected channels — auto-ingest a creator's VODs on a schedule. -#}
+        {{ side_link("/dashboard/sources", t("nav.sources"), "plug-connected", prefix="/dashboard/sources") }}
+        {#- Slice O.9 — operator-only surfaces, gated by CHALYBCLIP_ADMIN_TENANT_IDS. -#}
+        {%- set _is_admin = (request.state.is_admin if request and request.state else False) -%}
+        {% if _is_admin %}
+        <li><div class="nc-side__sep" role="separator"></div></li>
+        {{ side_link("/agents", t("nav.docs_agents"), "robot", prefix="/agents") }}
+        {{ side_link("/dashboard/llm-calls", t("nav.llm_spend"), "coin") }}
+        {{ side_link("/dashboard/settings/llm", t("nav.llm_settings"), "adjustments", prefix="/dashboard/settings/llm") }}
+        {{ side_link("/dashboard/settings/site", t("nav.site_settings"), "world", prefix="/dashboard/settings/site") }}
+        {{ side_link("/dashboard/_health/diarize", "Diarize", "wave-sine", prefix="/dashboard/_health/diarize") }}
+        {{ side_link("/dashboard/_health/queue", "Queue", "list-check", prefix="/dashboard/_health/queue") }}
+        {{ side_link("/dashboard/_health/logs", "Logs", "alert-triangle", prefix="/dashboard/_health/logs") }}
+        {% endif %}
+      </ul>
+    </nav>
+    <div class="nc-side__foot">
+      {# Slice NX.4 / O.47 — token balance chip (HTMX-polled fragment).
+         Reads request.state.token_balance; ∞ for admins, faded "—" before
+         any LLM calls. Markup lives in _balance_chip.html. #}
+      {%- set _bal = (request.state.token_balance if request and request.state else None) -%}
+      {% include "_balance_chip.html" %}
+
+      {# Slice O.1 — tier chip. request.state.tenant_tier from BearerAuthMiddleware.
+         Free → amber "watermark" tooltip; pro+ → lime "clean export". #}
+      {%- set _tier = (request.state.tenant_tier if request and request.state else None) -%}
+      {% if _tier %}
+      <span class="nc-chip nc-chip--{% if _tier == 'free' %}warn{% else %}success{% endif %}"
+            title="{% if _tier == 'free' %}Plan gratis · tus clips salen con la marca de chalybclip.com. Mejora tu plan y exporta sin marca.{% else %}Plan {{ _tier|capitalize }} · exportas sin marca{% endif %}">
+        <i class="ti ti-{% if _tier == 'free' %}flame{% else %}crown{% endif %}" aria-hidden="true"></i>
+        <span>{{ _tier|capitalize }}</span>
+      </span>
+      {% endif %}
+      {% if tenant_id %}
+      <span class="nc-chip nc-chip--muted" title="Tu cuenta">
+        <i class="ti ti-user" aria-hidden="true"></i>
+        <span>{{ tenant_id }}</span>
+      </span>
+      {% endif %}
+      <form action="/dashboard/logout" method="post">
+        <button type="submit" class="nc-btn nc-btn--sm">
+          <i class="ti ti-logout" aria-hidden="true"></i>
+          <span>{{ t('nav.logout') }}</span>
+        </button>
+      </form>
+    </div>
+  </aside>
+  <main class="nc-page {% block main_class %}{% endblock %}">
+    {% block content %}{% endblock %}
+  </main>
+  {# Token-balance live updates. One SSE connection replaces the old 30s chip
+     poll: the server pushes a `balance` event only when the cached balance
+     actually changes (see /dashboard/_balance/stream), and we relay it as the
+     `balance-poll` event the chip already listens for via HTMX. EventSource
+     auto-reconnects on drop, so no manual retry loop. #}
+  <script>
+    (function () {
+      if (!window.EventSource) return;
+      try {
+        var es = new EventSource("/dashboard/_balance/stream");
+        es.addEventListener("balance", function () {
+          document.body.dispatchEvent(new Event("balance-poll"));
+        });
+      } catch (e) { /* SSE unavailable — chip still updates on user actions */ }
+    })();
+  </script>
+  {# Local-time rendering. The DB stores UTC ISO timestamps; the server
+     can't know the browser's timezone, so any element carrying a
+     `data-localtime="<iso>"` attribute is converted here to the viewer's
+     local time + locale. Re-runs after htmx swaps so fragments localize
+     too. The element's text content is the raw fallback shown if JS is off. #}
+  <script>
+    (function () {
+      function toLocal(iso) {
+        if (!iso) return null;
+        var s = String(iso).trim();
+        // tz-naive timestamps are UTC (that's what the DB stores).
+        if (!/[zZ]$|[+-]\d{2}:?\d{2}$/.test(s)) s += "Z";
+        var d = new Date(s);
+        return isNaN(d.getTime()) ? null : d;
+      }
+      function fmt(d) {
+        try {
+          return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+        } catch (e) { return d.toLocaleString(); }
+      }
+      function apply(root) {
+        var scope = root && root.querySelectorAll ? root : document;
+        scope.querySelectorAll("[data-localtime]").forEach(function (el) {
+          if (el.dataset.localtimeDone) return;
+          var d = toLocal(el.getAttribute("data-localtime"));
+          if (!d) return;
+          el.textContent = fmt(d);
+          el.title = d.toString();
+          el.dataset.localtimeDone = "1";
+        });
+      }
+      apply(document);
+      document.body.addEventListener("htmx:afterSwap", function (e) { apply(e.target); });
+    })();
+  </script>
+</body>
+</html>

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from nexoclip.config import ChatHeatConfig
-from nexoclip.detect import detect_chat_heat
-from nexoclip.errors import DetectionError
-from nexoclip.ingest import ChatMessage, ChatReplay
+from chalybclip.config import ChatHeatConfig
+from chalybclip.detect import detect_chat_heat
+from chalybclip.errors import DetectionError
+from chalybclip.ingest import ChatMessage, ChatReplay
 
 from ._fixtures import make_stream
 

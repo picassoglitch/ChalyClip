@@ -9,8 +9,8 @@ import cv2
 import numpy as np
 import pytest
 
-from nexoclip.clip.thumbnail import pick_thumbnail, save_thumbnail
-from nexoclip.errors import ClipError
+from chalybclip.clip.thumbnail import pick_thumbnail, save_thumbnail
+from chalybclip.errors import ClipError
 
 
 def _write_video(path: Path, frames: list[np.ndarray], *, fps: float = 30.0) -> None:

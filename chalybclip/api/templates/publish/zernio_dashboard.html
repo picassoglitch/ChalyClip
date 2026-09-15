@@ -1,0 +1,3055 @@
+{% extends "base.html" %}
+{% block title %}Centro de publicación - ChalybClip{% endblock %}
+{% block content %}
+
+<style>
+  .nc-pc-acct-row {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+    padding: 10px 14px;
+  }
+  .nc-pc-acct-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 999px;
+    font-size: 12px; font-weight: 500;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.02);
+  }
+  .nc-pc-acct-chip.is-connected {
+    border-color: rgba(72, 187, 120, 0.35);
+    background: rgba(72, 187, 120, 0.08);
+    color: var(--nc-green, #48bb78);
+  }
+  .nc-pc-connect-btn {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 10px; border-radius: 999px;
+    font-size: 12px; font-weight: 500; cursor: pointer;
+    border: 1px dashed rgba(255,255,255,0.18);
+    background: rgba(255,255,255,0.02); color: var(--nc-text--muted, #aaa);
+  }
+  .nc-pc-connect-btn:hover {
+    border-color: var(--nc-green, #48bb78); color: var(--nc-green, #48bb78);
+  }
+  .nc-pc-tabs {
+    display: flex; gap: 4px; margin: 16px 0 12px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .nc-pc-tab {
+    padding: 8px 16px; background: none; border: none;
+    color: var(--nc-text--muted, #aaa); cursor: pointer;
+    font-size: 13px; font-weight: 500;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+  }
+  .nc-pc-tab.is-active {
+    color: var(--nc-green, #48bb78);
+    border-bottom-color: var(--nc-green, #48bb78);
+  }
+  .nc-pc-tab-body { display: none; }
+  .nc-pc-tab-body.is-active { display: block; }
+
+  .nc-pc-clip-list { display: flex; flex-direction: column; gap: 8px; }
+  .nc-pc-clip-row {
+    display: grid; grid-template-columns: 100px 1fr auto;
+    gap: 12px; align-items: center; padding: 8px 12px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 8px; cursor: pointer;
+    transition: border-color 120ms, background 120ms;
+  }
+  .nc-pc-clip-row:hover { border-color: rgba(255,255,255,0.15); }
+  .nc-pc-clip-row.is-expanded {
+    border-color: var(--nc-green, #48bb78);
+    background: rgba(72, 187, 120, 0.05);
+  }
+  .nc-pc-clip-row__thumb {
+    width: 100px; aspect-ratio: 9 / 16;
+    border-radius: 4px; overflow: hidden;
+    background: #0a0a0a; position: relative;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .nc-pc-clip-row__thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .nc-pc-clip-row__thumb-fallback { color: rgba(255,255,255,0.2); font-size: 24px; }
+  .nc-pc-clip-row__dur {
+    position: absolute; bottom: 4px; right: 4px;
+    background: rgba(0,0,0,0.75); color: #fff;
+    padding: 1px 5px; border-radius: 3px; font-size: 10px; font-family: monospace;
+  }
+  .nc-pc-clip-row__meta { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .nc-pc-clip-row__title {
+    font-size: 14px; font-weight: 500;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .nc-pc-clip-row__id {
+    font-size: 11px; color: var(--nc-text--muted, #888); font-family: monospace;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .nc-pc-clip-row__status {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; color: var(--nc-text--muted, #aaa);
+  }
+  .nc-pc-clip-row__caret {
+    color: var(--nc-text--muted, #aaa);
+    transition: transform 120ms, color 120ms; font-size: 18px;
+  }
+  .nc-pc-clip-row.is-expanded .nc-pc-clip-row__caret {
+    transform: rotate(180deg); color: var(--nc-green, #48bb78);
+  }
+
+  .nc-pc-publish-panel {
+    margin: 0; padding: 16px;
+    background: rgba(72, 187, 120, 0.04);
+    border: 1px solid rgba(72, 187, 120, 0.25);
+    border-radius: 8px; display: none;
+  }
+  .nc-pc-publish-panel.is-active { display: block; }
+  .nc-pc-publish-panel__header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .nc-pc-publish-panel__title { font-size: 15px; font-weight: 600; }
+  .nc-pc-publish-panel__meta { font-size: 11px; color: var(--nc-text--muted, #aaa); font-family: monospace; }
+  .nc-pc-platform-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+  .nc-pc-platform-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 6px 12px; border-radius: 999px;
+    font-size: 12px; font-weight: 500;
+    border: 1px solid rgba(255,255,255,0.10);
+    background: rgba(255,255,255,0.02);
+    cursor: pointer; user-select: none; transition: all 100ms;
+  }
+  .nc-pc-platform-chip:hover { border-color: rgba(255,255,255,0.25); }
+  .nc-pc-platform-chip.is-disabled {
+    opacity: 0.35; cursor: not-allowed; background: rgba(255,255,255,0.01);
+  }
+  .nc-pc-platform-chip.is-selected {
+    background: var(--nc-green, #48bb78); color: #000; border-color: var(--nc-green, #48bb78);
+  }
+  .nc-pc-bulk-row {
+    display: grid; grid-template-columns: 80px 1fr auto;
+    gap: 12px; align-items: center; padding: 10px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .nc-pc-bulk-row__thumb { width: 80px; aspect-ratio: 9/16; border-radius: 4px; overflow: hidden; background: #0a0a0a; }
+  .nc-pc-bulk-row__thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .nc-pc-bulk-row__meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .nc-pc-bulk-row__title { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nc-pc-bulk-row__dur { font-size: 11px; color: var(--nc-text--muted, #aaa); font-family: monospace; }
+  .nc-pc-bulk-actions { margin-top: 16px; display: flex; gap: 12px; align-items: center; }
+
+  .nc-pc-stats {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px; margin-bottom: 16px;
+  }
+  .nc-pc-stat {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px; padding: 12px 14px;
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .nc-pc-stat__n { font-size: 22px; font-weight: 700; font-family: monospace; }
+  .nc-pc-stat__label { font-size: 11px; color: var(--nc-text--muted, #888); text-transform: uppercase; letter-spacing: 0.05em; }
+  .nc-pc-stat--ok { border-left: 3px solid var(--nc-green, #48bb78); }
+  .nc-pc-stat--ok .nc-pc-stat__n { color: var(--nc-green, #48bb78); }
+  .nc-pc-stat--fail { border-left: 3px solid #ff7575; }
+  .nc-pc-stat--fail .nc-pc-stat__n { color: #ff7575; }
+  .nc-pc-stat--sched { border-left: 3px solid #ffd84a; }
+  .nc-pc-stat--sched .nc-pc-stat__n { color: #ffd84a; }
+  .nc-pc-stat--total { border-left: 3px solid rgba(255,255,255,0.2); }
+
+  .nc-pc-history-row { cursor: pointer; transition: background 100ms; }
+  .nc-pc-history-row:hover { background: rgba(72, 187, 120, 0.05); }
+  .nc-pc-history-row--inert { cursor: default; }
+  .nc-pc-history-row--inert:hover { background: transparent; }
+
+  .nc-pc-queued-banner { display: flex; align-items: center; gap: 8px; text-decoration: none; color: inherit; }
+  .nc-pc-queued-banner:hover { color: var(--nc-green, #48bb78); }
+  .nc-pc-queued-banner__cta { margin-left: auto; font-weight: 500; }
+</style>
+
+{# ----- Flash banners ----- #}
+{% if request.query_params.get('queued') %}
+<a href="/dashboard/publish/zernio/job/{{ request.query_params.get('queued') }}"
+   class="nc-panel nc-pc-queued-banner"
+   style="border-color: var(--nc-green); margin-bottom: 12px; display: block;">
+  <div class="nc-panel__body" style="padding: 12px 16px; display:flex; align-items:center; gap:10px;">
+    <i class="ti ti-circle-check" aria-hidden="true" style="color: var(--nc-green);"></i>
+    <span>En cola: <span class="nc-mono">{{ request.query_params.get('queued') }}</span></span>
+    <span class="nc-pc-queued-banner__cta">
+      Ver estado <i class="ti ti-arrow-right" aria-hidden="true"></i>
+    </span>
+  </div>
+</a>
+{% endif %}
+
+{% if request.query_params.get('draft') == 'saved' %}
+<div class="nc-panel" style="border-color: var(--nc-green); margin-bottom: 12px;">
+  <div class="nc-panel__body" style="padding: 12px 16px;">
+    <i class="ti ti-file-pencil" aria-hidden="true" style="color: var(--nc-green);"></i>
+    Borrador guardado — lo encuentras abajo en <strong>Borradores</strong> para publicarlo o programarlo.
+  </div>
+</div>
+{% endif %}
+
+{% if request.query_params.get('claimed') %}
+<div class="nc-panel" style="border-color: var(--nc-green); margin-bottom: 12px;">
+  <div class="nc-panel__body" style="padding: 12px 16px;">
+    <i class="ti ti-circle-check" aria-hidden="true" style="color: var(--nc-green);"></i>
+    Vinculaste tu perfil de Zernio <span class="nc-mono">{{ request.query_params.get('claimed') }}</span>.
+  </div>
+</div>
+{% endif %}
+
+{% if request.query_params.get('reopened') %}
+<div class="nc-panel" style="border-color: var(--nc-green); margin-bottom: 12px;">
+  <div class="nc-panel__body" style="padding: 12px 16px;">
+    <i class="ti ti-refresh" aria-hidden="true" style="color: var(--nc-green);"></i>
+    {% set n = request.query_params.get('reopened') %}
+    {% if n == '0' %}
+    No había clips publicados para reabrir.
+    {% else %}
+    Reabriste {{ n }} clip{{ 's' if n != '1' else '' }} — vuelven a la lista de
+    <strong>Publicar</strong> como aprobados, listos para republicar.
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% if request.query_params.get('unlinked') %}
+<div class="nc-panel" style="border-color: var(--nc-orange); margin-bottom: 12px;">
+  <div class="nc-panel__body" style="padding: 12px 16px;">
+    <i class="ti ti-unlink" aria-hidden="true" style="color: var(--nc-orange);"></i>
+    Listo, lo desvinculaste. Conecta una plataforma para publicar.
+  </div>
+</div>
+{% endif %}
+
+{# ----- Not configured short-circuit ----- #}
+{% if not configured %}
+<div class="nc-page-header"><div><h2>Centro de publicación</h2></div></div>
+<div class="nc-panel">
+  <div class="nc-panel__body">
+    <div class="nc-empty">
+      <div class="nc-empty__icon"><i class="ti ti-plug-off" aria-hidden="true"></i></div>
+      <div class="nc-empty__title">Zernio no está configurado</div>
+      <p class="nc-empty__body">
+        Define <code class="nc-mono">CHALYBCLIP_ZERNIO_API_KEY</code>
+        en el entorno y vuelve a desplegar.
+      </p>
+    </div>
+  </div>
+</div>
+
+{% else %}
+
+<div class="nc-page-header">
+  <div>
+    <h2>Centro de publicación</h2>
+    <small>
+      {% if profile_id %}
+      Perfil <strong>{{ profile_name or profile_id }}</strong> —
+      publica clips de tu biblioteca en todas tus redes conectadas.
+      {% else %}
+      Crea un perfil para juntar tus redes y empieza a publicar.
+      {% endif %}
+    </small>
+  </div>
+  {% if profile_id %}
+  <a href="/dashboard/publish/zernio?tab=published"
+     class="nc-btn nc-btn--primary js-open-published"
+     style="text-decoration:none; white-space:nowrap;">
+    <i class="ti ti-circle-check" aria-hidden="true"></i>
+    <span>Ver publicados{% if history %} ({{ history|length }}){% endif %}</span>
+  </a>
+  {% endif %}
+</div>
+
+{% if profile_id %}
+<div class="nc-pc-stats">
+  <div class="nc-pc-stat nc-pc-stat--ok js-open-published"
+       style="cursor:pointer;" title="Ver tus publicaciones"
+       role="button" tabindex="0">
+    <div class="nc-pc-stat__n">{{ stats.published }}</div>
+    <div class="nc-pc-stat__label">Publicados</div>
+  </div>
+  <div class="nc-pc-stat nc-pc-stat--fail js-open-failed"
+       style="cursor:pointer;" title="Ver y reintentar publicaciones fallidas"
+       role="button" tabindex="0">
+    <div class="nc-pc-stat__n">{{ stats.failed }}</div>
+    <div class="nc-pc-stat__label">Fallidos</div>
+  </div>
+  <div class="nc-pc-stat nc-pc-stat--sched">
+    <div class="nc-pc-stat__n">{{ stats.scheduled }}</div>
+    <div class="nc-pc-stat__label">Programados</div>
+  </div>
+  <div class="nc-pc-stat nc-pc-stat--total">
+    <div class="nc-pc-stat__n">{{ stats.total }}</div>
+    <div class="nc-pc-stat__label">En la lista</div>
+  </div>
+</div>
+{% endif %}
+
+{# =========================================================
+   SECTION 1 — Connected accounts. Zernio connects ONE platform
+   at a time (per-platform hosted OAuth), so each not-yet-connected
+   platform gets its own Connect button rather than one magic link.
+   ========================================================= #}
+{% if profile_id %}
+{# Swappable wrapper: the connect popup's postMessage triggers a fetch
+   of /accounts-panel and replaces this innerHTML — no full reload.
+   Connect/disconnect clicks are DELEGATED (see JS) so swapped-in
+   buttons keep working. #}
+<div id="zn-accounts-panel">
+  {% include "publish/_zernio_accounts.html" %}
+</div>
+
+{% if connect_fetch_failed %}
+<div class="nc-panel" style="border-color: var(--nc-orange); margin-bottom: 12px;">
+  <div class="nc-panel__body" style="padding: 12px 16px;">
+    <i class="ti ti-alert-triangle" aria-hidden="true" style="color: var(--nc-orange);"></i>
+    No pudimos leer tus cuentas conectadas desde Zernio — las etiquetas de
+    abajo pueden estar desactualizadas. El formulario para publicar sigue funcionando.
+  </div>
+</div>
+{% endif %}
+
+{% else %}
+{# First-time setup — create a profile (groups your social accounts),
+   then connect platforms to it. Creation is inline (AJAX) so the
+   operator never leaves the page. #}
+<div class="nc-panel" style="margin-bottom: 16px;">
+  <div class="nc-panel__body">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom: 10px;">
+      <i class="ti ti-id-badge-2" aria-hidden="true" style="color: var(--nc-green);"></i>
+      <strong>Crea tu perfil de publicación</strong>
+    </div>
+    <p class="nc-text--muted" style="margin: 0 0 12px 0; font-size: 13px;">
+      Un perfil junta las redes desde las que publicas (por ejemplo
+      “Mi marca” o “Mi agencia”). Crea uno para empezar — luego le
+      conectas TikTok, Instagram, YouTube y las demás.
+    </p>
+    <form id="zn-create-profile-form" style="display:flex; flex-direction:column; gap:8px; max-width: 520px;">
+      <label class="nc-label" style="margin:0;">
+        Nombre del perfil
+        <input class="nc-input" id="zn-profile-name" name="name" required
+               maxlength="80" placeholder="Mi marca" autocomplete="off">
+      </label>
+      <label class="nc-label" style="margin:0;">
+        Descripción <span class="nc-text--muted">(opcional)</span>
+        <input class="nc-input" id="zn-profile-desc" name="description"
+               maxlength="200" placeholder="Para qué es este perfil">
+      </label>
+      <div style="display:flex; align-items:center; gap:10px; margin-top: 4px;">
+        <button type="submit" class="nc-btn nc-btn--primary" id="zn-create-profile-btn">
+          <i class="ti ti-plus" aria-hidden="true"></i>
+          <span>Crear perfil</span>
+        </button>
+        <span id="zn-create-profile-msg" class="nc-text--muted" style="font-size:12px;"></span>
+      </div>
+    </form>
+
+    <details style="margin-top: 16px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.08);">
+      <summary class="nc-text--muted" style="cursor:pointer; font-size:12px;">
+        ¿Ya tienes un perfil de Zernio? Vincúlalo en lugar de crear uno.
+      </summary>
+      <p class="nc-text--muted" style="font-size: 12px; margin: 8px 0;">
+        Pega un <code class="nc-mono">profileId</code> de Zernio que ya
+        exista (debe tener al menos una cuenta conectada).
+      </p>
+      <form action="/dashboard/publish/zernio/accounts/claim" method="post" style="display: flex; gap: 8px; max-width: 520px;">
+        <input class="nc-input nc-input--mono" name="profile_id" required placeholder="prof_abc123…" style="flex:1;">
+        <button type="submit" class="nc-btn">
+          <i class="ti ti-link" aria-hidden="true"></i>
+          <span>Vincular</span>
+        </button>
+      </form>
+    </details>
+  </div>
+</div>
+{% endif %}
+
+{# =========================================================
+   SECTION 2 — Tab switcher + publish surfaces
+   ========================================================= #}
+{% if profile_id %}
+<div class="nc-pc-tabs">
+  <button type="button" class="nc-pc-tab is-active" data-tab="single">
+    <i class="ti ti-square" aria-hidden="true"></i>
+    Publicar uno
+  </button>
+  <button type="button" class="nc-pc-tab" data-tab="bulk">
+    <i class="ti ti-layout-grid" aria-hidden="true"></i>
+    Publicar varios
+  </button>
+  <button type="button" class="nc-pc-tab" data-tab="published">
+    <i class="ti ti-circle-check" aria-hidden="true"></i>
+    Publicados{% if history %} ({{ history|length }}){% endif %}
+  </button>
+  <button type="button" class="nc-pc-tab" data-tab="rendimiento">
+    <i class="ti ti-chart-bar" aria-hidden="true"></i>
+    Rendimiento
+  </button>
+  <button type="button" class="nc-pc-tab" data-tab="calendario">
+    <i class="ti ti-calendar" aria-hidden="true"></i>
+    Calendario
+  </button>
+  <button type="button" class="nc-pc-tab" data-tab="programacion">
+    <i class="ti ti-calendar-clock" aria-hidden="true"></i>
+    Programación
+  </button>
+  <button type="button" class="nc-pc-tab" data-tab="autopublish">
+    <i class="ti ti-robot" aria-hidden="true"></i>
+    Piloto automático
+  </button>
+  <button type="button" class="nc-pc-tab" data-tab="comentarios">
+    <i class="ti ti-message-circle" aria-hidden="true"></i>
+    Comentarios
+  </button>
+  <button type="button" class="nc-pc-tab" data-tab="dms">
+    <i class="ti ti-mail" aria-hidden="true"></i>
+    DMs
+  </button>
+  <button type="button" class="nc-pc-tab" data-tab="crecimiento">
+    <i class="ti ti-rocket" aria-hidden="true"></i>
+    Crecimiento
+  </button>
+  <button type="button" class="nc-pc-tab" data-tab="comunidad">
+    <i class="ti ti-speakerphone" aria-hidden="true"></i>
+    Comunidad
+  </button>
+</div>
+
+{# ========== Tab: Single Publish ========== #}
+<div class="nc-pc-tab-body is-active" data-tab-body="single">
+  {% if not publishable_clips %}
+  <div class="nc-panel">
+    <div class="nc-empty">
+      <div class="nc-empty__title">No tienes clips listos para publicar</div>
+      <p class="nc-empty__body">
+        Corta y aprueba un clip en <a href="/dashboard/streams">Streams</a>
+        y luego vuelve aquí.
+      </p>
+    </div>
+  </div>
+  {% else %}
+  <div class="nc-pc-clip-list" id="zn-clip-list">
+    {% for c in publishable_clips %}
+    <div class="nc-pc-clip-row"
+         data-clip-id="{{ c.id }}"
+         data-clip-title="{{ c.title }}"
+         data-clip-duration="{{ c.duration_s|round(1) }}">
+      <div class="nc-pc-clip-row__thumb">
+        <img src="{{ c.thumbnail_url }}" alt=""
+             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+        <span class="nc-pc-clip-row__thumb-fallback" style="display:none;">
+          <i class="ti ti-photo" aria-hidden="true"></i>
+        </span>
+        <span class="nc-pc-clip-row__dur">{{ c.duration_s|round(0) }}s</span>
+      </div>
+      <div class="nc-pc-clip-row__meta">
+        <div class="nc-pc-clip-row__title">{{ c.title }}</div>
+        <div class="nc-pc-clip-row__id">{{ c.id }}</div>
+        <span class="nc-pc-clip-row__status">
+          <i class="ti ti-circle-dot" aria-hidden="true" style="color: var(--nc-green);"></i>
+          Listo para publicar
+        </span>
+      </div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <form action="/dashboard/publish/zernio/clip/{{ c.id }}/mark-published"
+              method="post" style="margin:0;"
+              onclick="event.stopPropagation();"
+              onsubmit="return confirm('¿Marcar este clip como ya publicado? Sale de esta lista (no se envía ningún post).');">
+          <button type="submit" class="nc-btn"
+                  style="padding: 3px 10px; font-size: 11px; color: var(--nc-text--muted, #888);"
+                  title="¿Ya publicaste este clip? Márcalo como publicado para que salga de esta lista — no se envía nada.">
+            <i class="ti ti-check" aria-hidden="true"></i>
+            <span>Marcar publicado</span>
+          </button>
+        </form>
+        <i class="ti ti-chevron-down nc-pc-clip-row__caret" aria-hidden="true"></i>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="nc-pc-publish-panel" id="zn-publish-panel">
+    <div class="nc-pc-publish-panel__header">
+      <i class="ti ti-send" aria-hidden="true" style="color: var(--nc-green);"></i>
+      <div>
+        <div class="nc-pc-publish-panel__title" id="zn-selected-title">—</div>
+        <div class="nc-pc-publish-panel__meta">
+          <span id="zn-selected-id">—</span> · <span id="zn-selected-dur">—</span>s · 9:16
+        </div>
+      </div>
+    </div>
+
+    <form id="zn-single-form" method="post" action="" style="margin: 0;">
+      <div>
+        <small class="nc-text--muted">Plataformas — toca para activar; las apagadas no están conectadas.</small>
+        <div class="nc-pc-platform-chips" id="zn-platform-chips">
+          {% for key, label, icon in supported_platforms %}
+            {% set is_conn = key in connected_set %}
+            <span class="nc-pc-platform-chip {% if not is_conn %}is-disabled{% endif %}"
+                  data-platform="{{ key }}"
+                  data-connected="{{ '1' if is_conn else '0' }}">
+              <i class="ti {{ icon }}" aria-hidden="true"></i>
+              <span>{{ label }}</span>
+            </span>
+          {% endfor %}
+        </div>
+      </div>
+
+      <label class="nc-label" style="margin-top: 12px;">
+        Título
+        <input class="nc-input" name="title" maxlength="140"
+               placeholder="Opcional — se usa como título del post donde la plataforma lo permite">
+      </label>
+
+      <label class="nc-label">
+        Texto del post
+        <textarea class="nc-input" name="description" rows="3"
+                  placeholder="Opcional — el texto que se manda a cada plataforma elegida"></textarea>
+      </label>
+
+      <label class="nc-label">
+        Primer comentario <span class="nc-text--muted">(opcional — solo Facebook / Instagram / LinkedIn / YouTube)</span>
+        <input class="nc-input" name="first_comment" maxlength="500"
+               placeholder="Primer comentario — ej. link a tu canal de Kick">
+      </label>
+
+      {# Collapsed per-platform overrides: customContent per target +
+         YouTube's required title + TikTok privacy. Server reads
+         caption_{platform} / yt_title / tiktok_privacy form keys. #}
+      <details style="margin-top: 10px;">
+        <summary class="nc-text--muted" style="cursor: pointer; font-size: 13px;">
+          <i class="ti ti-adjustments" aria-hidden="true"></i>
+          Texto por plataforma (opcional)
+        </summary>
+        <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px; padding-left: 8px;">
+          <label class="nc-label" data-yt-only style="margin: 0;">
+            Título de YouTube <span class="nc-text--muted">(obligatorio si publicas a YouTube y no pusiste Título)</span>
+            <input class="nc-input" name="yt_title" maxlength="100"
+                   placeholder="Título del video en YouTube">
+          </label>
+          <label class="nc-label" data-tiktok-only style="margin: 0;">
+            Privacidad de TikTok
+            <select class="nc-input" name="tiktok_privacy">
+              <option value="">Por defecto (público)</option>
+              <option value="PUBLIC_TO_EVERYONE">Público</option>
+              <option value="MUTUAL_FOLLOW_FRIENDS">Amigos (follow mutuo)</option>
+              <option value="FOLLOWER_OF_CREATOR">Solo seguidores</option>
+              <option value="SELF_ONLY">Solo yo</option>
+            </select>
+          </label>
+          {% for key, label, icon in supported_platforms %}
+          <label class="nc-label" style="margin: 0;">
+            <span><i class="ti {{ icon }}" aria-hidden="true"></i> Texto {{ label }}</span>
+            <textarea class="nc-input" name="caption_{{ key }}" rows="2"
+                      placeholder="Solo para {{ label }} — si lo dejas vacío usa el texto general"></textarea>
+          </label>
+          {% endfor %}
+        </div>
+      </details>
+
+      <input type="hidden" name="mode" id="zn-mode" value="now">
+
+      {# Auto-fill: ask the server to compose the hook + caption + hashtags +
+         fixed handles for this clip and drop them into Title/Caption. #}
+      <div style="margin-top: 12px;">
+        <button type="button" class="nc-btn" id="zn-autofill-btn"
+                title="Genera el hook viral, caption, hashtags y tus handles para este clip">
+          <i class="ti ti-sparkles" aria-hidden="true"></i>
+          <span>Auto-rellenar (hook + caption + tags)</span>
+        </button>
+        <span class="nc-text--muted" id="zn-autofill-msg" style="font-size:12px; margin-left:8px;"></span>
+      </div>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; align-items: center;">
+        <button type="submit" class="nc-btn nc-btn--primary" data-mode="now">
+          <i class="ti ti-send" aria-hidden="true"></i>
+          <span>Publicar en <span id="zn-platform-count">0</span> plataforma(s)</span>
+        </button>
+        <button type="submit" class="nc-btn" data-mode="draft"
+                title="Guarda en Borradores para revisar o aprobar después">
+          <i class="ti ti-file-pencil" aria-hidden="true"></i>
+          <span>Guardar como borrador</span>
+        </button>
+      </div>
+
+      {# Schedule row on its own line so the calendar is obvious. The native
+         datetime-local pops a calendar on click; min blocks past dates. #}
+      <div style="margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.06);">
+        <label class="nc-label" style="margin:0;">
+          <i class="ti ti-calendar-event" aria-hidden="true"></i> Programar para (tu hora local)
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:4px;">
+            <input class="nc-input" type="datetime-local" name="scheduled_for"
+                   id="zn-schedule-at" style="width:auto; padding:6px 8px;">
+            <button type="button" class="nc-btn" id="zn-besttime-fill"
+                    title="Rellena con tu próxima mejor hora según el engagement">
+              <i class="ti ti-clock-bolt" aria-hidden="true"></i>
+              <span>Sugerir mejor hora</span>
+            </button>
+            <button type="submit" class="nc-btn nc-btn--primary" data-mode="schedule"
+                    title="Programa la publicación para la fecha elegida">
+              <i class="ti ti-calendar-plus" aria-hidden="true"></i>
+              <span>Programar</span>
+            </button>
+            <span class="nc-text--muted" id="zn-besttime-msg" style="font-size:12px;"></span>
+          </div>
+        </label>
+      </div>
+    </form>
+  </div>
+  {% endif %}
+</div>
+
+{# ========== Tab: Bulk Publish ========== #}
+<div class="nc-pc-tab-body" data-tab-body="bulk">
+  {% if not publishable_clips %}
+  <div class="nc-panel">
+    <div class="nc-empty"><div class="nc-empty__title">No tienes clips listos para publicar</div></div>
+  </div>
+  {% else %}
+  <div class="nc-panel">
+    <div class="nc-panel__body">
+      <p class="nc-text--muted" style="margin: 0 0 8px 0;">
+        Elige plataformas para cada clip — cada etiqueta se activa por su cuenta.
+        Toca Publicar seleccionados y salen todos a la vez.
+        {% if publishable_total and publishable_total > publishable_clips|length %}
+        <br>Mostrando los {{ publishable_clips|length }} más recientes de
+        {{ publishable_total }} aprobados — Auto-programar los toma todos.
+        {% endif %}
+      </p>
+      <div id="zn-bulk-rows">
+        {% for c in publishable_clips %}
+        <div class="nc-pc-bulk-row" data-clip-id="{{ c.id }}">
+          <div class="nc-pc-bulk-row__thumb">
+            <img src="{{ c.thumbnail_url }}" alt="" onerror="this.style.opacity=0">
+          </div>
+          <div class="nc-pc-bulk-row__meta">
+            <div class="nc-pc-bulk-row__title">{{ c.title }}</div>
+            <div class="nc-pc-bulk-row__dur">{{ c.duration_s|round(0) }}s · {{ c.id[:18] }}…</div>
+          </div>
+          <div class="nc-pc-platform-chips" style="margin: 0;">
+            {% for key, label, icon in supported_platforms %}
+              {% set is_conn = key in connected_set %}
+              <span class="nc-pc-platform-chip {% if not is_conn %}is-disabled{% endif %}"
+                    data-platform="{{ key }}"
+                    data-connected="{{ '1' if is_conn else '0' }}"
+                    style="padding: 4px 10px; font-size: 11px;">
+                <i class="ti {{ icon }}" aria-hidden="true"></i>
+              </span>
+            {% endfor %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <div class="nc-pc-bulk-actions">
+        <button type="button" id="zn-bulk-publish" class="nc-btn nc-btn--primary">
+          <i class="ti ti-send" aria-hidden="true"></i>
+          <span>Publicar seleccionados (<span id="zn-bulk-count">0</span>)</span>
+        </button>
+        <span class="nc-text--muted" style="font-size: 12px;" id="zn-bulk-hint">
+          Elige al menos una plataforma por clip para activar.
+        </span>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{# ========== Programación — recurring queue slots + Hora óptima +
+   upcoming (scheduled/queued) list with cancel. All data loads from
+   /schedule.json + /best-time.json; vanilla JS, no reload. ========== #}
+<div class="nc-pc-tab-body" data-tab-body="programacion">
+{% if profile_id %}
+<div class="nc-panel" id="zn-schedule-panel" style="margin-bottom: 16px;">
+  <div class="nc-panel__header" style="display:flex; align-items:center; gap:8px;">
+    <i class="ti ti-calendar-clock" aria-hidden="true"></i>
+    Programación
+    <span class="nc-text--muted" style="font-size:12px; margin-left:auto;">
+      Slots recurrentes · cola · hora óptima
+    </span>
+  </div>
+  <div class="nc-panel__body" style="display:flex; flex-direction:column; gap:16px;">
+
+    {# --- Auto-program (one-click whole-queue scheduler) --- #}
+    <div style="border:1px solid var(--nc-green, #48bb78); border-radius:10px; padding:14px;">
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+        <i class="ti ti-wand" aria-hidden="true" style="color:var(--nc-green);"></i>
+        <strong style="font-size:14px;">Auto-programar todo</strong>
+      </div>
+      <p class="nc-text--muted" style="font-size:13px; margin:0 0 10px 0;">
+        Reparte tus clips aprobados en tus mejores horas (según el engagement),
+        sin pasarte del tope diario, y le pone a cada uno su hook, caption,
+        hashtags y tus handles fijos. Configura plataformas, tope y handles en
+        <strong>Piloto automático</strong>.
+      </p>
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <button type="button" class="nc-btn nc-btn--primary" id="zn-autoprog-btn" style="padding:8px 16px;">
+          <i class="ti ti-calendar-bolt" aria-hidden="true"></i>
+          {#- Real backlog COUNT, not the 60-row display page — a 300-clip
+              backlog used to read "Auto-programar 60". -#}
+          <span>Auto-programar <span id="zn-autoprog-count">{{ publishable_total or (publishable_clips|length if publishable_clips else 0) }}</span> clip(s)</span>
+        </button>
+        <span class="nc-text--muted" id="zn-autoprog-msg" style="font-size:13px;"></span>
+      </div>
+    </div>
+
+    {# --- Recurring slots editor --- #}
+    <div>
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+        <strong style="font-size:13px;">Slots recurrentes</strong>
+        <span class="nc-text--muted" style="font-size:12px;">
+          La cola publica en estos huecos. Modo “Cola” al publicar usa el próximo libre.
+        </span>
+      </div>
+      <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap; margin-bottom:8px;">
+        <label class="nc-label" style="margin:0;">
+          Día
+          <select class="nc-input" id="zn-slot-dow" style="width:auto;">
+            <option value="1">Lunes</option><option value="2">Martes</option>
+            <option value="3">Miércoles</option><option value="4">Jueves</option>
+            <option value="5">Viernes</option><option value="6">Sábado</option>
+            <option value="0">Domingo</option>
+          </select>
+        </label>
+        <label class="nc-label" style="margin:0;">
+          Hora
+          <input class="nc-input" id="zn-slot-time" type="time" value="18:00" style="width:auto;">
+        </label>
+        <label class="nc-label" style="margin:0;">
+          Zona horaria
+          <input class="nc-input" id="zn-slot-tz" placeholder="UTC" value="UTC" style="width:auto;">
+        </label>
+        <button type="button" class="nc-btn" id="zn-slot-add" style="padding:6px 12px;">
+          <i class="ti ti-plus" aria-hidden="true"></i> Añadir slot
+        </button>
+      </div>
+      <div id="zn-slot-chips" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
+      <div style="margin-top:10px; display:flex; gap:8px; align-items:center;">
+        <button type="button" class="nc-btn nc-btn--primary" id="zn-slot-save" style="padding:6px 14px;">
+          <i class="ti ti-device-floppy" aria-hidden="true"></i> Guardar slots
+        </button>
+        <span class="nc-text--muted" id="zn-slot-msg" style="font-size:12px;"></span>
+      </div>
+    </div>
+
+    {# --- Hora óptima --- #}
+    <div>
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+        <strong style="font-size:13px;">Hora óptima</strong>
+        <span class="nc-text--muted" style="font-size:12px;">Según el engagement histórico (UTC).</span>
+      </div>
+      <div id="zn-besttime" class="nc-text--muted" style="font-size:13px;">Cargando…</div>
+    </div>
+
+    {# --- Upcoming --- #}
+    <div>
+      <strong style="font-size:13px;">Próximas publicaciones</strong>
+      <div id="zn-upcoming" style="margin-top:8px;"></div>
+    </div>
+  </div>
+</div>
+{% endif %}
+</div>
+
+{# ========== Comunidad — Discord/Telegram connect + announce-on-publish
+   toggle + brand identity + weekly digest (phase 11). ========== #}
+{# ========== Tab: Piloto automático — auto-publish settings (per-tenant).
+   Auto-encola clips a Zernio con su render (hooks quemados).
+   hands_free (default) publica cada clip generado sin revisión, desde el
+   pipeline del VOD; on_approve dispara desde el Ship del editor. ========== #}
+<div class="nc-pc-tab-body" data-tab-body="autopublish">
+{% if profile_id %}
+<div class="nc-panel" id="zn-autopublish-panel" style="margin-bottom:16px;">
+  <div class="nc-panel__header">
+    <i class="ti ti-robot" aria-hidden="true"></i>
+    Piloto automático
+    <span class="nc-text--muted" style="margin-left:auto; font-size:12px;">
+      Publica solo — hasta mientras duermes
+    </span>
+  </div>
+  <div class="nc-panel__body" style="display:flex; flex-direction:column; gap:18px;">
+
+    {# 1 · Master switch — big, plain, with the promise spelled out. #}
+    <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer;">
+      <input type="checkbox" id="zn-ap-enabled" style="margin-top:4px; transform:scale(1.3);">
+      <span>
+        <strong style="font-size:15px;">Encender el piloto automático</strong>
+        <div class="nc-text--muted" style="font-size:13px; margin-top:2px;">
+          Cuando está encendido, cada clip nuevo se publica solo en tus redes —
+          con su gancho, su texto, sus hashtags y tu firma. Tú no tocas nada.
+        </div>
+      </span>
+    </label>
+
+    <div style="border-top:1px solid rgba(255,255,255,0.06); padding-top:16px;
+                display:flex; flex-direction:column; gap:18px;">
+
+      {# 2 · Review? #}
+      <div>
+        <div style="font-size:14px; margin-bottom:8px;"><strong>1. ¿Reviso antes de publicar?</strong></div>
+        <label style="display:block; margin-bottom:6px; cursor:pointer;">
+          <input type="radio" name="zn-ap-mode" value="hands_free" checked>
+          <strong>No, publica todo solo</strong>
+          <span class="nc-text--muted" style="font-size:13px;"> — lo más automático, ideal para no estar encima.</span>
+        </label>
+        <label style="display:block; cursor:pointer;">
+          <input type="radio" name="zn-ap-mode" value="on_approve">
+          <strong>Sí, yo elijo cada clip</strong>
+          <span class="nc-text--muted" style="font-size:13px;"> — se publica solo cuando tú le das “Ship”.</span>
+        </label>
+      </div>
+
+      {# 3 · When (on_approve only) #}
+      <div>
+        <div style="font-size:14px; margin-bottom:8px;"><strong>2. Al darle “Ship” a un clip</strong></div>
+        <select class="nc-input" id="zn-ap-postmode" style="max-width:360px;">
+          <option value="queue">A la cola de Zernio</option>
+          <option value="now">Publicar enseguida</option>
+        </select>
+        <div class="nc-text--muted" style="font-size:12px; margin-top:4px;">
+          Solo aplica al modo “Yo elijo cada clip”. En automático, el Motor de
+          Crecimiento marca el ritmo por plataforma (tope diario + separación).
+        </div>
+      </div>
+
+      {# 4 · Where #}
+      <div>
+        <div style="font-size:14px; margin-bottom:8px;"><strong>3. ¿Dónde publico?</strong></div>
+        <div id="zn-ap-targets" style="display:flex; flex-wrap:wrap; gap:6px;">
+          <span class="nc-text--muted" style="font-size:12px;">Cargando…</span>
+        </div>
+      </div>
+
+      {# 5 · How many + which #}
+      <div style="display:flex; flex-wrap:wrap; gap:24px; align-items:flex-start;">
+        <label class="nc-label" style="margin:0;">
+          <strong style="font-size:14px;">4. ¿Cuántos por día?</strong>
+          <span class="nc-text--muted" style="font-size:12px;">Recomendamos no más de 10 para evitar bloqueos por las plataformas.</span>
+          <input class="nc-input" id="zn-ap-cap" type="number" min="0" value="10" style="width:90px;">
+        </label>
+        <label class="nc-label" style="margin:0;">
+          <strong style="font-size:14px;">5. ¿Qué clips publico?</strong>
+          <span class="nc-text--muted" style="font-size:12px;">Qué tan exigente eres.</span>
+          <select class="nc-input" id="zn-ap-threshold" style="width:auto;">
+            <option value="0.3">Todos los clips</option>
+            <option value="0.6">Los buenos y mejores</option>
+            <option value="0.8">Solo los mejores</option>
+          </select>
+        </label>
+      </div>
+      <div class="nc-text--muted" style="font-size:13px;" id="zn-ap-used"></div>
+
+      {# 6 · Signature #}
+      <label class="nc-label" style="margin:0;">
+        <strong style="font-size:14px;">6. Tu firma en cada post</strong>
+        <span class="nc-text--muted" style="font-size:12px;">
+          Se agrega al final de cada publicación: tus @ y tus hashtags de siempre.
+        </span>
+        <textarea class="nc-input" id="zn-ap-tagsuffix" rows="2" maxlength="500"
+                  placeholder="@minombre · sígueme en Kick · #gaming #clips"></textarea>
+      </label>
+
+      {# 7 · Smart publishing — deterministic per-platform rulebook (no LLM) #}
+      <div style="border-top:1px solid rgba(255,255,255,0.06); padding-top:16px;
+                  display:flex; flex-direction:column; gap:14px;">
+        <div>
+          <strong style="font-size:14px;">⚡ Publicación inteligente</strong>
+          <div class="nc-text--muted" style="font-size:13px; margin-top:2px;">
+            En vez de “publicar todo en todas partes”, cada clip se puntúa por
+            plataforma según su duración y calidad, se respeta el límite diario
+            de cada red, se evita repetir contenido parecido, y se reparten los
+            mejores clips primero. El resto espera en la cola. Todo automático.
+          </div>
+        </div>
+        <div id="zn-growth-opts" style="display:flex; flex-direction:column; gap:14px; padding-left:6px;">
+          <div style="display:flex; flex-wrap:wrap; gap:24px;">
+            <label class="nc-label" style="margin:0;">
+              <strong style="font-size:14px;">¿Cuántos clips hoy?</strong>
+              <span class="nc-text--muted" style="font-size:12px;">Vacío = sin tope (solo límites por red).</span>
+              <input class="nc-input" id="zn-ap-budget" type="number" min="0" placeholder="sin tope" style="width:120px;">
+            </label>
+            <label class="nc-label" style="margin:0;">
+              <strong style="font-size:14px;">Growth Score mínimo</strong>
+              <span class="nc-text--muted" style="font-size:12px;">Debajo de esto, no se publica en esa red.</span>
+              <input class="nc-input" id="zn-ap-growthmin" type="number" min="0" max="100" value="40" style="width:90px;">
+            </label>
+          </div>
+          <div>
+            <div style="font-size:14px; margin-bottom:6px;"><strong>Reglas por plataforma</strong>
+              <span class="nc-text--muted" style="font-size:12px;"> — máximo diario, separación mínima (min) y hashtags.</span>
+            </div>
+            <div id="zn-rules-table" class="nc-text--muted" style="font-size:12px;">Cargando…</div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <button type="button" class="nc-btn nc-btn--primary" id="zn-ap-save" style="padding:9px 20px; font-size:14px;">
+          <i class="ti ti-device-floppy"></i> Guardar
+        </button>
+        <span class="nc-text--muted" id="zn-ap-msg" style="font-size:13px; margin-left:8px;"></span>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+</div>
+
+<div class="nc-pc-tab-body" data-tab-body="comunidad">
+{% if profile_id %}
+<div class="nc-panel" id="zn-community-panel" style="margin-bottom: 16px;">
+  <div class="nc-panel__header">
+    <i class="ti ti-speakerphone" aria-hidden="true"></i>
+    Comunidad
+    <span class="nc-text--muted" style="margin-left:auto; font-size:12px;">
+      Avisa a tu Discord / Telegram cuando publicas
+    </span>
+  </div>
+  <div class="nc-panel__body" style="display:flex; flex-direction:column; gap:12px;">
+    <div class="nc-pc-acct-row" style="padding:0;">
+      {% for key, label, icon in community_platforms %}
+        {% if key in community_connected %}
+        <span class="nc-pc-acct-chip is-connected">
+          <i class="ti {{ icon }}" aria-hidden="true"></i><span>{{ label }}</span>
+          <i class="ti ti-check" aria-hidden="true"></i>
+        </span>
+        {% else %}
+        <button type="button" class="nc-pc-connect-btn js-zn-connect" data-platform="{{ key }}"
+                title="Conectar {{ label }}">
+          <i class="ti {{ icon }}" aria-hidden="true"></i><span>Conectar {{ label }}</span>
+        </button>
+        {% endif %}
+      {% endfor %}
+    </div>
+
+    <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+      <input type="checkbox" id="zn-comm-enabled"> Avisar a mi comunidad al publicar
+    </label>
+    <div style="display:flex; flex-wrap:wrap; gap:8px;">
+      <label class="nc-label" style="margin:0;">Canal Discord
+        <select class="nc-input" id="zn-comm-discord" style="width:auto;"><option value="">—</option></select></label>
+      <label class="nc-label" style="margin:0;">Canal Telegram
+        <select class="nc-input" id="zn-comm-telegram" style="width:auto;"><option value="">—</option></select></label>
+    </div>
+    <div style="display:flex; flex-wrap:wrap; gap:8px;">
+      <label class="nc-label" style="margin:0; flex:1; min-width:160px;">Nombre de marca (Discord)
+        <input class="nc-input" id="zn-comm-brand" placeholder="Mi canal" maxlength="80"></label>
+      <label class="nc-label" style="margin:0; flex:1; min-width:160px;">Avatar (URL)
+        <input class="nc-input" id="zn-comm-avatar" placeholder="https://…/avatar.png"></label>
+    </div>
+    <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+      <input type="checkbox" id="zn-comm-digest"> Resumen semanal de métricas (opcional)
+    </label>
+    <div>
+      <button type="button" class="nc-btn nc-btn--primary" id="zn-comm-save" style="padding:6px 14px;">
+        <i class="ti ti-device-floppy"></i> Guardar
+      </button>
+      <span class="nc-text--muted" id="zn-comm-msg" style="font-size:12px; margin-left:8px;"></span>
+    </div>
+  </div>
+</div>
+{% endif %}
+</div>
+
+{# ========== FAILED list — clickable from the Failed counter. Loads
+   from /failed.json with per-platform error + Spanish hint; Reintentar
+   per post + Reintentar todos. Hidden until the counter is clicked. #}
+<div class="nc-pc-tab-body" data-tab-body="published">
+{% if profile_id %}
+<div class="nc-panel" id="zn-failed-panel" style="margin-bottom: 16px; display:none; border-color:#ff7575;">
+  <div class="nc-panel__header" style="display:flex; align-items:center; gap:8px;">
+    <i class="ti ti-alert-triangle" aria-hidden="true" style="color:#ff7575;"></i>
+    Publicaciones fallidas
+    <button type="button" class="nc-btn nc-btn--primary" id="zn-reprocess-all" style="margin-left:auto; padding:4px 12px; font-size:12px;"
+            title="Re-renderiza, genera una URL nueva y reagenda por el drip. Arregla fallos por URL/render expirado.">
+      <i class="ti ti-rotate-clockwise" aria-hidden="true"></i> Reprocesar fallidos
+    </button>
+    <button type="button" class="nc-btn" id="zn-retry-all" style="padding:4px 12px; font-size:12px;"
+            title="Reintenta el mismo post en Zernio (misma URL). Útil solo para fallos temporales.">
+      <i class="ti ti-refresh" aria-hidden="true"></i> Reintentar todos
+    </button>
+  </div>
+  <div class="nc-panel__body" id="zn-failed-list" style="padding:12px 16px;">
+    <span class="nc-text--muted">Cargando…</span>
+  </div>
+</div>
+{% endif %}
+</div>
+
+{# ========== Borradores — drafts saved via "Guardar como borrador".
+   Local zernio_publishes rows with status='draft'; also the agency
+   client-approval flow: stage → review → Publicar ahora / Programar. #}
+<div class="nc-pc-tab-body" data-tab-body="published">
+{% if drafts %}
+<div class="nc-panel" style="margin-bottom: 16px;">
+  <div class="nc-panel__header">
+    <i class="ti ti-file-pencil" aria-hidden="true"></i>
+    Borradores ({{ drafts|length }})
+  </div>
+  <div class="nc-panel__body" style="padding: 0;">
+    <table class="nc-table" style="margin: 0;">
+      <thead>
+        <tr><th>Texto</th><th>Plataformas</th><th>Creado</th><th style="width: 1%;"></th></tr>
+      </thead>
+      <tbody>
+        {% for d in drafts %}
+        <tr>
+          <td style="max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
+              title="{{ d.content or '' }}">
+            {{ (d.content or '(sin caption)')[:80] }}
+          </td>
+          <td><span class="nc-chip nc-chip--code">{{ d.platforms }}</span></td>
+          <td class="nc-text--muted" style="font-size: 12px;" data-localtime="{{ d.created_at }}">{{ d.created_at[:16] }}</td>
+          <td>
+            <div style="display: flex; gap: 6px; align-items: center; white-space: nowrap;">
+              <form method="post" action="/dashboard/publish/zernio/draft/{{ d.post_id }}/publish"
+                    style="margin: 0; display: inline;">
+                <button type="submit" class="nc-btn nc-btn--primary" style="padding: 4px 10px; font-size: 12px;"
+                        title="Publicar este borrador ahora mismo">
+                  <i class="ti ti-send" aria-hidden="true"></i> Publicar ahora
+                </button>
+              </form>
+              <form method="post" action="/dashboard/publish/zernio/draft/{{ d.post_id }}/publish"
+                    style="margin: 0; display: inline-flex; gap: 4px; align-items: center;"
+                    onsubmit="var i=this.querySelector('[type=datetime-local]'); if(!i.value){alert('Elige fecha y hora.');return false;} var h=document.createElement('input'); h.type='hidden'; h.name='scheduled_for'; h.value=new Date(i.value).toISOString(); i.removeAttribute('name'); this.appendChild(h); return true;">
+                <input class="nc-input" type="datetime-local" name="scheduled_for"
+                       style="width: auto; padding: 3px 6px; font-size: 12px;">
+                <button type="submit" class="nc-btn" style="padding: 4px 10px; font-size: 12px;"
+                        title="Programar este borrador">
+                  <i class="ti ti-calendar-event" aria-hidden="true"></i> Programar
+                </button>
+              </form>
+              <form method="post" action="/dashboard/publish/zernio/draft/{{ d.post_id }}/delete"
+                    style="margin: 0; display: inline;"
+                    onsubmit="return confirm('¿Eliminar este borrador? No se puede deshacer.');">
+                <button type="submit" class="nc-btn nc-btn--danger" style="padding: 4px 8px; font-size: 12px;"
+                        title="Eliminar borrador">
+                  <i class="ti ti-trash" aria-hidden="true"></i>
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+</div>
+
+{# ========== Tab: Published (this tenant's publish history; local
+   zernio_publishes rows + live status joined by post id) ========== #}
+<div class="nc-pc-tab-body" data-tab-body="published">
+<div class="nc-panel">
+  <div class="nc-panel__header">
+    <i class="ti ti-history" aria-hidden="true"></i>
+    <span class="nc-panel__title">Publicados</span>
+    {% if published_clip_ids %}
+    <form action="/dashboard/publish/zernio/reopen-all" method="post"
+          style="margin-left:auto; display:inline;"
+          onsubmit="return confirm('¿Reabrir los {{ published_clip_ids|length }} clips publicados para volver a publicarlos? Vuelven a la lista de Publicar como aprobados (no se borra nada de lo ya publicado).');">
+      <button type="submit" class="nc-btn" style="padding:3px 10px; font-size:12px;"
+              title="Devuelve todos los clips publicados a la lista de Publicar para republicarlos">
+        <i class="ti ti-refresh" aria-hidden="true"></i>
+        <span>Republicar todos ({{ published_clip_ids|length }})</span>
+      </button>
+    </form>
+    {% else %}
+    <span class="nc-chip nc-chip--muted" style="margin-left:auto;">próximos + recientes</span>
+    {% endif %}
+  </div>
+  <div class="nc-panel__body" style="padding: 0;">
+    {% if history %}
+    <table class="nc-table">
+      <thead>
+        <tr><th>Cuándo</th><th>Clip</th><th>Plataformas</th><th>Estado</th><th>Texto</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for h in history %}
+        {% set view_url = ("/dashboard/clips/" ~ h.clip_id) if h.kind == "manual" else ("/dashboard/publish/zernio/job/" ~ h.post_id) %}
+        <tr class="nc-pc-history-row" data-href="{{ view_url }}">
+          {# Scheduled posts show their real publish time; everything else
+             shows when it was recorded. Both render in local tz via JS. #}
+          {% set when_ts = h.scheduled_for if (h.status == "scheduled" and h.scheduled_for) else h.created_at %}
+          <td>
+            <span class="nc-mono nc-mono--muted"{% if when_ts %} data-localtime="{{ when_ts }}"{% endif %}>{{ (when_ts or "")[:19] }}</span>
+            {% if h.status == "scheduled" and h.scheduled_for %}<span class="nc-text--muted" style="font-size:10px;"> · programado</span>{% endif %}
+          </td>
+          <td style="max-width:260px;">
+            {# Visual recognition — a thumbnail beats remembering the caption.
+               Lazy-loads; hides itself if the thumbnail was reclaimed. #}
+            <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+              {% if h.clip_id %}
+              <img src="/dashboard/clips/{{ h.clip_id }}/thumbnail" alt=""
+                   loading="lazy" onerror="this.style.display='none'"
+                   style="width:44px; height:58px; object-fit:cover; border-radius:6px;
+                          flex:0 0 auto; background:rgba(255,255,255,0.05);">
+              {% endif %}
+              <span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                {{ h.title or (h.clip_id or "")[:14] ~ "…" }}
+              </span>
+            </div>
+          </td>
+          <td>
+            {% if h.kind == "manual" %}
+            <span class="nc-chip nc-chip--muted" title="Lo marcaste como publicado — se subió fuera de ChalybClip o antes de que existiera el historial">manual</span>
+            {% else %}
+              {% for p in h.platforms %}
+              <span class="nc-chip nc-chip--code">{{ p }}</span>
+              {% endfor %}
+            {% endif %}
+          </td>
+          <td>
+            {% set st = (h.status or "")|lower %}
+            <span class="nc-chip {% if st in ('published','finished','success') %}nc-chip--success{% elif st in ('failed','error') %}nc-chip--warn{% else %}nc-chip--code{% endif %}">
+              {{ h.status }}
+            </span>
+          </td>
+          <td style="max-width:240px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ h.content or "—" }}</td>
+          <td style="text-align:right; white-space:nowrap;">
+            {% if h.clip_id and h.clip_id in published_clip_ids %}
+            <form action="/dashboard/publish/zernio/clip/{{ h.clip_id }}/reopen"
+                  method="post" style="display:inline;"
+                  onclick="event.stopPropagation();"
+                  onsubmit="return confirm('¿Reabrir este clip para volver a publicarlo? Vuelve a la lista de Publicar como aprobado.');">
+              <button type="submit" class="nc-btn" style="padding: 3px 10px; font-size: 12px;"
+                      title="Devuelve el clip a la lista de Publicar para republicarlo">
+                <i class="ti ti-refresh" aria-hidden="true"></i>
+                <span>Republicar</span>
+              </button>
+            </form>
+            {% endif %}
+            <a href="{{ view_url }}"
+               class="nc-btn" style="padding: 3px 10px; font-size: 12px; text-decoration:none;"
+               onclick="event.stopPropagation();">
+              <i class="ti ti-eye" aria-hidden="true"></i>
+              <span>{{ "Abrir clip" if h.kind == "manual" else "Ver" }}</span>
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <script>
+    (function () {
+      document.querySelectorAll(".nc-pc-history-row[data-href]").forEach(function (tr) {
+        tr.addEventListener("click", function () {
+          window.location.href = tr.getAttribute("data-href");
+        });
+      });
+    })();
+    </script>
+    {% else %}
+    <div class="nc-empty">
+      <div class="nc-empty__title">Aún no has publicado nada</div>
+      <p class="nc-empty__body">
+        Publica un clip desde la pestaña Publicar uno o Publicar varios —
+        cada publicación aparece aquí con su estado y un botón Ver.
+      </p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+</div>
+
+{# ========== Tab: Rendimiento — recent clips with per-platform metrics.
+   Loads live from /rendimiento.json; 7/30-day toggle. Unavailable
+   metrics render "—" (no fake zeros). ========== #}
+<div class="nc-pc-tab-body" data-tab-body="rendimiento">
+<div class="nc-panel">
+  <div class="nc-panel__header" style="display:flex; align-items:center; gap:8px;">
+    <i class="ti ti-chart-bar" aria-hidden="true"></i>
+    <span class="nc-panel__title">Rendimiento</span>
+    <span style="margin-left:auto; display:inline-flex; gap:4px;">
+      <button type="button" class="nc-btn js-perf-days is-active" data-days="7" style="padding:3px 10px; font-size:12px;">7 días</button>
+      <button type="button" class="nc-btn js-perf-days" data-days="30" style="padding:3px 10px; font-size:12px;">30 días</button>
+    </span>
+  </div>
+  <div class="nc-panel__body">
+    <div id="zn-perf-totals" class="nc-text--muted" style="font-size:14px; margin-bottom:12px;">Cargando…</div>
+    <div id="zn-perf-table"></div>
+    {% if feature_ads %}
+    {# Phase 12 — ads next to organic (read-only), feature-flagged. #}
+    <div style="margin-top:16px;">
+      <strong style="font-size:13px;"><i class="ti ti-ad" aria-hidden="true"></i> Anuncios</strong>
+      <div id="zn-ads-table" class="nc-text--muted" style="margin-top:8px;">Cargando…</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+</div>
+
+{# ========== Tab: Calendario — unified, 3 sources (hub / scheduled /
+   external), color-coded. Month grid; click a day to see its entries.
+   Loads from /calendar.json. ========== #}
+<div class="nc-pc-tab-body" data-tab-body="calendario">
+<div class="nc-panel">
+  <div class="nc-panel__header" style="display:flex; align-items:center; gap:8px;">
+    <i class="ti ti-calendar" aria-hidden="true"></i>
+    <span class="nc-panel__title">Calendario</span>
+    <span style="margin-left:auto; display:inline-flex; gap:8px; align-items:center;">
+      <button type="button" class="nc-btn" id="zn-cal-prev" style="padding:3px 10px; font-size:12px;"><i class="ti ti-chevron-left"></i></button>
+      <span id="zn-cal-month" style="font-weight:600; min-width:140px; text-align:center;"></span>
+      <button type="button" class="nc-btn" id="zn-cal-next" style="padding:3px 10px; font-size:12px;"><i class="ti ti-chevron-right"></i></button>
+    </span>
+  </div>
+  <div class="nc-panel__body">
+    <div style="display:flex; gap:14px; margin-bottom:10px; font-size:12px; flex-wrap:wrap; align-items:center;" class="nc-text--muted">
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#c5f82a;"></span> Publicado</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#00e5ff;"></span> Programado</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#ff2d95;"></span> Externo</span>
+      <span style="margin-left:auto;"><i class="ti ti-clock" aria-hidden="true"></i> Horas en tu zona horaria</span>
+    </div>
+    <div id="zn-cal-agenda" style="margin-bottom:12px;"></div>
+    <div id="zn-cal-grid" style="display:grid; grid-template-columns:repeat(7,1fr); gap:4px;"></div>
+    <div id="zn-cal-detail" style="margin-top:14px;"></div>
+  </div>
+</div>
+</div>
+
+{# ========== Tab: Crecimiento — Pro-gated funnel machine. Non-Pro
+   sees an upsell card (never a 500); Pro sees 4 sub-panels. ========== #}
+<div class="nc-pc-tab-body" data-tab-body="crecimiento">
+{% if not is_pro %}
+<div class="nc-panel" style="border-color: var(--nc-magenta, #ff2d95);">
+  <div class="nc-panel__body" style="text-align:center; padding:32px;">
+    <i class="ti ti-rocket" aria-hidden="true" style="font-size:32px; color: var(--nc-magenta, #ff2d95);"></i>
+    <h3 style="margin:12px 0 6px;">Crecimiento es una función Pro</h3>
+    <p class="nc-text--muted" style="max-width:460px; margin:0 auto 16px;">
+      Automatiza comentario→DM, gestiona contactos, lanza secuencias de bienvenida
+      y broadcasts a tu comunidad. Sube a Pro para activar el embudo Chalyb.
+    </p>
+    <a class="nc-btn nc-btn--primary" href="https://chalyb.com/app/subscription"
+       target="_blank" rel="noopener">Subir a Pro</a>
+  </div>
+</div>
+{% else %}
+<div style="display:flex; flex-direction:column; gap:16px;">
+
+  {# Automatizaciones comentario→DM #}
+  <div class="nc-panel">
+    <div class="nc-panel__header"><i class="ti ti-robot" aria-hidden="true"></i>
+      <span class="nc-panel__title">Automatizaciones comentario → DM</span>
+      <span class="nc-text--muted" style="margin-left:auto; font-size:12px;">Solo Instagram / Facebook</span>
+    </div>
+    <div class="nc-panel__body">
+      <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end; margin-bottom:10px;">
+        <label class="nc-label" style="margin:0;">Cuenta (IG/FB)
+          <select class="nc-input" id="zn-auto-account" style="width:auto;"></select></label>
+        <label class="nc-label" style="margin:0; flex:1; min-width:160px;">Clip objetivo
+          <select class="nc-input" id="zn-auto-post" style="width:100%;">
+            <option value="">Cualquier post</option></select></label>
+        <label class="nc-label" style="margin:0;">Keywords
+          <input class="nc-input" id="zn-auto-keywords" value="CLIP, LINK" style="width:auto;"></label>
+      </div>
+      <label class="nc-label">Mensaje DM
+        <input class="nc-input" id="zn-auto-dm" value="Aquí está el link 👉 {url}"></label>
+      <label class="nc-label">Respuesta pública (opcional)
+        <input class="nc-input" id="zn-auto-reply" placeholder="¡Revisa tu DM! 📩"></label>
+      <button type="button" class="nc-btn nc-btn--primary" id="zn-auto-create" style="margin-top:10px;">
+        <i class="ti ti-plus"></i> Crear automatización</button>
+      <div id="zn-auto-list" style="margin-top:12px;"></div>
+    </div>
+  </div>
+
+  {# Contactos #}
+  <div class="nc-panel">
+    <div class="nc-panel__header"><i class="ti ti-users" aria-hidden="true"></i>
+      <span class="nc-panel__title">Contactos</span></div>
+    <div class="nc-panel__body">
+      <div style="display:flex; gap:8px; margin-bottom:10px;">
+        <input class="nc-input" id="zn-contacts-q" placeholder="Buscar por nombre o usuario…" style="flex:1;">
+        <select class="nc-input" id="zn-contacts-tag" style="width:auto;">
+          <option value="">Todos los tags</option>
+          <option value="comment-lead">comment-lead</option>
+          <option value="dm-lead">dm-lead</option>
+        </select>
+      </div>
+      <div id="zn-contacts-list"><span class="nc-text--muted">Cargando…</span></div>
+    </div>
+  </div>
+
+  {# Secuencias #}
+  <div class="nc-panel">
+    <div class="nc-panel__header"><i class="ti ti-list-numbers" aria-hidden="true"></i>
+      <span class="nc-panel__title">Secuencias (drip)</span>
+      <button type="button" class="nc-btn" id="zn-seq-template" style="margin-left:auto; padding:4px 12px; font-size:12px;">
+        <i class="ti ti-template"></i> Usar “Bienvenida Chalyb”</button>
+    </div>
+    <div class="nc-panel__body"><div id="zn-seq-list"><span class="nc-text--muted">Cargando…</span></div></div>
+  </div>
+
+  {# Broadcasts #}
+  <div class="nc-panel" style="border-color: var(--nc-magenta, #ff2d95);">
+    <div class="nc-panel__header"><i class="ti ti-broadcast" aria-hidden="true"></i>
+      <span class="nc-panel__title">Broadcast</span>
+      <span class="nc-text--muted" style="margin-left:auto; font-size:12px;">Tope diario por seguridad anti-spam</span>
+    </div>
+    <div class="nc-panel__body">
+      <div style="display:flex; gap:8px; align-items:flex-end; margin-bottom:8px;">
+        <label class="nc-label" style="margin:0;">Cuenta
+          <select class="nc-input" id="zn-bc-account" style="width:auto;"></select></label>
+        <label class="nc-label" style="margin:0;">Segmento (tag)
+          <select class="nc-input" id="zn-bc-tag" style="width:auto;">
+            <option value="">Todos los contactos</option>
+            <option value="comment-lead">comment-lead</option>
+            <option value="dm-lead">dm-lead</option></select></label>
+      </div>
+      <label class="nc-label">Nombre interno
+        <input class="nc-input" id="zn-bc-name" placeholder="Promo de la semana"></label>
+      <label class="nc-label">Mensaje
+        <textarea class="nc-input" id="zn-bc-message" rows="2" placeholder="¡Nuevo clip publicado! 🎬"></textarea></label>
+      {% if feature_whatsapp %}
+      <p class="nc-text--muted" style="font-size:12px; margin:6px 0 0;">
+        <i class="ti ti-brand-whatsapp" aria-hidden="true"></i>
+        WhatsApp tiene costo extra (tarifa por número + uso de Meta por mensaje) y usa plantillas aprobadas.
+      </p>
+      {% endif %}
+      <button type="button" class="nc-btn nc-btn--primary" id="zn-bc-send" style="margin-top:8px;">
+        <i class="ti ti-send"></i> Enviar broadcast</button>
+    </div>
+  </div>
+
+</div>
+{% endif %}
+</div>
+
+{# ========== Tab: Comentarios — unified comment feed on the streamer's
+   clips; reply / like / hide (where supported). ========== #}
+<div class="nc-pc-tab-body" data-tab-body="comentarios">
+<div class="nc-panel">
+  <div class="nc-panel__header">
+    <i class="ti ti-message-circle" aria-hidden="true"></i>
+    <span class="nc-panel__title">Comentarios</span>
+  </div>
+  <div class="nc-panel__body" id="zn-comments-list">
+    <span class="nc-text--muted">Cargando…</span>
+  </div>
+</div>
+</div>
+
+{# ========== Tab: DMs — conversation list + thread + reply / archive. #}
+<div class="nc-pc-tab-body" data-tab-body="dms">
+<div class="nc-panel">
+  <div class="nc-panel__header">
+    <i class="ti ti-mail" aria-hidden="true"></i>
+    <span class="nc-panel__title">Mensajes directos</span>
+  </div>
+  <div class="nc-panel__body" style="display:grid; grid-template-columns:280px 1fr; gap:14px; min-height:320px;">
+    <div id="zn-dm-list" style="border-right:1px solid rgba(255,255,255,0.08); padding-right:12px; overflow-y:auto; max-height:480px;">
+      <span class="nc-text--muted">Cargando…</span>
+    </div>
+    <div id="zn-dm-thread">
+      <span class="nc-text--muted">Elige una conversación.</span>
+    </div>
+  </div>
+</div>
+</div>
+
+{% endif %}
+
+{# ----- Behavior JS ----- #}
+<script>
+(function () {
+  // ---- Tab switcher ----
+  function activateTab(which) {
+    document.querySelectorAll(".nc-pc-tab").forEach(function (t) {
+      t.classList.toggle("is-active", t.getAttribute("data-tab") === which);
+    });
+    document.querySelectorAll(".nc-pc-tab-body").forEach(function (b) {
+      b.classList.toggle("is-active", b.getAttribute("data-tab-body") === which);
+    });
+  }
+  document.querySelectorAll(".nc-pc-tab").forEach(function (tab) {
+    tab.addEventListener("click", function () {
+      activateTab(tab.getAttribute("data-tab"));
+    });
+  });
+  // Deep link only — publishing/marking does NOT force a tab change;
+  // the operator stays on the list they were working in (the queued
+  // banner + the View published button cover "go see it" when wanted).
+  var qs = new URLSearchParams(window.location.search);
+  if (qs.get("tab") === "published") {
+    activateTab("published");
+  }
+  // Header "View published" button + the Published stat tile both jump
+  // to the tab in place. The button's ?tab=published href stays as a
+  // no-JS fallback.
+  document.querySelectorAll(".js-open-published").forEach(function (el) {
+    el.addEventListener("click", function (e) {
+      e.preventDefault();
+      activateTab("published");
+    });
+  });
+
+  // ---- Single Publish: row selection (inline panel) ----
+  var panel = document.getElementById("zn-publish-panel");
+  var titleEl = document.getElementById("zn-selected-title");
+  var idEl    = document.getElementById("zn-selected-id");
+  var durEl   = document.getElementById("zn-selected-dur");
+  var form    = document.getElementById("zn-single-form");
+  var countEl = document.getElementById("zn-platform-count");
+  var list    = document.getElementById("zn-clip-list");
+
+  if (list && panel) {
+    list.addEventListener("click", function (e) {
+      var row = e.target.closest(".nc-pc-clip-row");
+      if (!row) return;
+      if (row.classList.contains("is-expanded")) {
+        row.classList.remove("is-expanded");
+        panel.classList.remove("is-active");
+        list.appendChild(panel);
+        return;
+      }
+      list.querySelectorAll(".nc-pc-clip-row.is-expanded").forEach(function (r) {
+        r.classList.remove("is-expanded");
+      });
+      row.classList.add("is-expanded");
+      var clipId = row.getAttribute("data-clip-id");
+      var title  = row.getAttribute("data-clip-title");
+      var dur    = row.getAttribute("data-clip-duration");
+      if (titleEl) titleEl.textContent = title;
+      if (idEl) idEl.textContent = clipId;
+      if (durEl) durEl.textContent = dur;
+      if (form) form.action = "/dashboard/publish/zernio/post/" + encodeURIComponent(clipId);
+      var chipsHost = document.getElementById("zn-platform-chips");
+      if (chipsHost) {
+        chipsHost.querySelectorAll(".is-selected").forEach(function (c) {
+          c.classList.remove("is-selected");
+        });
+      }
+      if (countEl) countEl.textContent = "0";
+      row.parentNode.insertBefore(panel, row.nextSibling);
+      panel.classList.add("is-active");
+      panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  }
+
+  // ---- Chip toggles (single form) ----
+  var singleChips = document.getElementById("zn-platform-chips");
+  if (singleChips) {
+    singleChips.addEventListener("click", function (e) {
+      var chip = e.target.closest(".nc-pc-platform-chip");
+      if (!chip) return;
+      if (chip.getAttribute("data-connected") !== "1") return;
+      chip.classList.toggle("is-selected");
+      var n = singleChips.querySelectorAll(".is-selected").length;
+      if (countEl) countEl.textContent = n;
+    });
+  }
+  if (form) {
+    // Three submit buttons share the form; each stamps its mode
+    // (now / draft / schedule) into the hidden input before submit.
+    var modeInput = document.getElementById("zn-mode");
+    form.querySelectorAll("button[data-mode]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        if (modeInput) { modeInput.value = btn.getAttribute("data-mode"); }
+      });
+    });
+    form.addEventListener("submit", function (e) {
+      var selected = singleChips
+        ? Array.from(singleChips.querySelectorAll(".is-selected"))
+            .map(function (x) { return x.getAttribute("data-platform"); })
+        : [];
+      if (!selected.length) { e.preventDefault(); alert("Elige al menos una plataforma."); return; }
+      if (!form.action) { e.preventDefault(); alert("Elige un clip primero."); return; }
+      var mode = modeInput ? modeInput.value : "now";
+      var schedAt = document.getElementById("zn-schedule-at");
+      if (mode === "schedule") {
+        if (!schedAt || !schedAt.value) {
+          e.preventDefault();
+          alert("Elige fecha y hora para programar.");
+          return;
+        }
+        // datetime-local is the operator's LOCAL time; ship the UTC
+        // instant so Zernio schedules the moment they actually meant.
+        var iso = new Date(schedAt.value).toISOString();
+        var hiddenSched = document.createElement("input");
+        hiddenSched.type = "hidden"; hiddenSched.name = "scheduled_for";
+        hiddenSched.value = iso;
+        schedAt.removeAttribute("name");  // the hidden ISO field wins
+        form.appendChild(hiddenSched);
+      }
+      // YouTube needs a title — catch it before the round-trip.
+      if (selected.indexOf("youtube") !== -1) {
+        var t = (form.querySelector('[name="title"]') || {}).value || "";
+        var yt = (form.querySelector('[name="yt_title"]') || {}).value || "";
+        if (!t.trim() && !yt.trim()) {
+          e.preventDefault();
+          alert("YouTube necesita un título — completa Título o el título de YouTube.");
+          return;
+        }
+      }
+      var hidden = document.createElement("input");
+      hidden.type = "hidden"; hidden.name = "platforms";
+      hidden.value = selected.join(",");
+      form.appendChild(hidden);
+    });
+  }
+
+  // ---- Schedule helpers (calendar prefill + auto-fill) ----
+  function znToLocalInput(d) {
+    // datetime-local wants YYYY-MM-DDTHH:mm in the operator's LOCAL time.
+    var local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+    return local.toISOString().slice(0, 16);
+  }
+  function znCurrentClipId() {
+    var a = (form && (form.getAttribute("action") || form.action)) || "";
+    var m = a.match(/\/post\/([^/?#]+)/);
+    return m ? decodeURIComponent(m[1]) : "";
+  }
+  var schedAt = document.getElementById("zn-schedule-at");
+  if (schedAt) {
+    // Block past dates — the picker can't go before "now".
+    schedAt.min = znToLocalInput(new Date(Date.now() + 5 * 60000));
+  }
+  var bestFill = document.getElementById("zn-besttime-fill");
+  if (bestFill && schedAt) {
+    bestFill.addEventListener("click", function () {
+      var msg = document.getElementById("zn-besttime-msg");
+      msg.style.color = "var(--nc-text--muted)";
+      msg.textContent = "Buscando…";
+      fetch("/dashboard/publish/zernio/schedule/next-best.json", { credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(function (b) {
+          if (!b.ok || !b.iso) { throw new Error("sin datos"); }
+          schedAt.value = znToLocalInput(new Date(b.iso));  // ISO is UTC → local
+          msg.style.color = "var(--nc-green, #48bb78)";
+          msg.textContent = "Listo ✓";
+        })
+        .catch(function () { msg.style.color = "#ff7575"; msg.textContent = "Sin datos aún."; });
+    });
+  }
+  var autofillBtn = document.getElementById("zn-autofill-btn");
+  if (autofillBtn && form) {
+    autofillBtn.addEventListener("click", function () {
+      var msg = document.getElementById("zn-autofill-msg");
+      var clipId = znCurrentClipId();
+      if (!clipId) {
+        msg.style.color = "#ff7575"; msg.textContent = "Elige un clip primero.";
+        return;
+      }
+      autofillBtn.disabled = true;
+      msg.style.color = "var(--nc-text--muted)";
+      msg.textContent = "Generando…";
+      fetch("/dashboard/publish/zernio/compose/" + encodeURIComponent(clipId), {
+        method: "POST", credentials: "same-origin",
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (b) {
+          if (!b.ok) { throw new Error(b.error || b.detail || "fallo"); }
+          var titleEl = form.querySelector('[name="title"]');
+          var capEl = form.querySelector('[name="description"]');
+          if (titleEl && b.title) { titleEl.value = b.title; }
+          if (capEl && b.caption) { capEl.value = b.caption; }
+          msg.style.color = "var(--nc-green, #48bb78)";
+          msg.textContent = "Hook + caption + tags listos ✓";
+        })
+        .catch(function (e) {
+          msg.style.color = "#ff7575";
+          msg.textContent = "No se pudo generar: " + e.message;
+        })
+        .finally(function () { autofillBtn.disabled = false; });
+    });
+  }
+
+  // ---- Bulk publish ----
+  var bulkRows = document.getElementById("zn-bulk-rows");
+  var bulkBtn = document.getElementById("zn-bulk-publish");
+  var bulkCount = document.getElementById("zn-bulk-count");
+  var bulkHint = document.getElementById("zn-bulk-hint");
+
+  function recomputeBulk() {
+    if (!bulkRows) return [];
+    var rows = bulkRows.querySelectorAll(".nc-pc-bulk-row");
+    var pending = [];
+    rows.forEach(function (row) {
+      var sel = Array.from(row.querySelectorAll(".nc-pc-platform-chip.is-selected"))
+        .map(function (x) { return x.getAttribute("data-platform"); });
+      if (sel.length) {
+        pending.push({ clip_id: row.getAttribute("data-clip-id"), platforms: sel });
+      }
+    });
+    if (bulkCount) bulkCount.textContent = pending.length;
+    if (bulkHint) {
+      bulkHint.textContent = pending.length
+        ? pending.length + " clip(s) listos para salir."
+        : "Elige al menos una plataforma por clip para activar.";
+    }
+    return pending;
+  }
+
+  if (bulkRows) {
+    bulkRows.addEventListener("click", function (e) {
+      var chip = e.target.closest(".nc-pc-platform-chip");
+      if (!chip || chip.getAttribute("data-connected") !== "1") return;
+      chip.classList.toggle("is-selected");
+      recomputeBulk();
+    });
+  }
+
+  if (bulkBtn) {
+    bulkBtn.addEventListener("click", async function () {
+      var pending = recomputeBulk();
+      if (!pending.length) { alert("Elige al menos una plataforma por clip."); return; }
+      bulkBtn.disabled = true;
+      bulkBtn.querySelector("span").textContent = "Enviando…";
+      try {
+        var resp = await fetch("/dashboard/publish/zernio/bulk-post", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ clips: pending }),
+        });
+        var body = await resp.json();
+        if (!resp.ok) { throw new Error(body.detail || ("HTTP " + resp.status)); }
+        var ok = (body.results || []).filter(function (r) { return r.ok; }).length;
+        alert(ok + " de " + pending.length + " publicados.");
+        // Reload in place — the published clips leave this list; their
+        // rows are on the Published tab when the operator wants them.
+        window.location.href = "/dashboard/publish/zernio";
+      } catch (err) {
+        alert("No se pudo publicar el lote: " + err.message);
+        bulkBtn.disabled = false;
+        bulkBtn.querySelector("span").textContent = "Publicar seleccionados (" + pending.length + ")";
+      }
+    });
+  }
+
+  // ---- Connect a platform (Zernio OAuth in a popup, auto-closed) ----
+  // We pass redirect_url to Zernio so the OAuth callback lands the popup
+  // on our own /connected page (same-origin), which postMessages this
+  // tab and closes itself — the operator never sees Zernio's dashboard.
+  // On the message we refresh the accounts row + publish chips IN PLACE
+  // (no reload); the accounts.json poll below stays as a fallback in
+  // case the postMessage is missed (e.g. popup blocked into a full tab).
+  var znConnectOpened = false;
+  var znPopup = null;
+
+  // Refresh connected-account state without a full page reload:
+  //  1. swap the server-rendered accounts row (#zn-accounts-panel)
+  //  2. flip data-connected / is-disabled on every publish chip
+  // Falls back to location.reload() if either fetch fails.
+  function znRefreshAccounts() {
+    var panel = document.getElementById("zn-accounts-panel");
+    var panelP = panel
+      ? fetch("/dashboard/publish/zernio/accounts-panel", { credentials: "same-origin" })
+          .then(function (r) {
+            if (!r.ok) { throw new Error("panel HTTP " + r.status); }
+            return r.text();
+          })
+          .then(function (html) { panel.innerHTML = html; })
+      : Promise.resolve();
+    var chipsP = fetch("/dashboard/publish/zernio/accounts.json", { credentials: "same-origin" })
+      .then(function (r) { return r.json(); })
+      .then(function (body) {
+        var connected = (body && body.connected) || [];
+        document.querySelectorAll(".nc-pc-platform-chip[data-platform]").forEach(function (chip) {
+          var isConn = connected.indexOf(chip.getAttribute("data-platform")) !== -1;
+          chip.setAttribute("data-connected", isConn ? "1" : "0");
+          chip.classList.toggle("is-disabled", !isConn);
+          if (!isConn) { chip.classList.remove("is-selected"); }
+        });
+      });
+    Promise.all([panelP, chipsP]).catch(function () { window.location.reload(); });
+  }
+
+  window.addEventListener("message", function (e) {
+    if (e.origin !== window.location.origin) return;
+    if (!e.data || e.data.type !== "zernio:connected") return;
+    if (znPopup) { try { znPopup.close(); } catch (err) { /* ignore */ } }
+    znConnectOpened = false;
+    znRefreshAccounts();
+  });
+  function znPollUntilConnected(popup, platform, triesLeft) {
+    if (triesLeft <= 0) { return; }  // give up quietly; focus-reload is the fallback
+    fetch("/dashboard/publish/zernio/accounts.json", { credentials: "same-origin" })
+      .then(function (r) { return r.json(); })
+      .then(function (body) {
+        var connected = (body && body.connected) || [];
+        if (connected.indexOf(platform) !== -1) {
+          if (popup) { try { popup.close(); } catch (e) { /* ignore */ } }
+          znConnectOpened = false;
+          znRefreshAccounts();
+          return;
+        }
+        setTimeout(function () {
+          znPollUntilConnected(popup, platform, triesLeft - 1);
+        }, 2500);
+      })
+      .catch(function () {
+        setTimeout(function () {
+          znPollUntilConnected(popup, platform, triesLeft - 1);
+        }, 2500);
+      });
+  }
+  // DELEGATED handler — connect buttons live inside #zn-accounts-panel,
+  // whose innerHTML gets swapped by znRefreshAccounts(); direct
+  // per-button listeners would die with the old nodes.
+  document.addEventListener("click", function (e) {
+    var btn = e.target.closest(".js-zn-connect");
+    if (!btn) return;
+    var platform = btn.getAttribute("data-platform");
+    // Open the popup synchronously inside the click gesture so popup
+    // blockers don't kill it; we redirect it once the URL arrives.
+    // Named window: re-clicking reuses the same popup instead of
+    // stacking a second OAuth window.
+    var w = window.open("", "zernio_connect", "popup=yes,width=520,height=720");
+    znPopup = w;
+    if (w) {
+      try {
+        w.document.write(
+          "<p style='font-family:system-ui,sans-serif;padding:24px;color:#333'>" +
+          "Abriendo la autorización de " + platform + "… puedes cerrar esta ventana " +
+          "cuando termines — ChalybClip se actualiza solo.</p>"
+        );
+      } catch (e2) { /* ignore */ }
+    }
+    btn.disabled = true;
+    fetch("/dashboard/publish/zernio/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ platform: platform }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (body) {
+        if (!body.ok || !body.auth_url) {
+          throw new Error(body.error || body.detail || "connect failed");
+        }
+        znConnectOpened = true;
+        if (w) { w.location.href = body.auth_url; }
+        else { window.open(body.auth_url, "zernio_connect"); }
+        // Poll our backend (~75s); when the account appears, close the
+        // popup + refresh chips so the operator stays on ChalybClip.
+        znPollUntilConnected(w, platform, 30);
+      })
+      .catch(function (err) {
+        if (w) { try { w.close(); } catch (e3) { /* ignore */ } }
+        alert("No se pudo conectar: " + err.message);
+      })
+      .finally(function () { btn.disabled = false; });
+  });
+  // Fallback: if the operator returns to this tab manually, refresh so
+  // a freshly-connected account shows up even if polling missed it.
+  window.addEventListener("focus", function () {
+    if (znConnectOpened) { znConnectOpened = false; znRefreshAccounts(); }
+  });
+
+  // ---- Disconnect an account (no Zernio UI needed) ----
+  // Delegated for the same reason as connect: the buttons get swapped
+  // in by znRefreshAccounts().
+  document.addEventListener("click", function (e) {
+    var btn = e.target.closest(".js-zn-disconnect");
+    if (!btn) return;
+    var accountId = btn.getAttribute("data-account-id");
+    var label = btn.getAttribute("data-label") || "esta cuenta";
+    if (!window.confirm("¿Desconectar " + label + " de Zernio?")) { return; }
+    btn.disabled = true;
+    fetch("/dashboard/publish/zernio/accounts/" + encodeURIComponent(accountId) + "/disconnect", {
+      method: "POST", credentials: "same-origin",
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (body) {
+        if (!body.ok) { throw new Error(body.error || "disconnect failed"); }
+        znRefreshAccounts();
+      })
+      .catch(function (err) {
+        btn.disabled = false;
+        alert("No se pudo desconectar: " + err.message);
+      });
+  });
+
+  // ---- Create profile (inline AJAX, no page leave) ----
+  var cpForm = document.getElementById("zn-create-profile-form");
+  if (cpForm) {
+    var cpBtn = document.getElementById("zn-create-profile-btn");
+    var cpMsg = document.getElementById("zn-create-profile-msg");
+    cpForm.addEventListener("submit", async function (e) {
+      e.preventDefault();
+      var name = (document.getElementById("zn-profile-name").value || "").trim();
+      var desc = (document.getElementById("zn-profile-desc").value || "").trim();
+      if (!name) { cpMsg.textContent = "Escribe un nombre de perfil."; return; }
+      cpBtn.disabled = true;
+      cpMsg.style.color = "";
+      cpMsg.textContent = "Creando…";
+      try {
+        var resp = await fetch("/dashboard/publish/zernio/profile", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ name: name, description: desc }),
+        });
+        var body = await resp.json();
+        if (!resp.ok || !body.ok) {
+          throw new Error(body.error || body.detail || ("HTTP " + resp.status));
+        }
+        cpMsg.style.color = "var(--nc-green, #48bb78)";
+        cpMsg.textContent = "Perfil “" + (body.name || name) + "” creado. Cargando…";
+        // Reload in place so the per-platform Connect buttons appear
+        // under the new profile (same URL — no navigation away).
+        window.location.reload();
+      } catch (err) {
+        cpBtn.disabled = false;
+        cpMsg.style.color = "#ff7575";
+        cpMsg.textContent = "No se pudo crear el perfil: " + err.message;
+      }
+    });
+  }
+
+  // ---- Rendimiento tab ----
+  var perfTable = document.getElementById("zn-perf-table");
+  if (perfTable) {
+    var perfDays = 7;
+    function fmtMetric(v) { return (v === null || v === undefined) ? "—" : v.toLocaleString(); }
+
+    function renderPerf(body) {
+      var t = body.totals || {};
+      document.getElementById("zn-perf-totals").innerHTML =
+        "Tus clips (" + body.days + " días): " +
+        "<strong>" + fmtMetric(t.views) + "</strong> vistas · " +
+        "<strong>" + fmtMetric(t.likes) + "</strong> me gusta · " +
+        "<strong>" + fmtMetric(t.comments) + "</strong> comentarios · " +
+        "<strong>" + fmtMetric(t.shares) + "</strong> compartidos";
+      var posts = body.posts || [];
+      if (!posts.length) {
+        perfTable.innerHTML =
+          '<div class="nc-empty"><div class="nc-empty__title">Sin datos de rendimiento aún</div>' +
+          '<p class="nc-empty__body">Publica clips y vuelve en unas horas — las métricas tardan en sincronizar.</p></div>';
+        return;
+      }
+      var rows = posts.map(function (p) {
+        var m = p.metrics || {};
+        var plats = (p.per_platform || []).map(function (pl) {
+          return '<span class="nc-chip nc-chip--code">' + (pl.platform || "?") + "</span>";
+        }).join(" ");
+        return "<tr>" +
+          '<td style="max-width:240px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' +
+          (p.content || "(sin caption)") + "</td>" +
+          "<td>" + plats + "</td>" +
+          '<td style="text-align:right;">' + fmtMetric(m.views) + "</td>" +
+          '<td style="text-align:right;">' + fmtMetric(m.likes) + "</td>" +
+          '<td style="text-align:right;">' + fmtMetric(m.comments) + "</td>" +
+          '<td style="text-align:right;">' + fmtMetric(m.shares) + "</td>" +
+          "</tr>";
+      }).join("");
+      perfTable.innerHTML =
+        '<table class="nc-table"><thead><tr>' +
+        "<th>Clip</th><th>Plataformas</th>" +
+        '<th style="text-align:right;">Vistas</th>' +
+        '<th style="text-align:right;">Me gusta</th>' +
+        '<th style="text-align:right;">Coment.</th>' +
+        '<th style="text-align:right;">Compart.</th>' +
+        "</tr></thead><tbody>" + rows + "</tbody></table>";
+    }
+
+    function loadPerf() {
+      document.getElementById("zn-perf-totals").textContent = "Cargando…";
+      fetch("/dashboard/publish/zernio/rendimiento.json?days=" + perfDays, { credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(renderPerf)
+        .catch(function () {
+          perfTable.innerHTML = '<span class="nc-text--muted">No se pudo cargar.</span>';
+        });
+    }
+
+    document.querySelectorAll(".js-perf-days").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        perfDays = parseInt(btn.getAttribute("data-days"), 10);
+        document.querySelectorAll(".js-perf-days").forEach(function (b) {
+          b.classList.toggle("is-active", b === btn);
+        });
+        loadPerf();
+      });
+    });
+
+    // Phase 12 — ads table (only present when FEATURE_ADS is on).
+    function loadAds() {
+      var host = document.getElementById("zn-ads-table");
+      if (!host) { return; }
+      fetch("/dashboard/publish/zernio/ads/campaigns.json", { credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(function (b) {
+          var items = b.campaigns || [];
+          host.innerHTML = items.length
+            ? items.map(function (c) {
+                return '<div style="padding:4px 0;">' + (c.name || c.id || "") +
+                  ' <span class="nc-chip nc-chip--code">' + (c.status || "") + "</span></div>";
+              }).join("")
+            : "Sin campañas de anuncios.";
+        })
+        .catch(function () { host.textContent = "No se pudo cargar anuncios."; });
+    }
+
+    // Lazy-load when the Rendimiento tab is first opened.
+    var perfLoaded = false;
+    document.querySelectorAll('.nc-pc-tab[data-tab="rendimiento"]').forEach(function (tab) {
+      tab.addEventListener("click", function () {
+        if (!perfLoaded) { perfLoaded = true; loadPerf(); loadAds(); }
+      });
+    });
+  }
+
+  // ---- Calendario tab ----
+  var calGrid = document.getElementById("zn-cal-grid");
+  if (calGrid) {
+    var SRC_COLOR = { hub: "#c5f82a", scheduled: "#00e5ff", external: "#ff2d95" };
+    var SRC_LABEL = { hub: "Publicado", scheduled: "Programado", external: "Externo" };
+    // Platform-first coloring: the operator thinks "3 TikToks + 2 Shorts el
+    // martes", not "these came from the hub". Hues are brand-adjacent but
+    // lifted for the dark background.
+    var PLAT_META = {
+      tiktok:    { icon: "ti-brand-tiktok",    color: "#00f2ea" },
+      youtube:   { icon: "ti-brand-youtube",   color: "#ff5c5c" },
+      instagram: { icon: "ti-brand-instagram", color: "#ff5c9d" },
+      twitter:   { icon: "ti-brand-x",         color: "#d6d9dc" },
+      x:         { icon: "ti-brand-x",         color: "#d6d9dc" },
+      facebook:  { icon: "ti-brand-facebook",  color: "#6ea8ff" },
+      linkedin:  { icon: "ti-brand-linkedin",  color: "#6cb2ff" },
+      pinterest: { icon: "ti-brand-pinterest", color: "#ff6b7d" },
+      threads:   { icon: "ti-brand-threads",   color: "#d6d9dc" },
+      bluesky:   { icon: "ti-brand-bluesky",   color: "#5bb8ff" }
+    };
+    var calRef = new Date();
+    calRef.setDate(1);
+    var calEntries = [];
+    var calLoadedMonth = null;
+
+    function ymd(d) {
+      return d.getFullYear() + "-" +
+        ("0" + (d.getMonth() + 1)).slice(-2) + "-" +
+        ("0" + d.getDate()).slice(-2);
+    }
+
+    // DB timestamps are UTC ISO strings; a bare one (no Z / offset) must
+    // not be parsed as local. Days and hours then render in the VIEWER'S
+    // timezone — a 23:30 post in Madrid belongs on that Madrid day, not
+    // on the next UTC day.
+    function toLocalDate(iso) {
+      if (!iso) { return null; }
+      var s = String(iso);
+      if (!/(?:[zZ]|[+-]\d\d:?\d\d)$/.test(s)) { s += "Z"; }
+      var d = new Date(s);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    function fmtHour(d) {
+      return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+    }
+    function platMeta(p) {
+      return PLAT_META[String(p || "").toLowerCase()] ||
+        { icon: "ti-world", color: "#9aa3ad" };
+    }
+    function platChip(p, count) {
+      var m = platMeta(p);
+      return '<span title="' + p + '" style="display:inline-flex; align-items:center; gap:2px; ' +
+        'font-size:11px; color:' + m.color + '; margin-right:6px; white-space:nowrap;">' +
+        '<i class="ti ' + m.icon + '" aria-hidden="true"></i>' +
+        (count > 1 ? count : "") + "</span>";
+    }
+    function isPendingEntry(e) { return e.source === "scheduled"; }
+
+    function renderCalendar() {
+      var year = calRef.getFullYear(), month = calRef.getMonth();
+      document.getElementById("zn-cal-month").textContent =
+        calRef.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+      // Bucket entries by LOCAL YYYY-MM-DD (not the raw UTC prefix).
+      var byDay = {};
+      calEntries.forEach(function (e) {
+        var d = toLocalDate(e.date);
+        if (!d) { return; }
+        var day = ymd(d);
+        (byDay[day] = byDay[day] || []).push(e);
+      });
+      calGrid.innerHTML = "";
+      ["L", "M", "X", "J", "V", "S", "D"].forEach(function (d) {
+        var h = document.createElement("div");
+        h.className = "nc-text--muted";
+        h.style.cssText = "text-align:center; font-size:11px; padding:2px;";
+        h.textContent = d;
+        calGrid.appendChild(h);
+      });
+      var first = new Date(year, month, 1);
+      // Monday-based offset.
+      var lead = (first.getDay() + 6) % 7;
+      for (var i = 0; i < lead; i++) { calGrid.appendChild(document.createElement("div")); }
+      var daysInMonth = new Date(year, month + 1, 0).getDate();
+      var todayKey = ymd(new Date());
+      for (var day = 1; day <= daysInMonth; day++) {
+        var cell = document.createElement("div");
+        var key = ymd(new Date(year, month, day));
+        var items = (byDay[key] || []).filter(function (e) { return e.status !== "deleted"; });
+        var isToday = key === todayKey;
+        var isPast = key < todayKey;
+        var pending = items.filter(isPendingEntry).length;
+        var hasExternal = items.some(function (e) { return e.source === "external"; });
+        // Per-platform counts → icon chips (up to 3 platforms + "+N").
+        var perPlat = {};
+        items.forEach(function (e) {
+          ((e.platforms && e.platforms.length) ? e.platforms : ["otro"]).forEach(function (p) {
+            var k = String(p).toLowerCase();
+            perPlat[k] = (perPlat[k] || 0) + 1;
+          });
+        });
+        var platKeys = Object.keys(perPlat).sort();
+        var chips = platKeys.slice(0, 3).map(function (p) {
+          return platChip(p, perPlat[p]);
+        }).join("") +
+          (platKeys.length > 3
+            ? '<span class="nc-text--muted" style="font-size:10px;">+' + (platKeys.length - 3) + "</span>"
+            : "");
+        // Heat tint: fuller day = stronger wash. Cyan while posts are still
+        // pending, lime once everything on the day already went out.
+        var heat = items.length ? Math.min(items.length / 8, 1) : 0;
+        var tint = "";
+        if (heat) {
+          var alpha = (0.05 + heat * 0.11).toFixed(3);
+          tint = pending
+            ? "background:rgba(0,229,255," + alpha + ");"
+            : "background:rgba(197,248,42," + alpha + ");";
+        }
+        cell.style.cssText =
+          "min-height:54px; border:1px solid " +
+          (isToday ? "rgba(0,229,255,0.7)" : "rgba(255,255,255,0.08)") +
+          "; border-radius:6px; padding:4px;" + tint +
+          (isPast && !isToday ? "opacity:0.55;" : "") +
+          (items.length ? "cursor:pointer;" : "");
+        var badge = items.length
+          ? '<span style="font-size:11px; font-weight:700; color:' +
+            (pending ? SRC_COLOR.scheduled : SRC_COLOR.hub) + ';">' + items.length +
+            (hasExternal ? ' <span style="color:' + SRC_COLOR.external + ';">&#9679;</span>' : "") +
+            "</span>"
+          : "";
+        cell.innerHTML =
+          '<div style="display:flex; justify-content:space-between; align-items:baseline; gap:4px;">' +
+          '<span class="' + (isToday ? "" : "nc-text--muted") + '" style="font-size:11px;' +
+          (isToday ? "color:#00e5ff; font-weight:700;" : "") + '">' +
+          day + (isToday ? " · hoy" : "") + "</span>" + badge + "</div>" +
+          (chips ? '<div style="margin-top:3px; line-height:1.5; overflow:hidden;">' + chips + "</div>" : "");
+        if (items.length) {
+          cell.addEventListener("click", (function (dayItems, label) {
+            return function () { showDayDetail(label, dayItems); };
+          })(items, key));
+        }
+        calGrid.appendChild(cell);
+      }
+    }
+
+    function entryLine(e, withDay) {
+      var deleted = e.status === "deleted";
+      var d = toLocalDate(e.date);
+      var when = d ? (withDay
+        ? d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }) + " " + fmtHour(d)
+        : fmtHour(d)) : "—";
+      var plats = (e.platforms || []).map(function (p) {
+        var m = platMeta(p);
+        return '<span style="color:' + m.color + '; white-space:nowrap;">' +
+          '<i class="ti ' + m.icon + '" aria-hidden="true"></i> ' + p + "</span>";
+      }).join(" ");
+      var srcChip = '<span class="nc-chip" style="background:' +
+        (SRC_COLOR[e.source] || "#888") + '; color:#000;">' +
+        (SRC_LABEL[e.source] || e.source) + "</span>";
+      var failed = ["failed", "error"].indexOf(String(e.status || "").toLowerCase()) >= 0;
+      var link = e.url
+        ? ' · <a href="' + e.url + '" target="_blank" rel="noopener">ver post</a>'
+        : (e.clip_id ? ' · <a href="/dashboard/clips/' + e.clip_id + '">ver clip</a>' : "");
+      return '<div style="padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.05); ' +
+        'display:flex; gap:8px; align-items:baseline; flex-wrap:wrap;' +
+        (deleted ? "opacity:0.45; text-decoration:line-through;" : "") + '">' +
+        '<span style="font-variant-numeric:tabular-nums; font-weight:600; min-width:44px;">' + when + "</span>" +
+        srcChip + (plats ? " " + plats : "") +
+        (failed ? ' <span style="color:#ff5c5c; font-size:11px;">' + e.status + "</span>" : "") +
+        ' <span class="nc-text--muted" style="flex:1; min-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' +
+        (e.content || "(sin caption)") + "</span>" + link + "</div>";
+    }
+
+    function showDayDetail(day, items) {
+      var host = document.getElementById("zn-cal-detail");
+      var d = toLocalDate(day + "T12:00:00Z");
+      var title = d
+        ? d.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })
+        : day;
+      var sorted = items.slice().sort(function (a, b) {
+        return String(a.date || "").localeCompare(String(b.date || ""));
+      });
+      host.innerHTML = "<h4 style='margin:0 0 8px;'>" + title + "</h4>" +
+        sorted.map(function (e) { return entryLine(e, false); }).join("");
+    }
+
+    // "Próximos 7 días" agenda — the question an operator actually has is
+    // "what goes out and when", and a list answers it faster than a grid.
+    function renderAgenda(entries) {
+      var host = document.getElementById("zn-cal-agenda");
+      if (!host) { return; }
+      var now = new Date();
+      var horizon = new Date(); horizon.setDate(horizon.getDate() + 7);
+      var upcoming = entries.filter(isPendingEntry).map(function (e) {
+        return { e: e, d: toLocalDate(e.date) };
+      }).filter(function (x) {
+        return x.d && x.d >= now && x.d <= horizon && x.e.status !== "deleted";
+      }).sort(function (a, b) { return a.d - b.d; });
+      if (!upcoming.length) { host.innerHTML = ""; return; }
+      var byDay = {};
+      var order = [];
+      upcoming.forEach(function (x) {
+        var k = ymd(x.d);
+        if (!byDay[k]) { byDay[k] = []; order.push(k); }
+        byDay[k].push(x);
+      });
+      host.innerHTML =
+        '<div style="border:1px solid rgba(0,229,255,0.25); border-radius:8px; padding:8px 12px;">' +
+        '<div style="font-size:12px; font-weight:600; margin-bottom:4px;">' +
+        '<i class="ti ti-calendar-due" aria-hidden="true"></i> Próximos 7 días</div>' +
+        order.map(function (k) {
+          var xs = byDay[k];
+          var label = xs[0].d.toLocaleDateString(undefined,
+            { weekday: "short", day: "numeric", month: "short" });
+          var posts = xs.map(function (x) {
+            var plats = (x.e.platforms || []).map(function (p) {
+              var m = platMeta(p);
+              return '<i class="ti ' + m.icon + '" aria-hidden="true" style="color:' + m.color + ';" title="' + p + '"></i>';
+            }).join("");
+            return '<span style="white-space:nowrap;">' + fmtHour(x.d) + " " + plats + "</span>";
+          }).join(' <span class="nc-text--muted">·</span> ');
+          return '<div style="font-size:12px; padding:2px 0;">' +
+            '<span style="display:inline-block; min-width:72px; font-weight:600;">' + label + "</span> " +
+            posts + "</div>";
+        }).join("") + "</div>";
+    }
+
+    function loadAgenda() {
+      // Local "next 7 days" can straddle UTC day bounds — over-fetch a day
+      // on each side and let the local-time filter trim it.
+      var from = new Date(); from.setDate(from.getDate() - 1);
+      var to = new Date(); to.setDate(to.getDate() + 8);
+      fetch("/dashboard/publish/zernio/calendar.json?date_from=" + ymd(from) + "&date_to=" + ymd(to),
+            { credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(function (b) { renderAgenda(b.entries || []); })
+        .catch(function () { renderAgenda([]); });
+    }
+
+    function loadCalendar() {
+      var year = calRef.getFullYear(), month = calRef.getMonth();
+      // ±1 day: entries bucket to the viewer's LOCAL day, so a post on the
+      // month's first/last UTC-day can belong to this month locally.
+      var from = ymd(new Date(year, month, 0));
+      var to = ymd(new Date(year, month + 1, 1));
+      fetch("/dashboard/publish/zernio/calendar.json?date_from=" + from + "&date_to=" + to,
+            { credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(function (b) { calEntries = b.entries || []; renderCalendar(); })
+        .catch(function () { calEntries = []; renderCalendar(); });
+    }
+
+    document.getElementById("zn-cal-prev").addEventListener("click", function () {
+      calRef.setMonth(calRef.getMonth() - 1); loadCalendar();
+    });
+    document.getElementById("zn-cal-next").addEventListener("click", function () {
+      calRef.setMonth(calRef.getMonth() + 1); loadCalendar();
+    });
+
+    document.querySelectorAll('.nc-pc-tab[data-tab="calendario"]').forEach(function (tab) {
+      tab.addEventListener("click", function () {
+        var m = calRef.getFullYear() + "-" + calRef.getMonth();
+        if (calLoadedMonth !== m) { calLoadedMonth = m; loadCalendar(); loadAgenda(); }
+      });
+    });
+  }
+
+  // ---- Comentarios tab ----
+  var commentsHost = document.getElementById("zn-comments-list");
+  if (commentsHost) {
+    var commentsLoaded = false;
+    function esc(s) { var d = document.createElement("div"); d.textContent = s || ""; return d.innerHTML; }
+
+    function renderComments(items) {
+      if (!items.length) {
+        commentsHost.innerHTML = '<span class="nc-text--muted">Aún no hay comentarios en tus clips.</span>';
+        return;
+      }
+      commentsHost.innerHTML = "";
+      items.forEach(function (c) {
+        var hidden = c.status === "hidden";
+        var card = document.createElement("div");
+        card.style.cssText = "padding:10px 0; border-bottom:1px solid rgba(255,255,255,0.05);" + (hidden ? "opacity:0.5;" : "");
+        card.innerHTML =
+          '<div style="display:flex; gap:8px; align-items:center;">' +
+          '<span class="nc-chip nc-chip--code">' + esc(c.platform) + "</span>" +
+          "<strong>" + esc(c.author_name || c.author_username || "anónimo") + "</strong>" +
+          (hidden ? ' <span class="nc-chip nc-chip--muted">oculto</span>' : "") + "</div>" +
+          '<div style="margin:4px 0;">' + esc(c.text) + "</div>";
+        var actions = document.createElement("div");
+        actions.style.cssText = "display:flex; gap:6px;";
+        function act(label, icon, fn) {
+          var b = document.createElement("button");
+          b.type = "button"; b.className = "nc-btn"; b.style.cssText = "padding:3px 10px; font-size:12px;";
+          b.innerHTML = '<i class="ti ' + icon + '"></i> ' + label;
+          b.addEventListener("click", fn);
+          return b;
+        }
+        actions.appendChild(act("Responder", "ti-arrow-back-up", function () {
+          var msg = window.prompt("Tu respuesta:");
+          if (!msg) { return; }
+          postJSON("/dashboard/publish/zernio/inbox/comments/reply", {
+            account_id: c.account_id, post_id: c.platform_post_id || c.post_id,
+            comment_id: c.comment_id, message: msg,
+          }, function () { alert("Respuesta enviada."); });
+        }));
+        actions.appendChild(act("Me gusta", "ti-heart", function () {
+          postJSON("/dashboard/publish/zernio/inbox/comments/like", {
+            account_id: c.account_id, post_id: c.platform_post_id || c.post_id, comment_id: c.comment_id,
+          }, function () {});
+        }));
+        if (c.can_hide && !hidden) {
+          actions.appendChild(act("Ocultar", "ti-eye-off", function () {
+            postJSON("/dashboard/publish/zernio/inbox/comments/hide", {
+              account_id: c.account_id, post_id: c.platform_post_id || c.post_id,
+              comment_id: c.comment_id, platform: c.platform,
+            }, function () { card.style.opacity = "0.5"; });
+          }));
+        }
+        card.appendChild(actions);
+        commentsHost.appendChild(card);
+      });
+    }
+
+    function postJSON(url, body, ok) {
+      fetch(url, { method: "POST", headers: { "Content-Type": "application/json" },
+                   credentials: "same-origin", body: JSON.stringify(body) })
+        .then(function (r) { return r.json(); })
+        .then(function (res) { if (!res.ok) { throw new Error(res.error || "fallo"); } ok(res); })
+        .catch(function (e) { alert("Error: " + e.message); });
+    }
+    window._znPostJSON = postJSON;
+
+    function loadComments() {
+      fetch("/dashboard/publish/zernio/inbox/comments.json", { credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(function (b) { renderComments(b.comments || []); })
+        .catch(function () { commentsHost.innerHTML = '<span class="nc-text--muted">No se pudo cargar.</span>'; });
+    }
+    document.querySelectorAll('.nc-pc-tab[data-tab="comentarios"]').forEach(function (tab) {
+      tab.addEventListener("click", function () {
+        if (!commentsLoaded) { commentsLoaded = true; loadComments(); }
+      });
+    });
+  }
+
+  // ---- DMs tab ----
+  var dmList = document.getElementById("zn-dm-list");
+  if (dmList) {
+    var dmLoaded = false;
+    var dmThread = document.getElementById("zn-dm-thread");
+    function escD(s) { var d = document.createElement("div"); d.textContent = s || ""; return d.innerHTML; }
+
+    function openThread(conv) {
+      dmThread.innerHTML = '<span class="nc-text--muted">Cargando…</span>';
+      fetch("/dashboard/publish/zernio/inbox/messages.json?conversation_id=" + encodeURIComponent(conv.conversation_id),
+            { credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(function (b) {
+          var msgs = (b.messages || []).map(function (m) {
+            var mine = m.direction === "outgoing";
+            return '<div style="text-align:' + (mine ? "right" : "left") + '; margin:4px 0;">' +
+              '<span style="display:inline-block; padding:6px 10px; border-radius:10px; max-width:80%;' +
+              "background:" + (mine ? "var(--nc-green,#48bb78); color:#000;" : "rgba(255,255,255,0.08);") + '">' +
+              escD(m.text) + "</span></div>";
+          }).join("");
+          dmThread.innerHTML =
+            "<div style='display:flex; align-items:center; gap:8px; margin-bottom:8px;'>" +
+            "<strong>" + escD(conv.participant_name || conv.participant_username || "contacto") + "</strong>" +
+            '<span class="nc-chip nc-chip--code">' + escD(conv.platform) + "</span>" +
+            "<button type='button' class='nc-btn' id='zn-dm-archive' style='margin-left:auto; padding:3px 10px; font-size:12px;'>" +
+            "<i class='ti ti-archive'></i> Archivar</button></div>" +
+            "<div style='max-height:320px; overflow-y:auto;'>" + (msgs || "<span class='nc-text--muted'>Sin mensajes.</span>") + "</div>" +
+            "<div style='display:flex; gap:6px; margin-top:10px;'>" +
+            "<input class='nc-input' id='zn-dm-input' placeholder='Escribe una respuesta…' style='flex:1;'>" +
+            "<button type='button' class='nc-btn nc-btn--primary' id='zn-dm-send'>Enviar</button></div>";
+          document.getElementById("zn-dm-send").addEventListener("click", function () {
+            var inp = document.getElementById("zn-dm-input");
+            if (!inp.value.trim()) { return; }
+            window._znPostJSON("/dashboard/publish/zernio/inbox/conversations/reply", {
+              account_id: conv.account_id, conversation_id: conv.conversation_id,
+              message: inp.value.trim(), platform: conv.platform,
+            }, function () { inp.value = ""; openThread(conv); });
+          });
+          document.getElementById("zn-dm-archive").addEventListener("click", function () {
+            window._znPostJSON("/dashboard/publish/zernio/inbox/conversations/archive", {
+              account_id: conv.account_id, conversation_id: conv.conversation_id,
+            }, function () { loadConversations(); dmThread.innerHTML = '<span class="nc-text--muted">Conversación archivada.</span>'; });
+          });
+        });
+    }
+
+    function loadConversations() {
+      fetch("/dashboard/publish/zernio/inbox/conversations.json", { credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(function (b) {
+          var convs = b.conversations || [];
+          if (!convs.length) {
+            dmList.innerHTML = '<span class="nc-text--muted">Sin conversaciones.</span>';
+            return;
+          }
+          dmList.innerHTML = "";
+          convs.forEach(function (c) {
+            var item = document.createElement("div");
+            item.style.cssText = "padding:8px; border-radius:6px; cursor:pointer;";
+            item.innerHTML =
+              "<strong>" + escD(c.participant_name || c.participant_username || "contacto") + "</strong>" +
+              ' <span class="nc-chip nc-chip--code">' + escD(c.platform) + "</span>" +
+              (c.status === "archived" ? ' <span class="nc-chip nc-chip--muted">archivada</span>' : "");
+            item.addEventListener("click", function () { openThread(c); });
+            item.addEventListener("mouseenter", function () { item.style.background = "rgba(255,255,255,0.04)"; });
+            item.addEventListener("mouseleave", function () { item.style.background = "transparent"; });
+            dmList.appendChild(item);
+          });
+        })
+        .catch(function () { dmList.innerHTML = '<span class="nc-text--muted">No se pudo cargar.</span>'; });
+    }
+    document.querySelectorAll('.nc-pc-tab[data-tab="dms"]').forEach(function (tab) {
+      tab.addEventListener("click", function () {
+        if (!dmLoaded) { dmLoaded = true; loadConversations(); }
+      });
+    });
+  }
+
+  // ---- Crecimiento tab (Pro) ----
+  var growthAccount = document.getElementById("zn-auto-account");
+  if (growthAccount) {
+    var growthLoaded = false;
+    function gPost(url, body, ok) {
+      fetch(url, { method: "POST", headers: { "Content-Type": "application/json" },
+                   credentials: "same-origin", body: JSON.stringify(body) })
+        .then(function (r) { return r.json().then(function (j) { return { s: r.status, j: j }; }); })
+        .then(function (res) {
+          if (!res.j.ok) { throw new Error(res.j.error || ("HTTP " + res.s)); }
+          ok(res.j);
+        })
+        .catch(function (e) { alert("Error: " + e.message); });
+    }
+
+    // Populate account selects from the connected accounts.
+    function loadGrowthAccounts() {
+      fetch("/dashboard/publish/zernio/accounts.json", { credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(function (b) {
+          var opts = (b.accounts || []).map(function (a) {
+            return '<option value="' + a.account_id + '">' + a.platform + " · " + a.account_id.slice(-6) + "</option>";
+          }).join("");
+          ["zn-auto-account", "zn-bc-account"].forEach(function (id) {
+            var el = document.getElementById(id); if (el) { el.innerHTML = opts; }
+          });
+        });
+      // Recent published clips → automation target picker.
+      fetch("/dashboard/publish/zernio/feed.json", { credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(function (b) {
+          var sel = document.getElementById("zn-auto-post");
+          (b.history || []).slice(0, 20).forEach(function (h) {
+            var o = document.createElement("option");
+            o.value = h.post_id; o.textContent = (h.content || h.post_id || "").slice(0, 40);
+            sel.appendChild(o);
+          });
+        }).catch(function () {});
+    }
+
+    function loadAutomations() {
+      fetch("/dashboard/publish/zernio/growth/automations.json", { credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(function (b) {
+          var host = document.getElementById("zn-auto-list");
+          var items = b.automations || [];
+          if (!items.length) { host.innerHTML = '<span class="nc-text--muted">Sin automatizaciones todavía.</span>'; return; }
+          host.innerHTML = items.map(function (a) {
+            var st = a.stats || {};
+            return '<div style="padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.05);">' +
+              '<strong>' + (a.name || "") + "</strong> " +
+              '<span class="nc-chip nc-chip--code">' + (a.platform || "") + "</span> " +
+              (a.isActive ? '<span class="nc-chip nc-chip--success">activa</span>' : '<span class="nc-chip nc-chip--muted">pausada</span>') +
+              '<span class="nc-text--muted" style="font-size:12px; margin-left:8px;">disparos: ' + (st.triggered || 0) + " · DMs: " + (st.dmsSent || 0) + "</span></div>";
+          }).join("");
+        });
+    }
+
+    document.getElementById("zn-auto-create").addEventListener("click", function () {
+      var kw = (document.getElementById("zn-auto-keywords").value || "").split(",").map(function (s) { return s.trim(); }).filter(Boolean);
+      gPost("/dashboard/publish/zernio/growth/automations", {
+        account_id: growthAccount.value,
+        name: "Auto " + (document.getElementById("zn-auto-post").selectedOptions[0] || {}).text || "clip",
+        dm_message: document.getElementById("zn-auto-dm").value,
+        keywords: kw,
+        platform_post_id: document.getElementById("zn-auto-post").value || null,
+        comment_reply: document.getElementById("zn-auto-reply").value || null,
+      }, function () { loadAutomations(); alert("Automatización creada."); });
+    });
+
+    function loadContacts() {
+      var q = document.getElementById("zn-contacts-q").value;
+      var tag = document.getElementById("zn-contacts-tag").value;
+      fetch("/dashboard/publish/zernio/growth/contacts.json?q=" + encodeURIComponent(q) + "&tag=" + encodeURIComponent(tag),
+            { credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(function (b) {
+          var host = document.getElementById("zn-contacts-list");
+          var items = b.contacts || [];
+          if (!items.length) { host.innerHTML = '<span class="nc-text--muted">Sin contactos.</span>'; return; }
+          host.innerHTML = items.map(function (c) {
+            return '<div style="padding:4px 0;"><strong>' + (c.name || c.username || c.contact_key) + "</strong> " +
+              '<span class="nc-text--muted" style="font-size:12px;">' + (c.tags || "") + "</span></div>";
+          }).join("");
+        });
+    }
+    document.getElementById("zn-contacts-q").addEventListener("input", loadContacts);
+    document.getElementById("zn-contacts-tag").addEventListener("change", loadContacts);
+
+    function loadSequences() {
+      fetch("/dashboard/publish/zernio/growth/sequences.json", { credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(function (b) {
+          var host = document.getElementById("zn-seq-list");
+          var items = b.sequences || [];
+          host.innerHTML = items.length
+            ? items.map(function (s) { return '<div style="padding:4px 0;">' + (s.name || "") + "</div>"; }).join("")
+            : '<span class="nc-text--muted">Sin secuencias. Usa la plantilla para empezar.</span>';
+        });
+    }
+    document.getElementById("zn-seq-template").addEventListener("click", function () {
+      gPost("/dashboard/publish/zernio/growth/sequences", {
+        account_id: growthAccount.value, name: "Bienvenida Chalyb", template: "bienvenida",
+      }, function () { loadSequences(); alert("Secuencia “Bienvenida Chalyb” creada."); });
+    });
+
+    document.getElementById("zn-bc-send").addEventListener("click", function () {
+      var name = document.getElementById("zn-bc-name").value;
+      var msg = document.getElementById("zn-bc-message").value;
+      var tag = document.getElementById("zn-bc-tag").value;
+      if (!name.trim() || !msg.trim()) { alert("Completa nombre y mensaje."); return; }
+      var seg = tag ? ("contactos con tag “" + tag + "”") : "TODOS tus contactos";
+      if (!window.confirm("¿Enviar este broadcast a " + seg + "? Esta acción no se puede deshacer.")) { return; }
+      gPost("/dashboard/publish/zernio/growth/broadcasts/send", {
+        account_id: document.getElementById("zn-bc-account").value,
+        name: name, message: msg, tag: tag || null, confirm: true,
+      }, function () { alert("Broadcast enviado."); });
+    });
+
+    document.querySelectorAll('.nc-pc-tab[data-tab="crecimiento"]').forEach(function (tab) {
+      tab.addEventListener("click", function () {
+        if (growthLoaded) { return; }
+        growthLoaded = true;
+        loadGrowthAccounts(); loadAutomations(); loadContacts(); loadSequences();
+      });
+    });
+  }
+
+  // ---- Piloto automático (auto-publish) settings ----
+  var apPanel = document.getElementById("zn-autopublish-panel");
+  if (apPanel) {
+    function renderApTargets(platforms, selected) {
+      var host = document.getElementById("zn-ap-targets");
+      host.innerHTML = "";
+      if (!platforms.length) {
+        host.innerHTML = '<span class="nc-text--muted" style="font-size:12px;">'
+          + 'Conecta una cuenta en el compositor para elegir destinos.</span>';
+        return;
+      }
+      var sel = {}; (selected || []).forEach(function (p) { sel[p] = true; });
+      platforms.forEach(function (p) {
+        var chip = document.createElement("label");
+        chip.className = "nc-pc-acct-chip"; chip.style.cursor = "pointer";
+        var cb = document.createElement("input");
+        cb.type = "checkbox"; cb.value = p; cb.checked = !!sel[p];
+        cb.className = "zn-ap-target";
+        var span = document.createElement("span"); span.textContent = " " + p;
+        chip.appendChild(cb); chip.appendChild(span);
+        host.appendChild(chip);
+      });
+    }
+    function loadAutopublish() {
+      fetch("/dashboard/publish/zernio/autopublish.json", { credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(function (b) {
+          var s = b.settings || {};
+          document.getElementById("zn-ap-enabled").checked = !!s.enabled;
+          var mode = s.mode || "hands_free";
+          document.querySelectorAll('input[name="zn-ap-mode"]').forEach(function (r) {
+            r.checked = (r.value === mode);
+          });
+          document.getElementById("zn-ap-postmode").value = s.post_mode || "queue";
+          document.getElementById("zn-ap-cap").value = (s.daily_cap == null ? 10 : s.daily_cap);
+          // Threshold is a 3-option select now — snap the stored float to the
+          // nearest bucket so old precise values still land somewhere sane.
+          var thr = (s.score_threshold == null ? 0.6 : s.score_threshold);
+          var bucket = thr <= 0.45 ? "0.3" : (thr >= 0.7 ? "0.8" : "0.6");
+          document.getElementById("zn-ap-threshold").value = bucket;
+          document.getElementById("zn-ap-tagsuffix").value = s.tag_suffix || "";
+          // Smart-publishing knobs (always on — deterministic, no LLM).
+          document.getElementById("zn-ap-growthmin").value =
+            (s.growth_min_score == null ? 40 : s.growth_min_score);
+          document.getElementById("zn-ap-budget").value =
+            (s.daily_clip_budget == null ? "" : s.daily_clip_budget);
+          loadPacingRules();
+          var selected = (s.targets || "").split(",").filter(function (t) { return t; });
+          renderApTargets(b.platforms || [], selected);
+          var used = document.getElementById("zn-ap-used");
+          if (used) {
+            used.textContent = s.daily_cap
+              ? ("Hoy llevas " + (b.used_today || 0) + " de " + s.daily_cap + " posts.")
+              : ("Hoy llevas " + (b.used_today || 0) + " posts.");
+          }
+        })
+        .catch(function () {});
+    }
+    // ---- Smart publishing: per-platform rulebook ----
+    function renderPacingRules(rules) {
+      var host = document.getElementById("zn-rules-table");
+      if (!rules || !rules.length) { host.textContent = "Sin reglas."; return; }
+      host.innerHTML = "";
+      var grid = document.createElement("div");
+      grid.style.display = "grid";
+      grid.style.gridTemplateColumns = "1fr 70px 80px 70px 60px auto";
+      grid.style.gap = "6px 10px";
+      grid.style.alignItems = "center";
+      var head = ["Plataforma", "Máx/día", "Gap (min)", "#tags", "On", ""];
+      head.forEach(function (h) {
+        var c = document.createElement("div");
+        c.textContent = h; c.style.fontWeight = "600"; c.style.opacity = "0.7";
+        grid.appendChild(c);
+      });
+      rules.forEach(function (r) {
+        var name = document.createElement("div");
+        name.textContent = r.platform + (r.overridden ? " •" : "");
+        name.title = r.overridden ? "Personalizado" : "Por defecto";
+        grid.appendChild(name);
+        function numInput(val, w) {
+          var i = document.createElement("input");
+          i.type = "number"; i.value = val; i.className = "nc-input";
+          i.style.width = w; i.style.padding = "3px 6px"; i.style.fontSize = "12px";
+          return i;
+        }
+        var maxd = numInput(r.max_per_day, "60px");
+        var gap = numInput(r.min_gap_minutes, "72px");
+        var tags = numInput(r.hashtag_max, "60px");
+        grid.appendChild(maxd); grid.appendChild(gap); grid.appendChild(tags);
+        var en = document.createElement("input");
+        en.type = "checkbox"; en.checked = !!r.enabled;
+        grid.appendChild(en);
+        var btn = document.createElement("button");
+        btn.type = "button"; btn.className = "nc-btn"; btn.textContent = "✓";
+        btn.style.padding = "2px 10px"; btn.style.fontSize = "12px";
+        btn.title = "Guardar regla";
+        btn.addEventListener("click", function () {
+          btn.textContent = "…";
+          fetch("/dashboard/publish/zernio/autopublish/rules/save", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({
+              platform: r.platform,
+              max_per_day: parseInt(maxd.value, 10) || 0,
+              min_gap_minutes: parseInt(gap.value, 10) || 0,
+              hashtag_max: parseInt(tags.value, 10) || 0,
+              enabled: en.checked,
+            }),
+          }).then(function (x) { return x.json(); })
+            .then(function () { btn.textContent = "✓"; loadPacingRules(); })
+            .catch(function () { btn.textContent = "✕"; });
+        });
+        grid.appendChild(btn);
+      });
+      host.appendChild(grid);
+    }
+    function loadPacingRules() {
+      fetch("/dashboard/publish/zernio/autopublish/rules.json", { credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(function (b) { renderPacingRules(b.rules || []); })
+        .catch(function () {});
+    }
+    document.getElementById("zn-ap-save").addEventListener("click", function () {
+      var msg = document.getElementById("zn-ap-msg");
+      msg.textContent = "Guardando…"; msg.style.color = "";
+      var targets = Array.prototype.slice
+        .call(document.querySelectorAll(".zn-ap-target"))
+        .filter(function (cb) { return cb.checked; })
+        .map(function (cb) { return cb.value; });
+      var mode = "on_approve";
+      document.querySelectorAll('input[name="zn-ap-mode"]').forEach(function (r) {
+        if (r.checked) { mode = r.value; }
+      });
+      fetch("/dashboard/publish/zernio/autopublish/save", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          enabled: document.getElementById("zn-ap-enabled").checked,
+          mode: mode,
+          targets: targets,
+          post_mode: document.getElementById("zn-ap-postmode").value,
+          daily_cap: parseInt(document.getElementById("zn-ap-cap").value, 10) || 0,
+          score_threshold: parseFloat(document.getElementById("zn-ap-threshold").value) || 0,
+          tag_suffix: document.getElementById("zn-ap-tagsuffix").value || "",
+          growth_min_score: parseInt(document.getElementById("zn-ap-growthmin").value, 10) || 0,
+          daily_clip_budget: document.getElementById("zn-ap-budget").value || null,
+        }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          msg.style.color = res.ok ? "var(--nc-green, #48bb78)" : "#ff7575";
+          msg.textContent = res.ok ? "Guardado ✓"
+            : ("Error: " + (res.error || res.detail || ""));
+          if (res.ok) { loadAutopublish(); }
+        })
+        .catch(function (e) { msg.style.color = "#ff7575"; msg.textContent = "Error: " + e.message; });
+    });
+    loadAutopublish();
+  }
+
+  // ---- Comunidad settings ----
+  var commPanel = document.getElementById("zn-community-panel");
+  if (commPanel) {
+    function fillChannelSelect(sel, channels, platform, current) {
+      sel.innerHTML = '<option value="">—</option>';
+      channels.filter(function (c) { return c.platform === platform; }).forEach(function (c) {
+        var o = document.createElement("option");
+        o.value = c.account_id; o.textContent = c.account_id.slice(-8);
+        if (c.account_id === current) { o.selected = true; }
+        sel.appendChild(o);
+      });
+    }
+    function loadCommunity() {
+      fetch("/dashboard/publish/zernio/community/settings.json", { credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(function (b) {
+          var s = b.settings || {};
+          document.getElementById("zn-comm-enabled").checked = !!s.enabled;
+          document.getElementById("zn-comm-digest").checked = !!s.weekly_digest;
+          document.getElementById("zn-comm-brand").value = s.brand_name || "";
+          document.getElementById("zn-comm-avatar").value = s.brand_avatar_url || "";
+          fillChannelSelect(document.getElementById("zn-comm-discord"), b.channels || [], "discord", s.discord_account_id);
+          fillChannelSelect(document.getElementById("zn-comm-telegram"), b.channels || [], "telegram", s.telegram_account_id);
+        })
+        .catch(function () {});
+    }
+    document.getElementById("zn-comm-save").addEventListener("click", function () {
+      var msg = document.getElementById("zn-comm-msg");
+      msg.textContent = "Guardando…";
+      fetch("/dashboard/publish/zernio/community/settings", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({
+          enabled: document.getElementById("zn-comm-enabled").checked,
+          weekly_digest: document.getElementById("zn-comm-digest").checked,
+          discord_account_id: document.getElementById("zn-comm-discord").value || null,
+          telegram_account_id: document.getElementById("zn-comm-telegram").value || null,
+          brand_name: document.getElementById("zn-comm-brand").value || null,
+          brand_avatar_url: document.getElementById("zn-comm-avatar").value || null,
+        }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          msg.style.color = res.ok ? "var(--nc-green, #48bb78)" : "#ff7575";
+          msg.textContent = res.ok ? "Guardado ✓" : ("Error: " + (res.error || res.detail || ""));
+        })
+        .catch(function (e) { msg.style.color = "#ff7575"; msg.textContent = "Error: " + e.message; });
+    });
+    loadCommunity();
+  }
+
+  // ---- FAILED list + retry ----
+  var failedPanel = document.getElementById("zn-failed-panel");
+  if (failedPanel) {
+    var failedList = document.getElementById("zn-failed-list");
+
+    function renderFailed(items) {
+      if (!items.length) {
+        failedList.innerHTML =
+          '<span class="nc-text--muted">No hay publicaciones fallidas. 🎉</span>';
+        return;
+      }
+      failedList.innerHTML = "";
+      items.forEach(function (p) {
+        var card = document.createElement("div");
+        card.style.cssText =
+          "padding:10px 0; border-bottom:1px solid rgba(255,255,255,0.05);";
+        var plats = (p.platforms || [])
+          .map(function (pl) {
+            return '<div style="margin:4px 0;">' +
+              '<span class="nc-chip nc-chip--code">' + (pl.platform || "?") + "</span> " +
+              '<span style="color:#ff7575; font-size:12px;">' + (pl.error || "error") + "</span>" +
+              '<div class="nc-text--muted" style="font-size:12px; margin-top:2px;">💡 ' +
+              (pl.hint || "") + "</div></div>";
+          })
+          .join("");
+        card.innerHTML =
+          '<div style="display:flex; align-items:center; gap:10px;">' +
+          '<span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' +
+          (p.content || "(sin caption)") + "</span></div>" + plats;
+        var actions = document.createElement("div");
+        actions.style.cssText = "display:flex; gap:8px; margin-top:6px;";
+        var reprocess = document.createElement("button");
+        reprocess.type = "button";
+        reprocess.className = "nc-btn nc-btn--primary";
+        reprocess.style.cssText = "padding:4px 12px; font-size:12px;";
+        reprocess.innerHTML = '<i class="ti ti-rotate-clockwise"></i> Reprocesar';
+        reprocess.title = "Re-renderiza, URL nueva y reagenda por el drip.";
+        reprocess.addEventListener("click", function () {
+          reprocess.disabled = true;
+          fetch("/dashboard/publish/zernio/reprocess/" + encodeURIComponent(p.post_id), {
+            method: "POST", credentials: "same-origin",
+          })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+              var r0 = (res.results || [])[0];
+              if (!res.ok || (r0 && !r0.ok)) {
+                throw new Error((r0 && r0.error) || res.error || "fallo");
+              }
+              card.style.opacity = "0.4";
+              reprocess.innerHTML = '<i class="ti ti-check"></i> Reagendado';
+            })
+            .catch(function (e) { reprocess.disabled = false; alert(e.message); });
+        });
+        var retry = document.createElement("button");
+        retry.type = "button";
+        retry.className = "nc-btn";
+        retry.style.cssText = "padding:4px 12px; font-size:12px;";
+        retry.innerHTML = '<i class="ti ti-refresh"></i> Reintentar';
+        retry.addEventListener("click", function () {
+          retry.disabled = true;
+          fetch("/dashboard/publish/zernio/retry/" + encodeURIComponent(p.post_id), {
+            method: "POST", credentials: "same-origin",
+          })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+              if (!res.ok) { throw new Error(res.error || "fallo"); }
+              card.style.opacity = "0.4";
+              retry.innerHTML = '<i class="ti ti-check"></i> Reintentado';
+            })
+            .catch(function (e) { retry.disabled = false; alert(e.message); });
+        });
+        actions.appendChild(reprocess);
+        actions.appendChild(retry);
+        card.appendChild(actions);
+        failedList.appendChild(card);
+      });
+    }
+
+    function loadFailed() {
+      fetch("/dashboard/publish/zernio/failed.json", { credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(function (b) { renderFailed(b.failed || []); })
+        .catch(function () {
+          failedList.innerHTML =
+            '<span class="nc-text--muted">No se pudo cargar.</span>';
+        });
+    }
+
+    function openFailed() {
+      activateTab("published");
+      failedPanel.style.display = "block";
+      loadFailed();
+      failedPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+    document.querySelectorAll(".js-open-failed").forEach(function (el) {
+      el.addEventListener("click", openFailed);
+      el.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openFailed(); }
+      });
+    });
+
+    document.getElementById("zn-reprocess-all").addEventListener("click", function () {
+      var btn = this;
+      if (!window.confirm(
+        "¿Reprocesar todas las publicaciones fallidas? Se re-renderizan y " +
+        "se reagendan por el drip (uno cada 30/60 min)."
+      )) { return; }
+      btn.disabled = true;
+      var label = btn.innerHTML;
+      btn.innerHTML = '<i class="ti ti-loader"></i> Reprocesando…';
+      fetch("/dashboard/publish/zernio/reprocess-failed", {
+        method: "POST", credentials: "same-origin",
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (!res.ok) { throw new Error(res.error || "fallo"); }
+          alert((res.reprocessed || 0) + " reprocesadas y reagendadas. Recargando…");
+          loadFailed();
+        })
+        .catch(function (e) { alert("No se pudo: " + e.message); })
+        .finally(function () { btn.disabled = false; btn.innerHTML = label; });
+    });
+
+    document.getElementById("zn-retry-all").addEventListener("click", function () {
+      var btn = this;
+      if (!window.confirm("¿Reintentar todas las publicaciones fallidas?")) { return; }
+      btn.disabled = true;
+      fetch("/dashboard/publish/zernio/retry-all", {
+        method: "POST", credentials: "same-origin",
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (!res.ok) { throw new Error(res.error || "fallo"); }
+          alert((res.retried || 0) + " reintentadas. Recargando lista…");
+          loadFailed();
+        })
+        .catch(function (e) { alert("No se pudo: " + e.message); })
+        .finally(function () { btn.disabled = false; });
+    });
+  }
+
+  // ---- Programación: recurring slots + hora óptima + próximas ----
+  var schedPanel = document.getElementById("zn-schedule-panel");
+  if (schedPanel) {
+    var DOW = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+    // Working set of {dayOfWeek, time} the operator is editing; seeded
+    // from the saved default queue on load.
+    var slots = [];
+    var chipsHost = document.getElementById("zn-slot-chips");
+    var slotMsg = document.getElementById("zn-slot-msg");
+
+    function renderSlots() {
+      chipsHost.innerHTML = "";
+      if (!slots.length) {
+        chipsHost.innerHTML =
+          '<span class="nc-text--muted" style="font-size:12px;">Sin slots todavía — añade al menos uno.</span>';
+        return;
+      }
+      slots
+        .slice()
+        .sort(function (a, b) { return a.dayOfWeek - b.dayOfWeek || a.time.localeCompare(b.time); })
+        .forEach(function (s) {
+          var chip = document.createElement("span");
+          chip.className = "nc-pc-acct-chip";
+          chip.innerHTML = "<span>" + DOW[s.dayOfWeek] + " " + s.time + "</span>";
+          var x = document.createElement("button");
+          x.type = "button";
+          x.style.cssText = "background:none;border:none;color:inherit;cursor:pointer;padding:0 0 0 4px;";
+          x.innerHTML = '<i class="ti ti-x"></i>';
+          x.addEventListener("click", function () {
+            slots = slots.filter(function (o) {
+              return !(o.dayOfWeek === s.dayOfWeek && o.time === s.time);
+            });
+            renderSlots();
+          });
+          chip.appendChild(x);
+          chipsHost.appendChild(chip);
+        });
+    }
+
+    document.getElementById("zn-slot-add").addEventListener("click", function () {
+      var dow = parseInt(document.getElementById("zn-slot-dow").value, 10);
+      var time = document.getElementById("zn-slot-time").value;
+      if (!time) { return; }
+      if (slots.some(function (s) { return s.dayOfWeek === dow && s.time === time; })) { return; }
+      slots.push({ dayOfWeek: dow, time: time });
+      renderSlots();
+    });
+
+    document.getElementById("zn-slot-save").addEventListener("click", function () {
+      if (!slots.length) { slotMsg.textContent = "Añade al menos un slot."; return; }
+      var tz = document.getElementById("zn-slot-tz").value || "UTC";
+      slotMsg.style.color = "var(--nc-text--muted)";
+      slotMsg.textContent = "Guardando…";
+      fetch("/dashboard/publish/zernio/schedule/slots", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ timezone: tz, slots: slots }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (b) {
+          if (!b.ok) { throw new Error(b.error || "fallo"); }
+          slotMsg.style.color = "var(--nc-green, #48bb78)";
+          slotMsg.textContent = "Slots guardados ✓";
+        })
+        .catch(function (e) {
+          slotMsg.style.color = "#ff7575";
+          slotMsg.textContent = "No se pudo guardar: " + e.message;
+        });
+    });
+
+    function loadSchedule() {
+      fetch("/dashboard/publish/zernio/schedule.json", { credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(function (b) {
+          // Seed slots from the default (or first) saved queue.
+          var queues = b.queues || [];
+          var def = queues.filter(function (q) { return q.isDefault; })[0] || queues[0];
+          if (def && Array.isArray(def.slots)) {
+            slots = def.slots
+              .filter(function (s) { return typeof s.dayOfWeek === "number" && s.time; })
+              .map(function (s) { return { dayOfWeek: s.dayOfWeek, time: s.time }; });
+            if (def.timezone) { document.getElementById("zn-slot-tz").value = def.timezone; }
+          }
+          renderSlots();
+
+          // Upcoming list.
+          var up = document.getElementById("zn-upcoming");
+          var items = b.upcoming || [];
+          if (!items.length) {
+            up.innerHTML =
+              '<span class="nc-text--muted" style="font-size:13px;">No hay publicaciones programadas.</span>';
+            return;
+          }
+          up.innerHTML = "";
+          items.forEach(function (p) {
+            var row = document.createElement("div");
+            row.style.cssText =
+              "display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.05);";
+            var when = p.scheduled_for ? new Date(p.scheduled_for).toLocaleString() : "—";
+            row.innerHTML =
+              '<span class="nc-chip nc-chip--code">' + (p.platforms || []).join(", ") + "</span>" +
+              '<span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' +
+              (p.content || "(sin caption)") + "</span>" +
+              '<span class="nc-text--muted" style="font-size:12px;">' + when + "</span>";
+            var cancel = document.createElement("button");
+            cancel.type = "button";
+            cancel.className = "nc-btn nc-btn--danger";
+            cancel.style.cssText = "padding:4px 8px; font-size:12px;";
+            cancel.innerHTML = '<i class="ti ti-x"></i> Cancelar';
+            cancel.addEventListener("click", function () {
+              if (!window.confirm("¿Cancelar esta publicación programada?")) { return; }
+              cancel.disabled = true;
+              fetch("/dashboard/publish/zernio/schedule/cancel/" + encodeURIComponent(p.post_id), {
+                method: "POST", credentials: "same-origin",
+              })
+                .then(function (r) { return r.json(); })
+                .then(function (res) {
+                  if (!res.ok) { throw new Error(res.error || "fallo"); }
+                  row.remove();
+                })
+                .catch(function (e) { cancel.disabled = false; alert("No se pudo cancelar: " + e.message); });
+            });
+            row.appendChild(cancel);
+            up.appendChild(row);
+          });
+        })
+        .catch(function () {
+          document.getElementById("zn-upcoming").innerHTML =
+            '<span class="nc-text--muted">No se pudo cargar la programación.</span>';
+        });
+    }
+
+    function loadBestTime() {
+      fetch("/dashboard/publish/zernio/best-time.json", { credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(function (b) {
+          var host = document.getElementById("zn-besttime");
+          var s = (b.slots || []).slice(0, 5);
+          if (!s.length) {
+            host.textContent = "Sin datos suficientes todavía — publica más clips para ver tus mejores horas.";
+            return;
+          }
+          // best-time dayOfWeek is 0=Monday.
+          var BT = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+          host.innerHTML = s
+            .map(function (slot) {
+              var d = BT[slot.day_of_week] || "?";
+              var hh = ("0" + slot.hour).slice(-2);
+              return '<span class="nc-pc-acct-chip" style="margin:2px;">' +
+                d + " " + hh + ":00 UTC</span>";
+            })
+            .join("");
+        })
+        .catch(function () {});
+    }
+
+    // ---- Auto-program (whole-queue scheduler) ----
+    var autoprogBtn = document.getElementById("zn-autoprog-btn");
+    if (autoprogBtn) {
+      autoprogBtn.addEventListener("click", function () {
+        var msg = document.getElementById("zn-autoprog-msg");
+        var count = parseInt(
+          (document.getElementById("zn-autoprog-count") || {}).textContent || "0", 10
+        ) || 0;
+        if (count <= 0) {
+          msg.style.color = "var(--nc-text--muted)";
+          msg.textContent = "No hay clips aprobados para programar.";
+          return;
+        }
+        if (!window.confirm("Programar " + count + " clip(s) en tus mejores horas?")) { return; }
+        autoprogBtn.disabled = true;
+        msg.style.color = "var(--nc-text--muted)";
+        msg.textContent = "Programando…";
+
+        var seen = {};  // clip_ids already removed from the grids (dedupe)
+        // Reflect a progress snapshot in the UI: live counter while running,
+        // final breakdown when done. Removes each scheduled clip from the
+        // To-publish + Bulk grids as it lands.
+        function applyProgress(p) {
+          (p.results || []).forEach(function (r) {
+            if (!r.ok || !r.clip_id || seen[r.clip_id]) { return; }
+            seen[r.clip_id] = true;
+            document.querySelectorAll('[data-clip-id="' + r.clip_id + '"]')
+              .forEach(function (row) { row.remove(); });
+          });
+          var countEl = document.getElementById("zn-autoprog-count");
+          if (countEl) { countEl.textContent = Math.max(0, count - (p.scheduled || 0)); }
+          var failTxt = p.failed ? (" · ✗ " + p.failed + " fallido(s)") : "";
+          // Platforms the run skipped because the network is rate-limiting
+          // us (cooldown). Without this note a selected red just silently
+          // gets zero posts and the operator can't tell why.
+          var cooledTxt = (p.cooled && p.cooled.length)
+            ? (" · ⏸ " + p.cooled.join(", ") + " en pausa por límite de la red — se reanuda solo")
+            : "";
+          if (p.state === "done") {
+            msg.style.color = (p.failed || cooledTxt) ? "#e0a458" : "var(--nc-green, #48bb78)";
+            msg.textContent = "Programados " + (p.scheduled || 0) + " clip(s)" + failTxt + " ✓" + cooledTxt;
+            loadSchedule();  // refresh "Próximas publicaciones"
+          } else {
+            msg.style.color = "var(--nc-text--muted)";
+            msg.textContent = "Programando " + (p.done || 0) + "/" + (p.total || count)
+              + " · ✓ " + (p.scheduled || 0) + failTxt + "…" + cooledTxt;
+          }
+        }
+
+        var poll = null;
+        function stop() {
+          if (poll) { clearInterval(poll); poll = null; }
+          autoprogBtn.disabled = false;
+        }
+        function tick() {
+          fetch("/dashboard/publish/zernio/schedule/auto/progress", {
+            credentials: "same-origin",
+          })
+            .then(function (r) { return r.json(); })
+            .then(function (p) {
+              applyProgress(p);
+              if (p.state === "done") { stop(); }
+              else if (p.state === "error") {
+                msg.style.color = "#ff7575";
+                msg.textContent = "No se pudo programar: " + (p.error || "error");
+                stop();
+              }
+            })
+            .catch(function () { /* transient; keep polling */ });
+        }
+
+        fetch("/dashboard/publish/zernio/schedule/auto", {
+          method: "POST", credentials: "same-origin",
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (b) {
+            if (!b.ok) { throw new Error(b.error || b.detail || "fallo"); }
+            if (b.state === "done") {  // nothing to schedule
+              applyProgress({ state: "done", scheduled: b.scheduled || 0, failed: 0 });
+              autoprogBtn.disabled = false;
+              return;
+            }
+            // Run is live on the server — poll for progress every second.
+            poll = setInterval(tick, 1000);
+            tick();
+          })
+          .catch(function (e) {
+            msg.style.color = "#ff7575";
+            msg.textContent = "No se pudo programar: " + e.message;
+            autoprogBtn.disabled = false;
+          });
+      });
+    }
+
+    loadSchedule();
+    loadBestTime();
+  }
+})();
+</script>
+
+{% endblock %}

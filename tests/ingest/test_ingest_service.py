@@ -8,8 +8,8 @@ from typing import Any
 
 import pytest
 
-from nexoclip.ingest import Stream, ingest_vod
-from nexoclip.ingest import service as ingest_service
+from chalybclip.ingest import Stream, ingest_vod
+from chalybclip.ingest import service as ingest_service
 
 
 def _stub_download_writes_file(monkeypatch: pytest.MonkeyPatch, *, info: dict[str, Any]) -> list[Path]:
@@ -156,7 +156,7 @@ def test_ingest_resume_upload_source_reclaimed_raises_clear_error(
     """Uploads have no origin to re-fetch — a reclaimed upload source must
     fail with a message that says to upload again, not fall through to
     yt-dlp on the upload:// pseudo-URL."""
-    from nexoclip.errors import IngestError
+    from chalybclip.errors import IngestError
 
     _stub_download_writes_file(monkeypatch, info={})
     _stub_audio_extract(monkeypatch)
@@ -237,7 +237,7 @@ def test_ingest_falls_back_to_ffprobe_for_duration(
 
 
 def test_assert_download_complete_raises_on_truncation() -> None:
-    from nexoclip.errors import IngestError
+    from chalybclip.errors import IngestError
 
     # 32-min video, ~8s actually downloaded — the still-processing-upload case.
     with pytest.raises(IngestError, match="truncated"):
@@ -274,7 +274,7 @@ def test_assert_download_complete_noop_without_baseline() -> None:
 def test_ingest_fails_on_truncated_download(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from nexoclip.errors import IngestError
+    from chalybclip.errors import IngestError
 
     # Metadata claims 32 min; the file on disk ffprobes to 8s.
     info = {"duration": 1924.0, "title": "fresh upload", "uploader": "u"}
@@ -321,8 +321,8 @@ def test_ingest_uses_ffprobe_duration_over_metadata(
 def test_disk_headroom_raises_when_below_floor(monkeypatch: pytest.MonkeyPatch) -> None:
     import shutil as _shutil
 
-    from nexoclip.errors import IngestError
-    from nexoclip.settings import get_settings
+    from chalybclip.errors import IngestError
+    from chalybclip.settings import get_settings
 
     monkeypatch.setattr(get_settings(), "min_free_disk_bytes", 3 * 1024**3, raising=False)
     monkeypatch.setattr(
@@ -336,7 +336,7 @@ def test_disk_headroom_raises_when_below_floor(monkeypatch: pytest.MonkeyPatch) 
 def test_disk_headroom_passes_with_room(monkeypatch: pytest.MonkeyPatch) -> None:
     import shutil as _shutil
 
-    from nexoclip.settings import get_settings
+    from chalybclip.settings import get_settings
 
     monkeypatch.setattr(get_settings(), "min_free_disk_bytes", 3 * 1024**3, raising=False)
     monkeypatch.setattr(
@@ -349,7 +349,7 @@ def test_disk_headroom_passes_with_room(monkeypatch: pytest.MonkeyPatch) -> None
 def test_disk_headroom_disabled_when_floor_zero(monkeypatch: pytest.MonkeyPatch) -> None:
     import shutil as _shutil
 
-    from nexoclip.settings import get_settings
+    from chalybclip.settings import get_settings
 
     monkeypatch.setattr(get_settings(), "min_free_disk_bytes", 0, raising=False)
     # disk_usage must not even be consulted when disabled.
@@ -369,7 +369,7 @@ def test_download_failure_sweeps_partial_files(
     """A failed yt-dlp download must not leave partial files behind."""
     import yt_dlp
 
-    from nexoclip.errors import IngestError
+    from chalybclip.errors import IngestError
 
     target = tmp_path / "source" / "video.mp4"
     target.parent.mkdir(parents=True)
@@ -467,7 +467,7 @@ def test_unavailable_video_error_is_wrapped_not_raw(
     wrapped as IngestError (with the leftover sweep), not escape raw."""
     import yt_dlp
 
-    from nexoclip.errors import IngestError
+    from chalybclip.errors import IngestError
 
     target = tmp_path / "source" / "video.mp4"
     target.parent.mkdir(parents=True)
@@ -532,7 +532,7 @@ def _capture_ydl_opts(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[s
 def test_download_vod_sets_proxy_when_configured(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from nexoclip.settings import get_settings
+    from chalybclip.settings import get_settings
 
     monkeypatch.setattr(
         get_settings(), "ytdlp_proxy", "http://u:p@proxy.host:1234", raising=False
@@ -549,7 +549,7 @@ def test_download_vod_sets_proxy_when_configured(
 def test_download_vod_no_proxy_when_unset(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from nexoclip.settings import get_settings
+    from chalybclip.settings import get_settings
 
     monkeypatch.setattr(get_settings(), "ytdlp_proxy", None, raising=False)
     captured = _capture_ydl_opts(monkeypatch, tmp_path)
@@ -593,7 +593,7 @@ def test_youtube_extractor_args_none_when_unset() -> None:
 def test_download_vod_sets_youtube_extractor_args(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from nexoclip.settings import get_settings
+    from chalybclip.settings import get_settings
 
     monkeypatch.setattr(
         get_settings(), "ytdlp_player_client", "tv,web_safari", raising=False

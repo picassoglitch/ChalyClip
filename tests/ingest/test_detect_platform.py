@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from nexoclip.ingest.service import detect_platform
+from chalybclip.ingest.service import detect_platform
 
 
 @pytest.mark.parametrize(

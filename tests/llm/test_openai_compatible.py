@@ -17,19 +17,19 @@ import pytest
 import respx
 from pydantic import BaseModel
 
-from nexoclip.errors import LLMError
-from nexoclip.llm import LLMConfig, LLMRouter
-from nexoclip.llm.config import (
+from chalybclip.errors import LLMError
+from chalybclip.llm import LLMConfig, LLMRouter
+from chalybclip.llm.config import (
     ProviderConfig,
     ProviderModelsConfig,
     RetryConfig,
     RoutingRule,
 )
-from nexoclip.llm.openai_compatible_provider import (
+from chalybclip.llm.openai_compatible_provider import (
     OpenAICompatibleProvider,
     _extract_json_object,
 )
-from nexoclip.llm.provider import MultimodalImage, RetryableLLMError
+from chalybclip.llm.provider import MultimodalImage, RetryableLLMError
 
 _BASE = "http://llm.test/v1"
 

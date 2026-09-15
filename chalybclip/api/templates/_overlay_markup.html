@@ -1,0 +1,82 @@
+{# ============================================================
+   Single source of truth for the .nc-pv-* overlay markup.
+   Included by BOTH clip_render.html (headless capture) and
+   clip_detail.html (editor preview) so the markup never
+   drifts between the two surfaces.
+
+   Context vars expected from the caller:
+     ov                   — dict; clip.overlay_config or {}
+     _captions            — dict; ov.captions or {}
+     _banner              — dict; ov.banner or {}
+     _top_hook            — dict; ov.top_hook or {}
+     banner_url_display   — str; pre-formatted "KICK.COM/HANDLE"
+                            from the handler (NOT recomputed in
+                            template; same helper used in editor
+                            + export so a single normalization
+                            rule applies)
+     render_watermark     — bool; whether to paint the CHALYBCLIP
+                            stamp (tier-gated in the handler)
+     show_live_pill       — bool; only relevant for the kick
+                            repost-page banner variant, where
+                            the operator can toggle a LIVE NOW
+                            indicator
+
+   IDs are stable identifiers the editor JS targets
+   (pv-banner, pv-banner-url, pv-caption, pv-title). Keep them
+   here so the editor's syncBanner / syncCaptions wiring keeps
+   working when this partial is included from clip_detail.html.
+   The export doesn't need the IDs but they're harmless.
+   ============================================================ #}
+
+{# Title hook — the headline pinned over the video. Only rendered
+   when the operator typed something into the overlay_config; an
+   empty title means "no title for this clip". #}
+{% if ov.get('title_text') %}
+<div class="nc-pv-title" id="pv-title">{{ ov.title_text }}</div>
+{% endif %}
+
+{# Secondary "top hook" pill — short context line above the main
+   title. Three style variants (white_rounded / black_solid /
+   subtle) tuned darker + smaller than the main hook so the eye
+   lands on the headline first. #}
+{% if _top_hook.get('enabled') and _top_hook.get('text') %}
+<div class="nc-pv-top-hook nc-pv-top-hook--{{ _top_hook.get('style') or 'white_rounded' }}"
+     id="pv-top-hook">
+  {{ _top_hook.text }}
+</div>
+{% endif %}
+
+{# Banner — always rendered (with is-hidden when disabled) so the
+   editor JS can flip the operator's "enable banner" toggle without
+   a re-render. Export ignores is-hidden vs absent — both equivalent. #}
+<div id="pv-banner"
+     class="nc-pv-banner nc-pv-banner--{{ _banner.get('variant') or 'kick_repost_page' }}{% if not _banner.get('enabled', False) %} is-hidden{% endif %}"
+     data-variant="{{ _banner.get('variant') or 'kick_repost_page' }}"
+     data-platform="{{ (_banner.get('platform') or 'kick')|lower }}">
+  <span class="nc-pv-banner__platform" id="pv-banner-platform">
+    {{ (_banner.get('platform') or 'kick')|upper }}
+  </span>
+  <span class="nc-pv-banner__url" id="pv-banner-url">
+    {{ banner_url_display }}
+  </span>
+  <span class="nc-pv-banner__live-pill" id="pv-banner-live-pill"
+        {% if not show_live_pill %}style="display:none;"{% endif %}>
+    EN VIVO
+  </span>
+</div>
+
+{# Caption layer. The element is always present (even with no
+   text) so the rAF / explicit-paint animator in the consuming
+   template has somewhere to write. is-hidden / empty handled
+   by the JS (editor) or per-frame paint (export). #}
+{% if _captions.get('enabled', True) %}
+<div class="nc-pv-caption nc-pv-caption--{{ _captions.get('position') or 'lower_third' }}"
+     id="pv-caption"
+     data-animation="{{ _captions.get('animation') or 'pop' }}"></div>
+{% endif %}
+
+{# Watermark — tier-gated; handler resolves whether to paint
+   based on tenant tier + brand_kit.show_chalybclip_credit. #}
+{% if render_watermark %}
+<div class="nc-pv-watermark">CHALYBCLIP</div>
+{% endif %}

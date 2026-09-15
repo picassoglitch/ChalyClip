@@ -2,10 +2,10 @@
 "don't override on garbage" semantics that protect existing paid
 tenants from a typo'd tier label.
 
-Background: Nexo AI sends `partner` for the top tier. Before
-nexoclip.tiers existed, the provisioning validator + SSO sync only
+Background: Chalyb sends `partner` for the top tier. Before
+chalybclip.tiers existed, the provisioning validator + SSO sync only
 accepted {free, pro, all_access} and silently dropped `partner`, so
-a partner tenant landed as `free` in NexoClip — losing every paid
+a partner tenant landed as `free` in ChalybClip — losing every paid
 perk (including the upload-post profile limit that 403'd the
 operator). These tests pin the alias map + the two normalization
 modes.
@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import pytest
 
-from nexoclip.tiers import (
+from chalybclip.tiers import (
     ALL_ACCESS,
     FREE,
     PAID_TIERS,
@@ -34,7 +34,7 @@ from nexoclip.tiers import (
     "raw",
     ["partner", "Partner", "  PARTNER ", "partners", "enterprise",
      "allaccess", "all-access",
-     # Nexo AI renamed its top tier ALL_ACCESS → VIP; SSO tokens and
+     # Chalyb renamed its top tier ALL_ACCESS → VIP; SSO tokens and
      # provisioning calls carry 'vip' now.
      "vip", "VIP"],
 )

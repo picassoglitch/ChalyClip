@@ -20,18 +20,18 @@ from typing import Any
 
 import pytest_asyncio
 
-from nexoclip.db import (
+from chalybclip.db import (
     Database,
     LLMCallsRepo,
     TenantsRepo,
     apply_migrations,
 )
-from nexoclip.errors import BudgetExceeded
-from nexoclip.ingest import Stream
-from nexoclip.tenancy import bound_tenant
-from nexoclip.transcribe.models import Segment, Transcript, Word
-from nexoclip.transcribe.providers import assemblyai
-from nexoclip.transcribe.service import transcribe
+from chalybclip.errors import BudgetExceeded
+from chalybclip.ingest import Stream
+from chalybclip.tenancy import bound_tenant
+from chalybclip.transcribe.models import Segment, Transcript, Word
+from chalybclip.transcribe.providers import assemblyai
+from chalybclip.transcribe.service import transcribe
 
 import pytest
 
@@ -227,8 +227,8 @@ async def test_transcribe_refuses_when_budget_exceeded(
         tenant, daily_llm_budget_usd_micros=100_000,
     )
     # Pre-fill spend = 100_000 (already at cap).
-    from nexoclip.db.models import LLMCallRow
-    from nexoclip.ids import new_id
+    from chalybclip.db.models import LLMCallRow
+    from chalybclip.ids import new_id
     with bound_tenant(tenant):
         await LLMCallsRepo(db).record(
             LLMCallRow(

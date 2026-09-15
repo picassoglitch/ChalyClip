@@ -2,7 +2,7 @@ name: Postgres tests
 
 # Runs the database-backed suites against a real Postgres service, the same
 # way they run against the local throwaway cluster in development. Setting
-# NEXOCLIP_TEST_PG_DSN flips the shared test fixtures (tests/_db_backend.py)
+# CHALYBCLIP_TEST_PG_DSN flips the shared test fixtures (tests/_db_backend.py)
 # from a throwaway SQLite file to Postgres, so these suites exercise the
 # actual production engine — the asyncpg facade, the ON CONFLICT idioms, and
 # the consolidated PG baseline — with no dialect drift.
@@ -22,7 +22,7 @@ jobs:
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: nexoclip_test
+          POSTGRES_DB: chalybclip_test
         ports:
           - 5432:5432
         # Wait until Postgres is accepting connections before the job starts.
@@ -33,7 +33,7 @@ jobs:
           --health-retries 10
 
     env:
-      NEXOCLIP_TEST_PG_DSN: postgresql://postgres:postgres@127.0.0.1:5432/nexoclip_test
+      CHALYBCLIP_TEST_PG_DSN: postgresql://postgres:postgres@127.0.0.1:5432/chalybclip_test
 
     steps:
       - uses: actions/checkout@v4

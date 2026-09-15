@@ -2,7 +2,7 @@
 
 **COMPLETED** — kept for historical reference; see README for current status.
 
-**Goal:** A single command — `nexoclip process <vod_url>` — that takes a Kick VOD URL and outputs a folder of vertical clips with cloud-LLM-generated Spanish captions, plus a JSON manifest.
+**Goal:** A single command — `chalybclip process <vod_url>` — that takes a Kick VOD URL and outputs a folder of vertical clips with cloud-LLM-generated Spanish captions, plus a JSON manifest.
 
 **Out of scope for Phase 0** (these come in Phase 1+):
 - Multi-tenancy enforcement (function signatures take `tenant_id` but it's hardcoded `"default"`)
@@ -21,7 +21,7 @@ This is a spike. The point is to prove the spine works end-to-end on Aldo's actu
 ## Exit criterion
 
 ```bash
-$ nexoclip process https://kick.com/aldovillanueva/videos/<vod_id> \
+$ chalybclip process https://kick.com/aldovillanueva/videos/<vod_id> \
     --persona aldo_villanueva \
     --language es \
     --output-dir ./out \
@@ -51,40 +51,40 @@ $ nexoclip process https://kick.com/aldovillanueva/videos/<vod_id> \
 - [ ] Verify ffmpeg is in PATH: `ffmpeg -version`
 - [ ] Verify CUDA is available for faster-whisper: `python -c "import torch; print(torch.cuda.is_available())"`
 - [ ] Copy `.env.example` to `.env` and fill in `ANTHROPIC_API_KEY`
-- [ ] Copy `config/nexoclip.example.yaml` to `config/nexoclip.yaml`
+- [ ] Copy `config/chalybclip.example.yaml` to `config/chalybclip.yaml`
 - [ ] `pytest` runs (with no real tests yet — proves install works)
 
 ### 1. Ingest module (Day 1)
-- [ ] `nexoclip/ingest/service.py::ingest_vod(tenant_id, vod_url, output_dir) -> Stream`
+- [ ] `chalybclip/ingest/service.py::ingest_vod(tenant_id, vod_url, output_dir) -> Stream`
   - Use `yt-dlp` Python module (not subprocess — better error handling)
   - Detect Kick / Twitch / YouTube from URL pattern
   - Download VOD to `<output_dir>/<stream_id>/source/video.mp4`
   - Extract audio: `ffmpeg -i video.mp4 -ac 1 -ar 16000 audio.wav`
   - Return `Stream` Pydantic model: `{id, tenant_id, vod_url, source_video_path, source_audio_path, duration_s}`
-- [ ] CLI: `nexoclip ingest <url>` calls service, prints JSON
+- [ ] CLI: `chalybclip ingest <url>` calls service, prints JSON
 - [ ] Smoke test: ingest a 10-min Kick VOD, verify outputs exist
 
 ### 2. Transcribe module (Day 2)
-- [ ] `nexoclip/transcribe/service.py::transcribe(tenant_id, stream) -> Transcript`
+- [ ] `chalybclip/transcribe/service.py::transcribe(tenant_id, stream) -> Transcript`
   - Use `faster_whisper.WhisperModel("medium", device="cuda", compute_type="float16")`
   - Run on `stream.source_audio_path`
   - Return `Transcript` with word-level timestamps: `{stream_id, segments: [{ts, text, words: [{ts, text, prob}]}]}`
   - Save to `<stream_dir>/source/transcript.json`
-- [ ] CLI: `nexoclip transcribe <stream_id>`
+- [ ] CLI: `chalybclip transcribe <stream_id>`
 - [ ] Idempotency: if `transcript.json` exists, skip and return loaded version unless `--force`
 
 ### 3. Detect module — voice triggers only (Day 2)
-- [ ] `nexoclip/detect/service.py::detect_voice_triggers(tenant_id, stream, transcript, config) -> list[Candidate]`
+- [ ] `chalybclip/detect/service.py::detect_voice_triggers(tenant_id, stream, transcript, config) -> list[Candidate]`
   - Phrase list from config: `["clipéalo", "clip this", "saca un clip", "guarda esto", "momento clip"]`
   - Fuzzy match (Levenshtein ≤ 2) over the transcript word sequence
   - For each match, emit `Candidate(timestamp, score, reason="voice", evidence={"phrase": ..., "transcript_snippet": ...})`
   - Score = `phrase_weight × confidence` (config-driven)
 - [ ] Merge candidates within 30s into one (highest score wins, evidence union)
-- [ ] CLI: `nexoclip detect <stream_id>` — prints candidates as JSON
+- [ ] CLI: `chalybclip detect <stream_id>` — prints candidates as JSON
 - [ ] Phase 0 has only this one detector; chat/audio/visual come in Phase 1
 
 ### 4. Clip module (Day 3)
-- [ ] `nexoclip/clip/service.py::cut_clips(tenant_id, stream, candidates, output_dir) -> list[Clip]`
+- [ ] `chalybclip/clip/service.py::cut_clips(tenant_id, stream, candidates, output_dir) -> list[Clip]`
   - For each candidate at time `t`:
     - Window: `[t - 30s, t + 15s]` (configurable per trigger type — defaults in config)
     - Cut: `ffmpeg -ss <start> -i <video> -t 45 -c copy <out>` (fast cut, may snap to keyframe — ok for spike)
@@ -92,10 +92,10 @@ $ nexoclip process https://kick.com/aldovillanueva/videos/<vod_id> \
     - Re-encode: `ffmpeg -i cut.mp4 -vf "crop=ih*9/16:ih,scale=1080:1920" -c:v libx264 -preset fast -c:a aac out.mp4`
   - Return `Clip` models, save `metadata.json` per clip
   - **Skip caption burning in Phase 0** — clips are clean, captions come back in Phase 1 once we have something to A/B against
-- [ ] CLI: `nexoclip cut <stream_id>`
+- [ ] CLI: `chalybclip cut <stream_id>`
 
 ### 5. LLM router (Day 3–4)
-- [ ] `nexoclip/llm/router.py::LLMRouter`
+- [ ] `chalybclip/llm/router.py::LLMRouter`
   - Phase 0 minimum: one method `complete(tenant_id, purpose, system, user, schema, quality="standard") -> T`
   - Loads provider config from `config/llm.yaml`
   - Reads API key from environment via `pydantic-settings`
@@ -103,20 +103,20 @@ $ nexoclip process https://kick.com/aldovillanueva/videos/<vod_id> \
   - **Logs every call to `llm_calls.jsonl`** (Phase 0 doesn't have a DB yet — use a JSONL file in `<stream_dir>/llm_calls.jsonl`)
   - Handles 3 retries with exponential backoff
   - Provider fallback: stub for now, just Anthropic in Phase 0
-- [ ] `nexoclip/llm/anthropic_provider.py` — concrete provider class
-- [ ] `nexoclip/llm/schemas.py` — Pydantic models for structured outputs
+- [ ] `chalybclip/llm/anthropic_provider.py` — concrete provider class
+- [ ] `chalybclip/llm/schemas.py` — Pydantic models for structured outputs
 
 ### 6. Variant generator (Day 4)
-- [ ] `nexoclip/variants/service.py::generate_variants(tenant_id, clip, persona, n=5) -> list[Variant]`
+- [ ] `chalybclip/variants/service.py::generate_variants(tenant_id, clip, persona, n=5) -> list[Variant]`
   - Loads persona config from `config/personas.yaml`
   - Builds prompt: persona voice prompt + transcript snippet + chat snippet (chat is empty for Phase 0) + clip metadata
   - Calls `LLMRouter.complete()` with `VariantBatch` schema (5 variants)
   - Returns variants, saves to `<clip_dir>/variants.json`
 - [ ] Variant Pydantic model: `{id, language, caption, title_card_text, hashtags: list[str]}`
-- [ ] CLI: `nexoclip variants <clip_id> --persona aldo_villanueva`
+- [ ] CLI: `chalybclip variants <clip_id> --persona aldo_villanueva`
 
 ### 7. End-to-end orchestrator (Day 5)
-- [ ] `nexoclip process <vod_url>` runs all 6 steps in sequence
+- [ ] `chalybclip process <vod_url>` runs all 6 steps in sequence
 - [ ] Each step is resumable: if `<stream_dir>/source/transcript.json` exists, skip transcribe; etc.
 - [ ] Generate `manifest.json` at the stream root with full state
 - [ ] `--json` flag prints the manifest to stdout when complete
@@ -150,7 +150,7 @@ $ nexoclip process https://kick.com/aldovillanueva/videos/<vod_id> \
 You sit down with Aldo, run:
 
 ```bash
-nexoclip process <his_latest_kick_vod_url> --persona aldo_villanueva --language es --output-dir ./demo
+chalybclip process <his_latest_kick_vod_url> --persona aldo_villanueva --language es --output-dir ./demo
 ```
 
 Expected:

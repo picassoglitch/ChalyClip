@@ -1,0 +1,93 @@
+# Cloud Build → Artifact Registry → Cloud Run. Copy into a new engine repo and
+# change _SERVICE to the engine's slug.
+#
+#   gcloud builds submit --config=cloudbuild.yaml \
+#     --substitutions=_PROJECT=chalyb,_SERVICE=<slug>
+#
+# Deploys with --image only. Everything else about the service — service
+# account, secrets, scaling, memory — belongs to Terraform, and `gcloud run
+# deploy` leaves unspecified fields alone, so the two never fight over the spec.
+
+substitutions:
+  _REGION: us-central1
+  _PROJECT: chalyb
+  _REPO: engines
+  _SERVICE: chalybclip
+  # Set to "true" if this engine has a worker service.
+  _HAS_WORKER: "true"
+
+options:
+  machineType: E2_HIGHCPU_8
+  logging: CLOUD_LOGGING_ONLY
+
+# Raise for a heavy image (a headless browser, ffmpeg, ML wheels). Cloud
+# Build's 10-minute default kills those mid-install.
+timeout: 2400s
+
+images:
+  - ${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_SERVICE}:${SHORT_SHA}
+  - ${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_SERVICE}:latest
+
+steps:
+  # Warm the layer cache. No-op on the first build, when :latest does not
+  # exist yet — hence the `|| true`.
+  - id: pull-cache
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        docker pull ${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_SERVICE}:latest || true
+
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --cache-from=${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_SERVICE}:latest
+      - -t
+      - ${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_SERVICE}:${SHORT_SHA}
+      - -t
+      - ${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_SERVICE}:latest
+      - .
+    waitFor: [pull-cache]
+
+  # Push before deploy: Cloud Run pulls from the registry, not the build
+  # workspace. The `images:` block also pushes, but only after every step has
+  # run — too late for the deploys below.
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args: [push, --all-tags, '${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_SERVICE}']
+    waitFor: [build]
+
+  - id: deploy-api
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image=${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_SERVICE}:${SHORT_SHA}
+      - --region=${_REGION}
+      - --project=${_PROJECT}
+      - --quiet
+    waitFor: [push]
+
+  # Only runs when _HAS_WORKER=true. --no-cpu-throttling is load-bearing for
+  # any worker that answers a request and then does the work in the
+  # background: without it CPU is withdrawn when the response is sent and the
+  # job freezes silently.
+  - id: deploy-worker
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        if [ "${_HAS_WORKER}" != "true" ]; then
+          echo "no worker for ${_SERVICE}; skipping"
+          exit 0
+        fi
+        gcloud run deploy ${_SERVICE}-worker \
+          --image=${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_SERVICE}:${SHORT_SHA} \
+          --region=${_REGION} --project=${_PROJECT} \
+          --no-cpu-throttling --quiet
+    waitFor: [push]

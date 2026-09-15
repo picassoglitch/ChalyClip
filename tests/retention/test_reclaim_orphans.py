@@ -6,11 +6,11 @@ import os
 import time
 from pathlib import Path
 
-from nexoclip.db import Database, StreamsRepo, TenantsRepo
-from nexoclip.db.models import StreamRow
-from nexoclip.jobs.active import pipeline_active
-from nexoclip.retention import reclaim_orphan_dirs
-from nexoclip.tenancy import bound_tenant
+from chalybclip.db import Database, StreamsRepo, TenantsRepo
+from chalybclip.db.models import StreamRow
+from chalybclip.jobs.active import pipeline_active
+from chalybclip.retention import reclaim_orphan_dirs
+from chalybclip.tenancy import bound_tenant
 
 from .conftest import days_ago_iso
 

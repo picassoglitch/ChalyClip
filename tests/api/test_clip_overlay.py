@@ -19,17 +19,17 @@ from pathlib import Path
 
 import httpx
 
-from nexoclip.db import (
+from chalybclip.db import (
     ClipsRepo,
     Database,
     StreamsRepo,
 )
-from nexoclip.db.models import (
+from chalybclip.db.models import (
     CandidateRow,
     ClipRow,
     StreamRow,
 )
-from nexoclip.tenancy import bound_tenant
+from chalybclip.tenancy import bound_tenant
 
 
 def _now() -> str:
@@ -44,7 +44,7 @@ async def _seed_clip(
     clip_id: str = "clp_e",
     status: str = "cut",
 ) -> None:
-    from nexoclip.db import CandidatesRepo
+    from chalybclip.db import CandidatesRepo
 
     with bound_tenant(tenant_id):
         await StreamsRepo(db).upsert(
@@ -292,7 +292,7 @@ async def test_finalize_runs_overlay_burn_when_overlays_enabled(
     Patch ClipsRepo.get to return a clip whose path lives under
     tmp_path so the burn helper can find it on disk; patch
     burn_overlays to confirm it gets called with the right config."""
-    from nexoclip.clip import overlay_burn
+    from chalybclip.clip import overlay_burn
 
     tid = tenants["alice"]["id"]
     await _login(client, tenants["alice"]["token"])
@@ -313,7 +313,7 @@ async def test_finalize_runs_overlay_burn_when_overlays_enabled(
                 status="ingested", created_at=_now(),
             )
         )
-        from nexoclip.db import CandidatesRepo
+        from chalybclip.db import CandidatesRepo
         await CandidatesRepo(db).upsert_many([CandidateRow(
             id="cnd_e", stream_id="str_e", tenant_id=tid, ts=10.0,
             score=0.9, reason="voice", evidence={}, created_at=_now(),
@@ -335,12 +335,12 @@ async def test_finalize_runs_overlay_burn_when_overlays_enabled(
         return True
 
     # Patch BOTH the module-of-origin AND the re-exported name on
-    # nexoclip.clip — the dashboard handler imports
-    # `from nexoclip.clip import burn_overlays` at call time, so
+    # chalybclip.clip — the dashboard handler imports
+    # `from chalybclip.clip import burn_overlays` at call time, so
     # the re-export binding is what it actually grabs.
-    import nexoclip.clip
+    import chalybclip.clip
     monkeypatch.setattr(overlay_burn, "burn_overlays", fake_burn)
-    monkeypatch.setattr(nexoclip.clip, "burn_overlays", fake_burn)
+    monkeypatch.setattr(chalybclip.clip, "burn_overlays", fake_burn)
 
     r = await client.post(
         "/dashboard/clips/clp_e/finalize",
@@ -381,7 +381,7 @@ async def test_finalize_tolerates_burn_failure(
     """If ffmpeg fails, finalize still succeeds (status moves,
     overlay_config persists). Publishers fall back to the original
     clip.mp4 — the operator can retry from the editor."""
-    from nexoclip.clip import overlay_burn
+    from chalybclip.clip import overlay_burn
 
     tid = tenants["alice"]["id"]
     await _login(client, tenants["alice"]["token"])
@@ -397,7 +397,7 @@ async def test_finalize_tolerates_burn_failure(
             source_video_path="/tmp/v", source_audio_path="/tmp/a",
             status="ingested", created_at=_now(),
         ))
-        from nexoclip.db import CandidatesRepo
+        from chalybclip.db import CandidatesRepo
         await CandidatesRepo(db).upsert_many([CandidateRow(
             id="cnd_e", stream_id="str_e", tenant_id=tid, ts=10.0,
             score=0.9, reason="voice", evidence={}, created_at=_now(),
@@ -413,9 +413,9 @@ async def test_finalize_tolerates_burn_failure(
     def boom(**kwargs):
         raise RuntimeError("ffmpeg burn failed: pretend stderr")
 
-    import nexoclip.clip
+    import chalybclip.clip
     monkeypatch.setattr(overlay_burn, "burn_overlays", boom)
-    monkeypatch.setattr(nexoclip.clip, "burn_overlays", boom)
+    monkeypatch.setattr(chalybclip.clip, "burn_overlays", boom)
 
     r = await client.post(
         "/dashboard/clips/clp_e/finalize",
@@ -621,8 +621,8 @@ async def test_captions_endpoint_returns_word_level_lines(
     import datetime as _dt
     import json
 
-    from nexoclip.db import TranscriptsRepo
-    from nexoclip.db.models import TranscriptRow
+    from chalybclip.db import TranscriptsRepo
+    from chalybclip.db.models import TranscriptRow
 
     tid = tenants["alice"]["id"]
     await _login(client, tenants["alice"]["token"])
@@ -842,7 +842,7 @@ async def test_clip_row_loader_tolerates_unknown_columns(
     We simulate this by injecting a fake column directly via SQL,
     then verifying the loader strips it without raising.
     """
-    from nexoclip.db.repos import _clip_from_row
+    from chalybclip.db.repos import _clip_from_row
 
     tid = tenants["alice"]["id"]
     await _seed_clip(db, tenant_id=tid)
@@ -919,9 +919,9 @@ async def test_intelligence_endpoint_emits_voice_trigger_marker(
     `AttributeError: 'CandidateRow' object has no attribute 'timestamp'`.
 
     Two parallel models almost shadow each other:
-      - `nexoclip.detect.models.Candidate` (in-memory detector output,
+      - `chalybclip.detect.models.Candidate` (in-memory detector output,
         field name `timestamp`)
-      - `nexoclip.db.models.CandidateRow` (DB row, field name `ts`)
+      - `chalybclip.db.models.CandidateRow` (DB row, field name `ts`)
 
     `CandidatesRepo.list_for_stream` returns the DB shape, so the
     endpoint MUST read `.ts`. The pre-fix code used `.timestamp` →
@@ -929,7 +929,7 @@ async def test_intelligence_endpoint_emits_voice_trigger_marker(
     voice-trigger phrase. Re-seed with that exact shape and assert the
     response is 200 with the expected clip-relative ts.
     """
-    from nexoclip.db import CandidatesRepo
+    from chalybclip.db import CandidatesRepo
 
     tid = tenants["alice"]["id"]
     await _login(client, tenants["alice"]["token"])
@@ -999,10 +999,10 @@ async def test_generate_hooks_endpoint_returns_json(
     """End-to-end: POST /clips/{id}/generate-hooks → patches the
     real Anthropic factory with a FakeProvider → returns the canned
     hooks as JSON shaped {hooks: [{text}], tone, n}."""
-    from nexoclip.llm import router as router_module
-    from nexoclip.settings import get_settings
+    from chalybclip.llm import router as router_module
+    from chalybclip.settings import get_settings
 
-    monkeypatch.setenv("NEXOCLIP_DEFAULT_OUTPUT_DIR", str(tmp_path))
+    monkeypatch.setenv("CHALYBCLIP_DEFAULT_OUTPUT_DIR", str(tmp_path))
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     get_settings.cache_clear()
 
@@ -1051,10 +1051,10 @@ async def test_generate_hooks_endpoint_falls_back_when_llm_fails(
 ) -> None:
     """LLM down / out of credits → the button still returns usable titles,
     built deterministically from the transcript/stream title (no 502)."""
-    from nexoclip.llm import router as router_module
-    from nexoclip.settings import get_settings
+    from chalybclip.llm import router as router_module
+    from chalybclip.settings import get_settings
 
-    monkeypatch.setenv("NEXOCLIP_DEFAULT_OUTPUT_DIR", str(tmp_path))
+    monkeypatch.setenv("CHALYBCLIP_DEFAULT_OUTPUT_DIR", str(tmp_path))
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     get_settings.cache_clear()
 
@@ -1107,10 +1107,10 @@ async def test_generate_hooks_endpoint_clamps_invalid_inputs(
     tmp_path,
 ) -> None:
     """Bogus tone falls back to 'default'; n outside [1, 10] gets clamped."""
-    from nexoclip.llm import router as router_module
-    from nexoclip.settings import get_settings
+    from chalybclip.llm import router as router_module
+    from chalybclip.settings import get_settings
 
-    monkeypatch.setenv("NEXOCLIP_DEFAULT_OUTPUT_DIR", str(tmp_path))
+    monkeypatch.setenv("CHALYBCLIP_DEFAULT_OUTPUT_DIR", str(tmp_path))
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     get_settings.cache_clear()
 

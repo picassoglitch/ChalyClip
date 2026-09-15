@@ -8,10 +8,10 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from nexoclip.config import ViralConfig
-from nexoclip.detect import ViralMoment, ViralMomentList, detect_viral_moments
-from nexoclip.detect.viral import _format_transcript
-from nexoclip.errors import LLMError
+from chalybclip.config import ViralConfig
+from chalybclip.detect import ViralMoment, ViralMomentList, detect_viral_moments
+from chalybclip.detect.viral import _format_transcript
+from chalybclip.errors import LLMError
 
 from ._fixtures import make_stream, make_transcript
 
@@ -192,7 +192,7 @@ def test_format_transcript_empty_segments_returns_placeholder() -> None:
 
 async def test_tenant_mismatch_raises() -> None:
     """Tenant ID must agree across caller / stream / transcript."""
-    from nexoclip.errors import DetectionError
+    from chalybclip.errors import DetectionError
 
     router = AsyncMock()
     with pytest.raises(DetectionError, match="tenant mismatch"):

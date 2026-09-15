@@ -8,15 +8,15 @@ from pathlib import Path
 
 import pytest_asyncio
 
-from nexoclip.cost import compute_cost_projection
-from nexoclip.db import (
+from chalybclip.cost import compute_cost_projection
+from chalybclip.db import (
     Database,
     LLMCallsRepo,
     TenantsRepo,
     apply_migrations,
 )
-from nexoclip.db.models import LLMCallRow
-from nexoclip.tenancy import bound_tenant
+from chalybclip.db.models import LLMCallRow
+from chalybclip.tenancy import bound_tenant
 
 
 @pytest_asyncio.fixture

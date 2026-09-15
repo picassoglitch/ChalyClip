@@ -1,7 +1,7 @@
 """Integration test for the Postgres backend (migration runner + facade).
 
-Skipped unless ``NEXOCLIP_TEST_PG_DSN`` points at a disposable Postgres
-database (e.g. ``postgresql://postgres@127.0.0.1:5433/nexoclip_test``). The
+Skipped unless ``CHALYBCLIP_TEST_PG_DSN`` points at a disposable Postgres
+database (e.g. ``postgresql://postgres@127.0.0.1:5433/chalybclip_test``). The
 target database is mutated, so never point this at production data.
 
 This is the seed of the Phase 4 "tests on real Postgres" work; Phase 4
@@ -14,12 +14,12 @@ import os
 
 import pytest
 
-from nexoclip.db import Database, apply_migrations
-from nexoclip.db.migrations import _pg_baseline_version
+from chalybclip.db import Database, apply_migrations
+from chalybclip.db.migrations import _pg_baseline_version
 
-_DSN = os.environ.get("NEXOCLIP_TEST_PG_DSN")
+_DSN = os.environ.get("CHALYBCLIP_TEST_PG_DSN")
 pytestmark = pytest.mark.skipif(
-    not _DSN, reason="set NEXOCLIP_TEST_PG_DSN to run Postgres integration tests"
+    not _DSN, reason="set CHALYBCLIP_TEST_PG_DSN to run Postgres integration tests"
 )
 
 

@@ -31,12 +31,12 @@ from pathlib import Path
 import httpx
 import pytest
 
-from nexoclip.api._render_validation import (
+from chalybclip.api._render_validation import (
     is_servable_cached_mp4,
     validate_rendered_mp4,
 )
-from nexoclip.db import Database
-from nexoclip.tenancy import bound_tenant
+from chalybclip.db import Database
+from chalybclip.tenancy import bound_tenant
 
 from .conftest import auth
 
@@ -291,7 +291,7 @@ async def test_download_evicts_zero_byte_cache_and_schedules_fresh(
     async def fake_runner(**kwargs: object) -> None:
         return None
     monkeypatch.setattr(
-        "nexoclip.api._clip_render.render_clip_in_background", fake_runner,
+        "chalybclip.api._clip_render.render_clip_in_background", fake_runner,
     )
 
     r = await client.get(
@@ -330,7 +330,7 @@ async def test_download_evicts_truncated_cache_and_schedules_fresh(
     async def fake_runner(**kwargs: object) -> None:
         return None
     monkeypatch.setattr(
-        "nexoclip.api._clip_render.render_clip_in_background", fake_runner,
+        "chalybclip.api._clip_render.render_clip_in_background", fake_runner,
     )
 
     r = await client.get(
@@ -368,7 +368,7 @@ async def test_download_does_not_evict_while_rendering(
     async def fake_runner(**kwargs: object) -> None:
         return None
     monkeypatch.setattr(
-        "nexoclip.api._clip_render.render_clip_in_background", fake_runner,
+        "chalybclip.api._clip_render.render_clip_in_background", fake_runner,
     )
 
     r = await client.get(

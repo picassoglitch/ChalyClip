@@ -7,8 +7,8 @@ import datetime as _dt
 import httpx
 import respx
 
-from nexoclip.db.models import ConnectedAccount, PublishJob
-from nexoclip.metrics import fetch_instagram_metric
+from chalybclip.db.models import ConnectedAccount, PublishJob
+from chalybclip.metrics import fetch_instagram_metric
 
 
 def _now() -> str:

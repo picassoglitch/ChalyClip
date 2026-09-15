@@ -39,7 +39,7 @@ then publishers; then the operational layer (cost cards, webhooks).
 **Out of scope (Phase 3+):**
 - Cloud migration (Aurora/Postgres, ECS, SQS-backed worker pool, S3 for
   clip + frame storage, Cognito auth, Stripe billing, marketing site).
-- MCP server. *(Since shipped as Phase 3 #3 — lives in `nexoclip/mcp_server/`, run via `nexoclip mcp serve`.)*
+- MCP server. *(Since shipped as Phase 3 #3 — lives in `chalybclip/mcp_server/`, run via `chalybclip mcp serve`.)*
 - **SSE-based live pipeline progress.** Tempting but explodes scope on
   connection lifecycle, reconnect, event buffering, partial state sync,
   proxy quirks. The dashboard needs reliable scoring + publishing +
@@ -79,15 +79,15 @@ then publishers; then the operational layer (cost cards, webhooks).
 
 ```bash
 # 1. Phase 1 still works:
-nexoclip db init
-nexoclip tenants add aldo "Aldo Villanueva"
-nexoclip tokens issue --tenant aldo --scope full
+chalybclip db init
+chalybclip tenants add aldo "Aldo Villanueva"
+chalybclip tokens issue --tenant aldo --scope full
 
 # 2. Set the budget governor (Phase 2 makes this required for vision-rescore):
-nexoclip tenants set-budget aldo --daily-usd 5.00 --rescore-cap 8
+chalybclip tenants set-budget aldo --daily-usd 5.00 --rescore-cap 8
 
 # 3. Run a VOD with vision-rescore enabled:
-nexoclip process <vod_url> \
+chalybclip process <vod_url> \
     --persona aldo_villanueva --tenant aldo \
     --vision-rescore
 # -> top-K rescored by Claude vision; publish-ready clips ranked by both
@@ -106,7 +106,7 @@ open http://localhost:8000/dashboard/connected-accounts
 # -> "Connect TikTok" -> OAuth round-trip -> account row with refresh_token
 
 # 6. Publish to TikTok directly (no Buffer):
-nexoclip publish --tenant aldo
+chalybclip publish --tenant aldo
 # -> tiktok publish_job: 200, external_id = TikTok video id, status=sent
 # -> yt   publish_job: 200, external_id = YouTube video id, status=sent
 # -> token expired mid-drain -> automatic OAuth refresh -> retry succeeds.
@@ -139,7 +139,7 @@ his Discord bot subscribed to webhooks announces the new uploads.
 After this merges, **schema is frozen at version 2 for Phase 2.** Any further
 change is a numbered migration.
 
-- [ ] `nexoclip/db/migrations/002_phase2.sql`:
+- [ ] `chalybclip/db/migrations/002_phase2.sql`:
   - `webhook_subscriptions(id, tenant_id, url, types_json, secret, status,
     created_at, last_dispatch_ts, failure_count)`
   - Extend `connected_accounts`: `refresh_token`, `expires_at`, `scopes_json`,
@@ -162,7 +162,7 @@ Lock-down because every Phase 2 LLM/publish path adds load - without a
 governor in place first, vision-rescore + multimodal smart crop will
 silently burn money under usage spikes.
 
-- [ ] `nexoclip/governance/budget.py`:
+- [ ] `chalybclip/governance/budget.py`:
   - `BudgetGovernor(db, *, clock)` with `check_llm_spend(tenant_id, projected_usd_micros)`,
     `record_llm_spend(...)`, `check_publish_quota(tenant_id, platform)`.
   - Reads daily totals from `llm_calls` + `publish_jobs` filtered to today
@@ -171,15 +171,15 @@ silently burn money under usage spikes.
     sized from `tenants.rescore_concurrency_cap`.
   - Cooldown: if last K rescore verdicts for this tenant returned scores
     below `low_confidence_threshold`, refuse new rescores for `cooldown_s`.
-- [ ] `nexoclip/errors.py` adds `BudgetExceededError` + `QuotaExceededError`
+- [ ] `chalybclip/errors.py` adds `BudgetExceededError` + `QuotaExceededError`
       + `CooldownActiveError`.
 - [ ] `LLMRouter.complete` / `complete_multimodal` consult the governor
       before issuing the call. Failure raises `BudgetExceededError`, which
       higher-up callers catch + emit `llm.budget_exhausted` event + halt
       cleanly (don't propagate to a 500).
-- [ ] `nexoclip/publish/service.py`: `run_publish_jobs` checks the publish
+- [ ] `chalybclip/publish/service.py`: `run_publish_jobs` checks the publish
       quota per (tenant, platform) before each enqueue dispatch.
-- [ ] CLI: `nexoclip tenants set-budget <id> --daily-usd N --rescore-cap N
+- [ ] CLI: `chalybclip tenants set-budget <id> --daily-usd N --rescore-cap N
       --publish-limit N`.
 - [ ] Tests:
   - llm_calls totals projecting tomorrow's first call across the ceiling
@@ -191,7 +191,7 @@ silently burn money under usage spikes.
 
 ### 2. FrameStore protocol (Day 4)
 
-- [ ] `nexoclip/llm/frame_store.py`:
+- [ ] `chalybclip/llm/frame_store.py`:
   - `FrameStore` protocol: `get`, `put`, `clear`.
   - `MemoryFrameStore` (existing FrameCache, renamed + adapted).
 - [ ] `generate_variants(frame_store=...)` and the new vision-rescore service
@@ -200,13 +200,13 @@ silently burn money under usage spikes.
 
 ### 3. Vision-LLM rescore wiring (Day 5-6)
 
-- [ ] `nexoclip/detect/vision_rescore.py::rescore_candidates(...)`:
+- [ ] `chalybclip/detect/vision_rescore.py::rescore_candidates(...)`:
       samples 5 frames per top-K candidate, calls
       `router.complete_multimodal`, persists `rescore_score / rescore_reason
       / rescore_model` on the candidate row. Hits the `BudgetGovernor`
       first; honors the per-tenant concurrency semaphore.
-- [ ] CLI flag: `nexoclip detect --vision-rescore`,
-      `nexoclip process --vision-rescore`.
+- [ ] CLI flag: `chalybclip detect --vision-rescore`,
+      `chalybclip process --vision-rescore`.
 - [ ] Pipeline orchestrator opt-in: `process_vod(use_vision_rescore=False)`
       default; flag flips it.
 - [ ] Tests: fake provider replays a rescored response; candidates are
@@ -230,7 +230,7 @@ silently burn money under usage spikes.
 The Phase 1 columns (`smart_crop_box_json`, `thumbnail_frame_path`) stay -
 only the picker logic changes.
 
-- [ ] `nexoclip/clip/smart_crop_vision.py` + `thumbnail_vision.py`:
+- [ ] `chalybclip/clip/smart_crop_vision.py` + `thumbnail_vision.py`:
       vision-LLM pickers; fall back to Phase 1 face-detect heuristic on
       LLM error or budget refusal.
 - [ ] CLI flag `--vision-crop`, persona-level opt-in.
@@ -239,7 +239,7 @@ only the picker logic changes.
 
 ### 6. Vision-driven face emotion (Day 10)
 
-- [ ] `nexoclip/vision/face_emotion_vision.py`: replaces the Haar-Cascade-
+- [ ] `chalybclip/vision/face_emotion_vision.py`: replaces the Haar-Cascade-
       only path. The LLM gets one frame at the candidate ts, returns a
       `FaceEmotion` label.
 - [ ] Caching: per-second emotion labels share the FrameStore so a 10-min
@@ -268,10 +268,10 @@ is unanswerable, and we'll waste cycles guessing instead of measuring.
 
 ### 8. TikTok Content Posting API publisher (Day 12-14)
 
-- [ ] `nexoclip/publish/tiktok.py` - `TikTokClient` (httpx), implements
+- [ ] `chalybclip/publish/tiktok.py` - `TikTokClient` (httpx), implements
       `init_video_upload`, `upload_chunks`, `publish`. Same transient/fatal
       error split as `BufferClient`.
-- [ ] `nexoclip/publish/service.py` dispatcher routes by
+- [ ] `chalybclip/publish/service.py` dispatcher routes by
       `connected_accounts.platform`.
 - [ ] OAuth round-trip on `/dashboard/connected-accounts`: "Connect TikTok"
       -> redirect -> callback writes refresh_token + expires_at.
@@ -282,14 +282,14 @@ is unanswerable, and we'll waste cycles guessing instead of measuring.
 
 ### 9. YouTube Data API (Shorts) publisher (Day 15-16)
 
-- [ ] `nexoclip/publish/youtube.py` - YouTube Data API v3 with the
+- [ ] `chalybclip/publish/youtube.py` - YouTube Data API v3 with the
       resumable upload protocol.
 - [ ] OAuth: same flow as TikTok behind a shared `OAuthFlow` helper.
 - [ ] Tests: respx mocks Data API surface.
 
 ### 10. OAuth refresh + dispatcher integration (Day 17)
 
-- [ ] `nexoclip/publish/oauth.py::refresh_if_expiring(account, *, db, http)`:
+- [ ] `chalybclip/publish/oauth.py::refresh_if_expiring(account, *, db, http)`:
       called once per drain pass before posting; on 401 mid-call, force a
       refresh + one retry.
 - [ ] Refresh failure flips `connected_accounts.status` to `auth_failed`,
@@ -309,14 +309,14 @@ is unanswerable, and we'll waste cycles guessing instead of measuring.
 
 ### 12. Webhook dispatch (Day 19-20)
 
-- [ ] `nexoclip/webhooks/`:
+- [ ] `chalybclip/webhooks/`:
   - `repos.py` CRUD on `webhook_subscriptions`.
   - `service.py::run_webhook_dispatch(tenant_id)` reads new event rows
     since `last_dispatch_ts`, filters by subscribed types, signs payloads
     with HMAC-SHA256(secret), posts to `url`.
   - Retry/give-up shape mirrors the publisher.
 - [ ] FastAPI lifespan: another loop kicks `run_webhook_dispatch` every 30s.
-- [ ] CLI: `nexoclip webhooks send --tenant <id>` for one-shot drains.
+- [ ] CLI: `chalybclip webhooks send --tenant <id>` for one-shot drains.
 - [ ] REST: `POST /webhooks`, `GET /webhooks`, `DELETE /webhooks/{id}`.
 - [ ] Dashboard: /dashboard/webhooks list + create form.
 - [ ] Tests: respx mocks subscriber endpoints; HMAC signature in headers;

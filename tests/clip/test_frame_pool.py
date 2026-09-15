@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from nexoclip.clip.frame_pool import (
+from chalybclip.clip.frame_pool import (
     DEFAULT_SAMPLE_N,
     ClipFrameBatch,
     sample_clip_frames,

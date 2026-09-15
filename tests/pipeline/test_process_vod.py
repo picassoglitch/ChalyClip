@@ -9,14 +9,14 @@ from typing import Any
 
 import pytest
 
-from nexoclip.clip import service as clip_service
-from nexoclip.config import NexoClipConfig, VoiceDetectorConfig
-from nexoclip.errors import VariantError
-from nexoclip.ingest import service as ingest_service
-from nexoclip.llm import LLMRouter
-from nexoclip.llm.config import ProviderConfig
-from nexoclip.pipeline import PipelineDeps, StreamManifest, load_manifest, process_vod
-from nexoclip.variants import Persona
+from chalybclip.clip import service as clip_service
+from chalybclip.config import ChalybClipConfig, VoiceDetectorConfig
+from chalybclip.errors import VariantError
+from chalybclip.ingest import service as ingest_service
+from chalybclip.llm import LLMRouter
+from chalybclip.llm.config import ProviderConfig
+from chalybclip.pipeline import PipelineDeps, StreamManifest, load_manifest, process_vod
+from chalybclip.variants import Persona
 from tests.llm._fakes import FakeProvider  # type: ignore[import]
 from tests.llm._fixtures import make_llm_config  # type: ignore[import]
 from tests.transcribe._fakes import (  # type: ignore[import]
@@ -57,7 +57,7 @@ def _force_inprocess_whisper(monkeypatch: pytest.MonkeyPatch) -> None:
     # Force the in-process Whisper path so the WhisperModel monkeypatch
     # below actually intercepts the call. The default production path
     # spawns a subprocess that wouldn't see our patched fake. The
-    # provider factory reads NEXOCLIP_TRANSCRIBE_INPROCESS from the
+    # provider factory reads CHALYBCLIP_TRANSCRIBE_INPROCESS from the
     # environment, and the local provider lazy-imports
     # `faster_whisper.WhisperModel` inside `_run_inprocess`, so we patch
     # the module entry in sys.modules (stubbing it out when the real
@@ -65,10 +65,10 @@ def _force_inprocess_whisper(monkeypatch: pytest.MonkeyPatch) -> None:
     import sys
     import types
 
-    monkeypatch.setenv("NEXOCLIP_TRANSCRIBE_INPROCESS", "1")
+    monkeypatch.setenv("CHALYBCLIP_TRANSCRIBE_INPROCESS", "1")
     # Defensive: invalidate the Settings singleton so the factory sees a
     # fresh `transcribe_provider` (tests share a cached Settings instance).
-    from nexoclip.settings import get_settings
+    from chalybclip.settings import get_settings
 
     get_settings.cache_clear()
     fw = sys.modules.get("faster_whisper")
@@ -119,8 +119,8 @@ def _stub_ffmpeg(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
     return calls
 
 
-def _make_config() -> NexoClipConfig:
-    cfg = NexoClipConfig()
+def _make_config() -> ChalybClipConfig:
+    cfg = ChalybClipConfig()
     cfg.detection.voice = VoiceDetectorConfig(
         enabled=True,
         weight=1.0,

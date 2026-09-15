@@ -18,20 +18,20 @@ from pathlib import Path
 
 import pytest
 
-from nexoclip.db import (
+from chalybclip.db import (
     Database,
     DriveWatchesRepo,
     TenantsRepo,
 )
-from nexoclip.db.models import DriveWatchRow
-from nexoclip.drive import (
+from chalybclip.db.models import DriveWatchRow
+from chalybclip.drive import (
     DriveClient,
     FakeDriveClient,
     PollReport,
     poll_drive_watches,
 )
-from nexoclip.drive.models import DriveFile
-from nexoclip.tenancy import bound_tenant
+from chalybclip.drive.models import DriveFile
+from chalybclip.tenancy import bound_tenant
 
 # ---- ingest callback collector ----
 

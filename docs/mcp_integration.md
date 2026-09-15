@@ -1,6 +1,6 @@
 # MCP integration — Claude Code, Cursor, Claude Desktop
 
-The NexoClip MCP server is a thin translation layer over the REST surface
+The ChalybClip MCP server is a thin translation layer over the REST surface
 (P3 #3). It runs locally over stdio so external agents drive the same
 tenant a human would via the dashboard. This doc shows the config snippet
 to register it with the three most common harnesses. No business logic is
@@ -10,11 +10,11 @@ exposed beyond what the dashboard already does.
 
 ```bash
 # 1. Initialize SQLite + apply migrations.
-nexoclip db init
+chalybclip db init
 
 # 2. Create a tenant + issue a full-scope API token.
-nexoclip tenants add aldo "Aldo Villanueva"
-nexoclip tokens issue --tenant aldo --scope full
+chalybclip tenants add aldo "Aldo Villanueva"
+chalybclip tokens issue --tenant aldo --scope full
 # → tok_01H... (copy this; the CLI prints the raw token ONCE)
 ```
 
@@ -28,11 +28,11 @@ Add to `~/.claude.json` under your project:
 ```json
 {
   "mcpServers": {
-    "nexoclip": {
+    "chalybclip": {
       "command": "C:/path/to/QuantorClipAI/.venv/Scripts/python.exe",
-      "args": ["-m", "nexoclip.cli", "mcp", "serve"],
+      "args": ["-m", "chalybclip.cli", "mcp", "serve"],
       "env": {
-        "NEXOCLIP_API_TOKEN": "tok_01H..."
+        "CHALYBCLIP_API_TOKEN": "tok_01H..."
       }
     }
   }
@@ -48,11 +48,11 @@ On macOS / Linux replace `Scripts/python.exe` with `bin/python`.
 ```json
 {
   "mcpServers": {
-    "nexoclip": {
+    "chalybclip": {
       "command": "/path/to/QuantorClipAI/.venv/bin/python",
-      "args": ["-m", "nexoclip.cli", "mcp", "serve"],
+      "args": ["-m", "chalybclip.cli", "mcp", "serve"],
       "env": {
-        "NEXOCLIP_API_TOKEN": "tok_01H..."
+        "CHALYBCLIP_API_TOKEN": "tok_01H..."
       }
     }
   }
@@ -97,12 +97,12 @@ Read-only tokens get a clear refusal and the agent stops trying.
 
 ## Troubleshooting
 
-* **"no API token"** at boot: the `NEXOCLIP_API_TOKEN` env var is empty
+* **"no API token"** at boot: the `CHALYBCLIP_API_TOKEN` env var is empty
   in the agent's spawned subprocess. Most harnesses accept the `env`
   block above; otherwise pass `--token tok_...` in `args` directly.
 * **"unknown token"**: the token wasn't issued for this DB. Check the
   `--db-path` flag if you're running from a non-default working
-  directory; the CLI defaults to `./nexoclip.db`.
+  directory; the CLI defaults to `./chalybclip.db`.
 * **No tools listed**: agent didn't successfully spawn the subprocess.
-  Run `nexoclip mcp serve --token tok_...` directly in a terminal to
+  Run `chalybclip mcp serve --token tok_...` directly in a terminal to
   see the boot logs.

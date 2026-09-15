@@ -1,13 +1,13 @@
 """GET /auth/sso — post-login redirect + external_user_id reconciliation.
 
-Pins the funnel contract with nexo-ai:
+Pins the funnel contract with chalyb:
   - a fresh SSO login lands on /dashboard/start (the "New clip" hero),
-    matching the `next=/dashboard/start` nexo-ai sends on every launch URL
+    matching the `next=/dashboard/start` chalyb sends on every launch URL
   - `next` is honored only as a same-origin relative path — /auth/sso must
     not be usable as an open redirect
   - the tenant's external_user_id is synced to the signed payload's user_id
     on EVERY login (backfill on NULL *and* overwrite on mismatch), because a
-    stale link makes balance fetches read the wrong Nexo AI ledger.
+    stale link makes balance fetches read the wrong Chalyb ledger.
 """
 
 from __future__ import annotations
@@ -17,9 +17,9 @@ from collections.abc import Iterator
 import httpx
 import pytest
 
-from nexoclip.db import Database, TenantsRepo
-from nexoclip.integrations.nexo_ai.sso import sign_sso_token
-from nexoclip.settings import get_settings
+from chalybclip.db import Database, TenantsRepo
+from chalybclip.integrations.chalyb.sso import sign_sso_token
+from chalybclip.settings import get_settings
 
 _SECRET = "sso_shared_secret_value"
 
@@ -27,7 +27,7 @@ _SECRET = "sso_shared_secret_value"
 @pytest.fixture
 def sso_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
     """Strict-mode SSO: set the shared secret + bust the settings cache."""
-    monkeypatch.setenv("NEXO_AI_SSO_SECRET", _SECRET)
+    monkeypatch.setenv("CHALYB_SSO_SECRET", _SECRET)
     get_settings.cache_clear()
     try:
         yield _SECRET
@@ -35,7 +35,7 @@ def sso_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
         get_settings.cache_clear()
 
 
-def _token_for(tenant_id: str, *, user_id: str = "nexo_user_1") -> str:
+def _token_for(tenant_id: str, *, user_id: str = "chalyb_user_1") -> str:
     return sign_sso_token(
         user_id=user_id,
         email="alice@example.com",
@@ -53,7 +53,7 @@ async def test_sso_lands_on_dashboard_start_by_default(
     r = await client.get(f"/auth/sso?token={token}", follow_redirects=False)
     assert r.status_code == 303
     assert r.headers["location"] == "/dashboard/start"
-    assert "nexoclip_token" in r.headers.get("set-cookie", "")
+    assert "chalybclip_token" in r.headers.get("set-cookie", "")
 
 
 async def test_sso_honors_relative_next(
@@ -81,14 +81,14 @@ async def test_sso_auto_links_zernio_profile(
     pasting a profileId."""
     tid = tenants["alice"]["id"]
     token = sign_sso_token(
-        user_id="nexo_user_1", email="alice@example.com", tenant_id=tid,
-        secret=_SECRET, zernio_profile_id="prof_from_nexo_ai",
+        user_id="chalyb_user_1", email="alice@example.com", tenant_id=tid,
+        secret=_SECRET, zernio_profile_id="prof_from_chalyb",
     )
     r = await client.get(f"/auth/sso?token={token}", follow_redirects=False)
     assert r.status_code == 303
     tenant = await TenantsRepo(db).get(tid)
     assert tenant is not None
-    assert tenant.zernio_profile_id == "prof_from_nexo_ai"
+    assert tenant.zernio_profile_id == "prof_from_chalyb"
 
 
 async def test_sso_does_not_clobber_existing_profile(
@@ -102,8 +102,8 @@ async def test_sso_does_not_clobber_existing_profile(
     tid = tenants["alice"]["id"]
     await TenantsRepo(db).set_zernio_profile(tid, profile_id="prof_manual")
     token = sign_sso_token(
-        user_id="nexo_user_1", email="alice@example.com", tenant_id=tid,
-        secret=_SECRET, zernio_profile_id="prof_from_nexo_ai",
+        user_id="chalyb_user_1", email="alice@example.com", tenant_id=tid,
+        secret=_SECRET, zernio_profile_id="prof_from_chalyb",
     )
     await client.get(f"/auth/sso?token={token}", follow_redirects=False)
     tenant = await TenantsRepo(db).get(tid)
@@ -119,7 +119,7 @@ async def test_sso_without_profile_id_is_backcompat(
 ) -> None:
     """Older tokens without zernio_profile_id still validate + log in."""
     token = sign_sso_token(
-        user_id="nexo_user_1", email="alice@example.com",
+        user_id="chalyb_user_1", email="alice@example.com",
         tenant_id=tenants["alice"]["id"], secret=_SECRET,
     )
     r = await client.get(f"/auth/sso?token={token}", follow_redirects=False)
@@ -160,13 +160,13 @@ async def test_sso_backfills_missing_external_user_id(
     before = await TenantsRepo(db).get(tenant_id)
     assert before is not None and not before.external_user_id
 
-    token = _token_for(tenant_id, user_id="nexo_user_fresh")
+    token = _token_for(tenant_id, user_id="chalyb_user_fresh")
     r = await client.get(f"/auth/sso?token={token}", follow_redirects=False)
     assert r.status_code == 303
 
     after = await TenantsRepo(db).get(tenant_id)
     assert after is not None
-    assert after.external_user_id == "nexo_user_fresh"
+    assert after.external_user_id == "chalyb_user_fresh"
 
 
 async def test_sso_overwrites_stale_external_user_id(
@@ -176,15 +176,15 @@ async def test_sso_overwrites_stale_external_user_id(
     sso_env: str,
 ) -> None:
     """A tenant linked to the WRONG platform user reads someone else's
-    token ledger. The signed payload is nexo-ai's word on ownership, so a
+    token ledger. The signed payload is chalyb's word on ownership, so a
     mismatch is corrected on login — not preserved."""
     tenant_id = tenants["alice"]["id"]
-    await TenantsRepo(db).set_external_user_id(tenant_id, "nexo_user_stale")
+    await TenantsRepo(db).set_external_user_id(tenant_id, "chalyb_user_stale")
 
-    token = _token_for(tenant_id, user_id="nexo_user_current")
+    token = _token_for(tenant_id, user_id="chalyb_user_current")
     r = await client.get(f"/auth/sso?token={token}", follow_redirects=False)
     assert r.status_code == 303
 
     after = await TenantsRepo(db).get(tenant_id)
     assert after is not None
-    assert after.external_user_id == "nexo_user_current"
+    assert after.external_user_id == "chalyb_user_current"

@@ -8,10 +8,10 @@ from pathlib import Path
 
 import pytest
 
-from nexoclip.clip import Clip, cut_clips, load_clips
-from nexoclip.clip import service as clip_service
-from nexoclip.config import ClipConfig
-from nexoclip.errors import ClipError
+from chalybclip.clip import Clip, cut_clips, load_clips
+from chalybclip.clip import service as clip_service
+from chalybclip.config import ClipConfig
+from chalybclip.errors import ClipError
 
 from ._fixtures import make_candidate, seed_stream
 

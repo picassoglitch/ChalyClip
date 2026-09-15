@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from nexoclip.clip.word_captions import (
+from chalybclip.clip.word_captions import (
     LINE_BREAK_PAUSE_S,
     MAX_LINE_DURATION_S,
     MAX_WORDS_PER_LINE,

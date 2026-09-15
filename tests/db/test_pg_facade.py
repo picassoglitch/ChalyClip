@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from nexoclip.db.connection import (
+from chalybclip.db.connection import (
     Database,
     _is_postgres_dsn,
     _parse_rowcount,
@@ -106,10 +106,10 @@ class TestIsPostgresDsn:
         assert _is_postgres_dsn("postgresql://u@h/db") is True
 
     def test_path_object(self) -> None:
-        assert _is_postgres_dsn(Path("./nexoclip.db")) is False
+        assert _is_postgres_dsn(Path("./chalybclip.db")) is False
 
     def test_plain_file_string(self) -> None:
-        assert _is_postgres_dsn("./nexoclip.db") is False
+        assert _is_postgres_dsn("./chalybclip.db") is False
 
 
 class TestDatabaseBackendSelection:

@@ -15,7 +15,7 @@ from typing import Any
 
 import pytest
 
-from nexoclip.integrations.storage import (
+from chalybclip.integrations.storage import (
     S3RecordingStore,
     build_recording_store,
 )

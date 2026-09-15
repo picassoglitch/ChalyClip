@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Tu firma visual - ChalybClip{% endblock %}
+{% block content %}
+
+<div class="nc-page-header">
+  <div>
+    <h2>Tu firma visual</h2>
+    <small>Una identidad por firma: tus colores, tus fuentes y tus frases que disparan clips.</small>
+  </div>
+  <div class="nc-page-summary">
+    <a href="/dashboard/brand-kits/new" class="nc-btn nc-btn--primary nc-btn--sm">
+      <i class="ti ti-plus" aria-hidden="true"></i>
+      <span>Crear firma</span>
+    </a>
+  </div>
+</div>
+
+{% if kits %}
+<div class="nc-panel">
+  <div class="nc-panel__header">
+    <i class="ti ti-palette" aria-hidden="true" style="color: var(--nc-blue-bright);"></i>
+    <span class="nc-panel__title">{{ kits|length }} firma{{ "s" if kits|length != 1 else "" }}</span>
+  </div>
+  <div class="nc-panel__body" style="padding: 0;">
+    <table class="nc-table">
+      <thead>
+        <tr>
+          <th>Nombre</th>
+          <th>Colores</th>
+          <th>Diseño</th>
+          <th>Frases que disparan clips</th>
+          <th>¿Por defecto?</th>
+          <th class="nc-cell-actions"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for kit in kits %}
+        <tr>
+          <td>
+            <a href="/dashboard/brand-kits/{{ kit.id }}">
+              <strong style="color: var(--nc-text);">{{ kit.name }}</strong>
+            </a>
+            <div><span class="nc-mono nc-mono--muted" style="font-size: 11px;">{{ kit.id }}</span></div>
+          </td>
+          <td>
+            <span style="display: inline-block; width: 14px; height: 14px; background: {{ kit.primary_color }}; border: var(--nc-hairline); border-radius: 3px; vertical-align: middle;"></span>
+            <span class="nc-mono">{{ kit.primary_color }}</span>
+            <span style="color: var(--nc-text-muted);">/</span>
+            <span style="display: inline-block; width: 14px; height: 14px; background: {{ kit.accent_color }}; border: var(--nc-hairline); border-radius: 3px; vertical-align: middle;"></span>
+            <span class="nc-mono">{{ kit.accent_color }}</span>
+          </td>
+          <td><span class="nc-chip nc-chip--code">{{ kit.default_layout }}</span></td>
+          <td>
+            <span class="nc-mono" style="font-size: 11px;">
+              +{{ kit.custom_trigger_phrases.forward|length }} hacia adelante
+              · +{{ kit.custom_trigger_phrases.retroactive|length }} hacia atrás
+            </span>
+          </td>
+          <td>
+            {% if kit.is_default %}
+            <span class="nc-chip">por defecto</span>
+            {% else %}
+            <form action="/dashboard/brand-kits/{{ kit.id }}/default" method="post" style="margin: 0;">
+              <button type="submit" class="nc-btn nc-btn--sm">Usar por defecto</button>
+            </form>
+            {% endif %}
+          </td>
+          <td class="nc-cell-actions">
+            <a href="/dashboard/brand-kits/{{ kit.id }}" class="nc-btn nc-btn--sm">
+              <i class="ti ti-edit" aria-hidden="true"></i>
+              <span>Editar</span>
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="nc-panel">
+  <div class="nc-empty">
+    <div class="nc-empty__icon"><i class="ti ti-palette" aria-hidden="true"></i></div>
+    <div class="nc-empty__title">Aún no tienes ninguna firma visual</div>
+    <p class="nc-empty__body">
+      Una firma reúne tus colores, tus fuentes, tus redes y las frases que
+      disparan clips, todo en un solo lugar. Crea una y asígnasela a un
+      streamer para que tus clips salgan con tu estilo solos.
+    </p>
+    <a href="/dashboard/brand-kits/new" class="nc-btn nc-btn--primary">
+      <i class="ti ti-plus" aria-hidden="true"></i>
+      <span>Crear firma</span>
+    </a>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

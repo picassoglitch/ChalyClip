@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from nexoclip.publish.fatigue import assess_batch_fatigue, jaccard
+from chalybclip.publish.fatigue import assess_batch_fatigue, jaccard
 
 
 def test_jaccard_basics() -> None:

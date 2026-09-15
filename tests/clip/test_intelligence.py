@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest_asyncio
 
-from nexoclip.clip.intelligence import (
+from chalybclip.clip.intelligence import (
     _audio_peaks_from_segments,
     _chat_heat_spikes,
     _face_emotion_changes,
@@ -17,7 +17,7 @@ from nexoclip.clip.intelligence import (
     _scene_cuts_and_motion_peaks,
     compute_intelligence,
 )
-from nexoclip.db import (
+from chalybclip.db import (
     CandidatesRepo,
     ClipsRepo,
     Database,
@@ -26,13 +26,13 @@ from nexoclip.db import (
     TranscriptsRepo,
     apply_migrations,
 )
-from nexoclip.db.models import (
+from chalybclip.db.models import (
     CandidateRow,
     ClipRow,
     StreamRow,
     TranscriptRow,
 )
-from nexoclip.tenancy import bound_tenant
+from chalybclip.tenancy import bound_tenant
 
 
 @pytest_asyncio.fixture

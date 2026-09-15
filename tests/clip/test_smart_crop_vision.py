@@ -8,10 +8,10 @@ import cv2
 import numpy as np
 import pytest
 
-from nexoclip.clip.smart_crop_vision import compute_smart_crop_box_vision
-from nexoclip.errors import LLMError
-from nexoclip.llm import LLMRouter, MemoryFrameStore
-from nexoclip.llm.config import ProviderConfig
+from chalybclip.clip.smart_crop_vision import compute_smart_crop_box_vision
+from chalybclip.errors import LLMError
+from chalybclip.llm import LLMRouter, MemoryFrameStore
+from chalybclip.llm.config import ProviderConfig
 from tests.llm._fakes import FakeProvider  # type: ignore[import]
 from tests.llm._fixtures import make_llm_config  # type: ignore[import]
 

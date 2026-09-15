@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+{% block title %}Publicación · {{ post_id[:18] }}… - ChalybClip{% endblock %}
+{% block content %}
+
+<style>
+  .nc-pj-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .nc-pj-back { color: var(--nc-text--muted, #888); text-decoration: none; }
+  .nc-pj-back:hover { color: var(--nc-green, #48bb78); }
+  .nc-pj-status-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  }
+  .nc-pj-status-pill[data-s="SCHEDULED"],
+  .nc-pj-status-pill[data-s="PENDING"],
+  .nc-pj-status-pill[data-s="QUEUED"],
+  .nc-pj-status-pill[data-s="PUBLISHING"],
+  .nc-pj-status-pill[data-s="PROCESSING"] {
+    background: rgba(255, 200, 60, 0.12); color: #ffd84a;
+    border: 1px solid rgba(255, 216, 74, 0.3);
+  }
+  .nc-pj-status-pill[data-s="PUBLISHED"],
+  .nc-pj-status-pill[data-s="FINISHED"],
+  .nc-pj-status-pill[data-s="SUCCESS"] {
+    background: rgba(72, 187, 120, 0.12); color: var(--nc-green, #48bb78);
+    border: 1px solid rgba(72, 187, 120, 0.3);
+  }
+  .nc-pj-status-pill[data-s="FAILED"],
+  .nc-pj-status-pill[data-s="ERROR"] {
+    background: rgba(230, 80, 80, 0.12); color: #ff7575;
+    border: 1px solid rgba(230, 80, 80, 0.3);
+  }
+  .nc-pj-status-pill[data-s="UNKNOWN"],
+  .nc-pj-status-pill[data-s="UNAVAILABLE"] {
+    background: rgba(255,255,255,0.04); color: var(--nc-text--muted, #888);
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .nc-pj-spinner {
+    display: inline-block; width: 10px; height: 10px;
+    border: 2px solid currentColor; border-right-color: transparent;
+    border-radius: 50%; animation: nc-pj-spin 0.7s linear infinite;
+  }
+  @keyframes nc-pj-spin { to { transform: rotate(360deg); } }
+
+  .nc-pj-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+  }
+  .nc-pj-card {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px; padding: 14px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .nc-pj-card__head { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; }
+  .nc-pj-card__body { font-size: 12px; color: var(--nc-text--muted, #aaa); }
+  .nc-pj-card__error {
+    background: rgba(230, 80, 80, 0.08); color: #ff9696;
+    border: 1px solid rgba(230, 80, 80, 0.2);
+    padding: 8px 10px; border-radius: 4px;
+    font-family: monospace; font-size: 11px; word-break: break-word;
+  }
+  .nc-pj-card__link a { color: var(--nc-green, #48bb78); text-decoration: none; font-weight: 500; }
+  .nc-pj-card__link a:hover { text-decoration: underline; }
+  .nc-pj-meta { font-size: 11px; color: var(--nc-text--muted, #666); font-family: monospace; word-break: break-all; }
+</style>
+
+<div class="nc-pj-header">
+  <a href="/dashboard/publish/zernio" class="nc-pj-back">
+    <i class="ti ti-arrow-left" aria-hidden="true"></i> Volver al Centro de Publicación
+  </a>
+</div>
+
+<div class="nc-page-header">
+  <div>
+    <h2>Tu publicación</h2>
+    <small class="nc-mono nc-mono--muted">{{ post_id }}</small>
+  </div>
+  <div style="display:flex; align-items:center; gap: 10px;">
+    <span id="zn-job-status-pill" class="nc-pj-status-pill" data-s="{{ overall_status }}">
+      <span id="zn-job-status-spinner" class="nc-pj-spinner"
+            style="{% if overall_status in ['PUBLISHED','FINISHED','SUCCESS','FAILED','ERROR','UNAVAILABLE'] %}display:none;{% endif %}"></span>
+      <span id="zn-job-status-text">{{ overall_status }}</span>
+    </span>
+    <button type="button" id="zn-job-refresh-btn" class="nc-btn"
+            title="Revisa el estado ahora mismo, aunque el refresco automático ya se haya detenido"
+            style="padding: 4px 10px; font-size: 12px;">
+      <i class="ti ti-refresh" aria-hidden="true"></i>
+      <span>Actualizar</span>
+    </button>
+  </div>
+</div>
+
+{% if fetch_error %}
+<div class="nc-panel" style="border-color: var(--nc-orange); margin-bottom: 12px;">
+  <div class="nc-panel__body" style="padding: 12px 16px;">
+    <i class="ti ti-alert-triangle" aria-hidden="true" style="color: var(--nc-orange);"></i>
+    {{ fetch_error }}
+  </div>
+</div>
+{% endif %}
+
+<div class="nc-pj-grid" id="zn-job-grid">
+  <div class="nc-panel" style="grid-column: 1 / -1;">
+    <div class="nc-empty">
+      <div class="nc-empty__icon"><i class="ti ti-clock" aria-hidden="true"></i></div>
+      <div class="nc-empty__title">Cargando los resultados de cada red…</div>
+      <p class="nc-empty__body">
+        Aquí ves cómo va tu clip en cada red conforme se va publicando.
+        La página se actualiza sola cada 3 segundos — no toques nada.
+      </p>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  // Poll /status/<id>.json every 3s while the post is in a non-terminal
+  // state. Zernio's per-platform `platforms` payload may be a LIST of
+  // {platform, status, url, error} or a DICT keyed by platform — we
+  // normalize both shapes before rendering. The exact contract is
+  // still being confirmed against real traffic, so renderGrid() is
+  // defensive about field names.
+  var POST_ID = {{ post_id|tojson }};
+  var INITIAL_PLATFORMS = {{ per_platform|tojson }};
+  // UNAVAILABLE = Zernio 404'd the post and we have no local record;
+  // terminal so the poller settles instead of looping every 3s.
+  var TERMINAL = { PUBLISHED: 1, FINISHED: 1, SUCCESS: 1, FAILED: 1, ERROR: 1, UNAVAILABLE: 1 };
+  var pollTimer = null;
+
+  function normalize(s) { return String(s || "UNKNOWN").toUpperCase(); }
+  function isTerminal(s) { return !!TERMINAL[normalize(s)]; }
+
+  function platformIconClass(p) {
+    var map = {
+      tiktok: "ti-brand-tiktok", instagram: "ti-brand-instagram",
+      youtube: "ti-brand-youtube", twitter: "ti-brand-x", x: "ti-brand-x",
+      linkedin: "ti-brand-linkedin", facebook: "ti-brand-facebook",
+      threads: "ti-brand-threads", pinterest: "ti-brand-pinterest",
+      bluesky: "ti-brand-bluesky",
+    };
+    return map[String(p || "").toLowerCase()] || "ti-circle";
+  }
+  function escapeHtml(s) {
+    return String(s || "").replace(/[&<>"']/g, function (c) {
+      return { "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c];
+    });
+  }
+
+  // Coerce either shape into a list of {platform, ok, url, postId, error, status}.
+  function normalizePlatforms(raw) {
+    if (!raw) return [];
+    var rows = [];
+    if (Array.isArray(raw)) {
+      rows = raw.slice();
+    } else if (typeof raw === "object") {
+      rows = Object.keys(raw).map(function (k) {
+        var v = raw[k] || {};
+        if (typeof v !== "object") v = { status: v };
+        if (!v.platform) v.platform = k;
+        return v;
+      });
+    }
+    return rows.map(function (v) {
+      var st = v.status || (v.success ? "PUBLISHED" : null);
+      var ok = v.success === true || /^(PUBLISHED|FINISHED|SUCCESS)$/i.test(st || "");
+      return {
+        platform: v.platform || "",
+        ok: ok,
+        status: st,
+        url: v.url || v.post_url || v.postUrl || v.link || "",
+        postId: v.postId || v.platform_post_id || v.platformPostId || v.id || "",
+        error: v.error || v.error_message || v.errorMessage || "",
+      };
+    });
+  }
+
+  // Replace the loading panel with a settled message (post gone / failed
+  // with no per-platform detail) so the page doesn't sit on "Cargando…".
+  function renderMessage(status) {
+    var n = normalize(status);
+    var icon = "ti-cloud-off", title, body;
+    if (n === "UNAVAILABLE") {
+      title = "Esta publicación ya no está disponible";
+      body = "No se encontró en Zernio. Puede que se haya borrado o que se " +
+        "publicara desde otro espacio de trabajo. Vuelve al Centro de Publicación.";
+    } else if (/(FAILED|ERROR)/.test(n)) {
+      icon = "ti-alert-triangle";
+      title = "La publicación falló";
+      body = "Zernio no devolvió resultados por red para este post.";
+    } else {
+      title = "Sin resultados por red";
+      body = "Zernio no devolvió el detalle por red de esta publicación.";
+    }
+    var grid = document.getElementById("zn-job-grid");
+    grid.innerHTML = '<div class="nc-panel" style="grid-column: 1 / -1;">' +
+      '<div class="nc-empty">' +
+        '<div class="nc-empty__icon"><i class="ti ' + icon + '" aria-hidden="true"></i></div>' +
+        '<div class="nc-empty__title">' + escapeHtml(title) + '</div>' +
+        '<p class="nc-empty__body">' + escapeHtml(body) + '</p>' +
+      '</div></div>';
+  }
+
+  function renderGrid(raw, status) {
+    var grid = document.getElementById("zn-job-grid");
+    var rows = normalizePlatforms(raw);
+    if (!rows.length) {
+      // No per-platform data: settle to a message once terminal, else
+      // keep the loading state and wait for the next poll.
+      if (isTerminal(status)) renderMessage(status);
+      return;
+    }
+    var html = "";
+    rows.forEach(function (r) {
+      var statusPill = r.ok
+        ? '<span class="nc-pj-status-pill" data-s="PUBLISHED"><i class="ti ti-check"></i> Publicado</span>'
+        : (/(FAILED|ERROR)/i.test(r.status || "")
+            ? '<span class="nc-pj-status-pill" data-s="FAILED"><i class="ti ti-x"></i> Falló</span>'
+            : '<span class="nc-pj-status-pill" data-s="PUBLISHING"><i class="ti ti-clock"></i> ' + escapeHtml(normalize(r.status)) + '</span>');
+      var linkBlock = r.url
+        ? '<div class="nc-pj-card__link"><i class="ti ti-external-link"></i> <a href="' + escapeHtml(r.url) + '" target="_blank" rel="noopener">Ver publicación →</a></div>'
+        : "";
+      var idBlock = r.postId ? '<div class="nc-pj-meta">ID de publicación: ' + escapeHtml(r.postId) + '</div>' : "";
+      var errBlock = r.error ? '<div class="nc-pj-card__error">' + escapeHtml(r.error) + '</div>' : "";
+      var label = r.platform ? r.platform.charAt(0).toUpperCase() + r.platform.slice(1) : "Red social";
+      html += '<div class="nc-pj-card" data-platform="' + escapeHtml(r.platform) + '">' +
+        '<div class="nc-pj-card__head">' +
+          '<i class="ti ' + platformIconClass(r.platform) + '"></i>' +
+          '<span>' + escapeHtml(label) + '</span>' +
+          '<span style="margin-left:auto;">' + statusPill + '</span>' +
+        '</div>' +
+        '<div class="nc-pj-card__body">' + linkBlock + idBlock + errBlock + '</div>' +
+      '</div>';
+    });
+    grid.innerHTML = html;
+  }
+
+  function setStatus(s) {
+    var n = normalize(s);
+    var pill = document.getElementById("zn-job-status-pill");
+    var spinner = document.getElementById("zn-job-status-spinner");
+    var text = document.getElementById("zn-job-status-text");
+    pill.setAttribute("data-s", n);
+    text.textContent = n;
+    spinner.style.display = isTerminal(n) ? "none" : "";
+    if (isTerminal(n) && pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  }
+
+  async function refresh() {
+    try {
+      var resp = await fetch(
+        "/dashboard/publish/zernio/status/" + encodeURIComponent(POST_ID) + ".json",
+        { credentials: "same-origin" }
+      );
+      if (!resp.ok) return;
+      var body = await resp.json();
+      setStatus(body.status);
+      // Always call renderGrid so a terminal post with no per-platform
+      // data settles into a message instead of looping on "Cargando…".
+      renderGrid(body.platforms, body.status);
+    } catch (e) { /* swallow — next tick retries */ }
+  }
+
+  // Initial paint from the server-rendered payload, then poll if needed.
+  var initialStatus = document.getElementById("zn-job-status-pill").getAttribute("data-s");
+  renderGrid(INITIAL_PLATFORMS, initialStatus);
+  if (!isTerminal(initialStatus)) {
+    pollTimer = setInterval(refresh, 3000);
+    // One immediate fetch so a freshly-queued post fills in fast.
+    refresh();
+  }
+
+  var refreshBtn = document.getElementById("zn-job-refresh-btn");
+  if (refreshBtn) {
+    refreshBtn.addEventListener("click", function () {
+      refreshBtn.disabled = true;
+      refresh().finally(function () {
+        setTimeout(function () { refreshBtn.disabled = false; }, 400);
+      });
+    });
+  }
+})();
+</script>
+
+{% endblock %}

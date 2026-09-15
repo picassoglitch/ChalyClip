@@ -14,8 +14,8 @@ from pathlib import Path
 
 import pytest
 
-from nexoclip.clip import service as clip_service
-from nexoclip.clip.models import SmartCropBox
+from chalybclip.clip import service as clip_service
+from chalybclip.clip.models import SmartCropBox
 
 
 def _boom(*_a: object, **_k: object) -> object:
@@ -55,7 +55,7 @@ def test_thumbnail_no_reopen_returns_none_pair(
 
 
 def test_framing_no_reopen_returns_none(monkeypatch: pytest.MonkeyPatch) -> None:
-    import nexoclip.detect.framing as framing_mod
+    import chalybclip.detect.framing as framing_mod
 
     monkeypatch.setattr(framing_mod, "analyze_framing", _boom)
     out = clip_service._safe_analyze_framing(

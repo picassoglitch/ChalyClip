@@ -3,7 +3,7 @@ scoreline/versus/reason template banks, seeded rotation. Pure functions."""
 
 from __future__ import annotations
 
-from nexoclip.variants.deterministic import (
+from chalybclip.variants.deterministic import (
     clean_stream_title,
     deterministic_hook,
     deterministic_hook_candidates,

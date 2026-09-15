@@ -27,7 +27,7 @@ from tests.pipeline.test_process_vod import (  # type: ignore[import]
 from tests.llm._fakes import FakeProvider  # type: ignore[import]
 from tests.llm._fixtures import make_llm_config  # type: ignore[import]
 
-from nexoclip.pipeline import PipelineDeps, process_vod
+from chalybclip.pipeline import PipelineDeps, process_vod
 
 
 def test_phase_0_exit_criterion(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

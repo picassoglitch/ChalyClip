@@ -1,6 +1,6 @@
 """Generate the Postgres baseline schema from the SQLite migrations.
 
-The SQLite migration chain (``nexoclip/db/migrations/*.sql``) is the source
+The SQLite migration chain (``chalybclip/db/migrations/*.sql``) is the source
 of truth for the schema. Rather than hand-port 46 files to Postgres, we:
 
   1. apply every migration to a throwaway SQLite database,
@@ -8,7 +8,7 @@ of truth for the schema. Rather than hand-port 46 files to Postgres, we:
   3. translate SQLite DDL → Postgres DDL (types + comment stripping),
   4. topologically sort tables by foreign-key dependency (Postgres requires
      a referenced table to already exist at CREATE time; SQLite doesn't),
-  5. write ``nexoclip/db/pg_baseline.sql``.
+  5. write ``chalybclip/db/pg_baseline.sql``.
 
 Re-run this whenever the migration chain changes (then review the diff and
 bump the baseline version constant in the migration runner).
@@ -23,9 +23,9 @@ import re
 import tempfile
 from pathlib import Path
 
-from nexoclip.db import Database, apply_migrations
+from chalybclip.db import Database, apply_migrations
 
-_OUT = Path(__file__).parent.parent / "nexoclip" / "db" / "pg_baseline.sql"
+_OUT = Path(__file__).parent.parent / "chalybclip" / "db" / "pg_baseline.sql"
 
 # Type substitutions (whole-word, case-insensitive). SQLite's loose affinity
 # types map to permissive Postgres types so the existing Python value types

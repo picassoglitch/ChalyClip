@@ -11,8 +11,8 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
-from nexoclip.clip import ensure_local_clip, offload_clip_artifacts
-from nexoclip.integrations.storage import (
+from chalybclip.clip import ensure_local_clip, offload_clip_artifacts
+from chalybclip.integrations.storage import (
     clip_key_family,
     clip_media_key,
     clip_render_key,
@@ -122,7 +122,7 @@ async def test_offload_accepts_db_row_thumbnail_alias(tmp_path: Path) -> None:
 def test_pipeline_clip_model_field_name_is_pinned() -> None:
     """The offload reads `thumbnail_path` off the objects cut_clips
     returns — fail loudly here if the model field is ever renamed."""
-    from nexoclip.clip.models import Clip
+    from chalybclip.clip.models import Clip
 
     assert "thumbnail_path" in Clip.model_fields
 
@@ -202,7 +202,7 @@ def test_key_family_covers_media_thumbnail_and_render() -> None:
 def test_render_key_matches_publish_router_contract() -> None:
     # The publish path (api/routers/internal.py) has uploaded to this exact
     # key since Phase 1 — the shared builder must never drift from it.
-    from nexoclip.api.routers.internal import artifact_key_for_clip
+    from chalybclip.api.routers.internal import artifact_key_for_clip
 
     assert (
         artifact_key_for_clip("ten_a", "clp_1")

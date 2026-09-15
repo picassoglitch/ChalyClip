@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from nexoclip.llm import LLMConfig
-from nexoclip.llm.config import (
+from chalybclip.llm import LLMConfig
+from chalybclip.llm.config import (
     ModelPricing,
     ProviderConfig,
     ProviderModelsConfig,

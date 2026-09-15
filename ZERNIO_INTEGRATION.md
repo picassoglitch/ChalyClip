@@ -1,36 +1,36 @@
 # Zernio Integration — Quantor Publish & Engagement Hub
 
 The single Zernio integration layer for the Quantor ecosystem. It lives
-inside the NexoClip backend and is consumed three ways:
+inside the ChalybClip backend and is consumed three ways:
 
-- **NexoClip** — the Publish Center dashboard (streamers, direct UI).
-- **NexoOBS** — the Android IRL app; its Auto-Clip Mode publishes via the
+- **ChalybClip** — the Publish Center dashboard (streamers, direct UI).
+- **ChalybOBS** — the Android IRL app; its Auto-Clip Mode publishes via the
   internal API (`/api/internal/v1/*`) and never talks to Zernio directly.
-- **Nexo AI** — other ecosystem engines (content generators, ranking)
+- **Chalyb** — other ecosystem engines (content generators, ranking)
   use the same internal API + the analytics read.
 
 Zernio is the upstream social API (`https://zernio.com/api/v1`, 14+
-platforms, OAuth on their side). One company-wide API key; each NexoClip
+platforms, OAuth on their side). One company-wide API key; each ChalybClip
 tenant is one Zernio `profileId`.
 
 ---
 
 ## Environment variables
 
-All carry the `NEXOCLIP_` prefix (Pydantic Settings).
+All carry the `CHALYBCLIP_` prefix (Pydantic Settings).
 
 | Var | Default | Purpose |
 |-----|---------|---------|
-| `NEXOCLIP_ZERNIO_API_KEY` | — | Company-wide Zernio bearer key (`sk_...`). Required to publish. |
-| `NEXOCLIP_ZERNIO_BASE_URL` | `https://zernio.com/api/v1` | Override for staging. |
-| `NEXOCLIP_ZERNIO_WEBHOOK_SECRET` | — | HMAC secret to verify inbound webhooks. Unset → receiver 503s. |
-| `NEXOCLIP_PUBLIC_URL` | `http://localhost:8000` | Externally-reachable origin (connect redirect, signed clip URLs, webhook registration). |
-| `NEXOCLIP_HUB_SERVICE_TOKENS` | — | Comma-sep `name:token` pairs for the internal API. Unset → `/api/internal/v1/*` 503s. |
-| `NEXOCLIP_HUB_MAX_POSTS_PER_PLATFORM_PER_DAY` | `4` | Batch anti-spam cap. |
-| `NEXOCLIP_HUB_AUTO_RETRY_DELAY_S` | `600` | Delay before the one-shot auto-retry on a transient `post.failed` (`0`=inline, `<0`=off). |
-| `NEXOCLIP_HUB_MAX_BROADCASTS_PER_DAY` | `1` | Per-tenant daily broadcast cap (irreversible mass-DM guardrail). |
-| `NEXOCLIP_FEATURE_WHATSAPP` | `0` | WhatsApp seam (extra cost). Off → routes 404, UI hidden. |
-| `NEXOCLIP_FEATURE_ADS` | `0` | Ads seam (Meta spend). Off → routes 404, UI hidden. |
+| `CHALYBCLIP_ZERNIO_API_KEY` | — | Company-wide Zernio bearer key (`sk_...`). Required to publish. |
+| `CHALYBCLIP_ZERNIO_BASE_URL` | `https://zernio.com/api/v1` | Override for staging. |
+| `CHALYBCLIP_ZERNIO_WEBHOOK_SECRET` | — | HMAC secret to verify inbound webhooks. Unset → receiver 503s. |
+| `CHALYBCLIP_PUBLIC_URL` | `http://localhost:8000` | Externally-reachable origin (connect redirect, signed clip URLs, webhook registration). |
+| `CHALYBCLIP_HUB_SERVICE_TOKENS` | — | Comma-sep `name:token` pairs for the internal API. Unset → `/api/internal/v1/*` 503s. |
+| `CHALYBCLIP_HUB_MAX_POSTS_PER_PLATFORM_PER_DAY` | `4` | Batch anti-spam cap. |
+| `CHALYBCLIP_HUB_AUTO_RETRY_DELAY_S` | `600` | Delay before the one-shot auto-retry on a transient `post.failed` (`0`=inline, `<0`=off). |
+| `CHALYBCLIP_HUB_MAX_BROADCASTS_PER_DAY` | `1` | Per-tenant daily broadcast cap (irreversible mass-DM guardrail). |
+| `CHALYBCLIP_FEATURE_WHATSAPP` | `0` | WhatsApp seam (extra cost). Off → routes 404, UI hidden. |
+| `CHALYBCLIP_FEATURE_ADS` | `0` | Ads seam (Meta spend). Off → routes 404, UI hidden. |
 
 ---
 
@@ -66,7 +66,7 @@ never clip targets).
 - **Inbound**: `POST /api/webhooks/zernio`. Verifies `X-Zernio-Signature`
   (lowercase hex HMAC-SHA256 of the raw body), dedups on `payload.id`
   (`zernio_events` PK), ACKs 2xx fast, processes in a background task.
-- **Registration**: `nexoclip webhooks register-zernio` (idempotent
+- **Registration**: `chalybclip webhooks register-zernio` (idempotent
   create-or-update of the webhook at `{PUBLIC_URL}/api/webhooks/zernio`).
 - **Events handled**: `post.scheduled/published/failed/partial/cancelled`
   + `post.platform.*` (publish-job status), `post.external.created/
@@ -79,8 +79,8 @@ never clip targets).
 ### Outbound event fan-out
 Each processed Zernio event is recorded as a `zernio.<type>` row in the
 `events` table and relayed to the tenant's webhook subscriptions via the
-existing HMAC-signed dispatcher (`X-Nexoclip-Signature`). So NexoOBS /
-Nexo AI subscribers receive the relay. Relay bodies carry ids/status
+existing HMAC-signed dispatcher (`X-Chalybclip-Signature`). So ChalybOBS /
+Chalyb subscribers receive the relay. Relay bodies carry ids/status
 only — never comment/message text.
 
 ---
@@ -88,7 +88,7 @@ only — never comment/message text.
 ## Internal Publish API (`/api/internal/v1/*`)
 
 Auth: `Authorization: Bearer <service-token>` validated against
-`NEXOCLIP_HUB_SERVICE_TOKENS`. See `NEXOOBS_PUBLISH_CONTRACT.md` for the
+`CHALYBCLIP_HUB_SERVICE_TOKENS`. See `CHALYBOBS_PUBLISH_CONTRACT.md` for the
 full request/response examples. Summary:
 
 | Method | Path | Purpose |
@@ -140,6 +140,6 @@ Structured errors (never a raw Zernio 402): `plan_limit`,
 
 | Command | When |
 |---------|------|
-| `nexoclip webhooks register-zernio` | Once / after PUBLIC_URL or secret change. |
-| `nexoclip webhooks snapshot-analytics` | Daily (cron) — per-post metric snapshots. |
-| `nexoclip webhooks community-digest` | Weekly (cron) — opt-in community digest. |
+| `chalybclip webhooks register-zernio` | Once / after PUBLIC_URL or secret change. |
+| `chalybclip webhooks snapshot-analytics` | Daily (cron) — per-post metric snapshots. |
+| `chalybclip webhooks community-digest` | Weekly (cron) — opt-in community digest. |

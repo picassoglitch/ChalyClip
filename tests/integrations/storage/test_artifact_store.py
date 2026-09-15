@@ -12,7 +12,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from nexoclip.integrations.storage import (
+from chalybclip.integrations.storage import (
     ArtifactStore,
     S3ArtifactStore,
     build_artifact_store,

@@ -7,14 +7,14 @@ from pathlib import Path
 
 import pytest
 
-from nexoclip.db import Database, EventsRepo, TenantsRepo, apply_migrations
-from nexoclip.events import (
+from chalybclip.db import Database, EventsRepo, TenantsRepo, apply_migrations
+from chalybclip.events import (
     CLIP_READY_FOR_REVIEW,
     STREAM_CREATED,
     STREAM_PROCESSED,
 )
-from nexoclip.pipeline import process_vod
-from nexoclip.tenancy import bound_tenant
+from chalybclip.pipeline import process_vod
+from chalybclip.tenancy import bound_tenant
 
 from tests.db.test_pipeline_dual_write import (  # type: ignore[import]
     _make_deps_no_router,

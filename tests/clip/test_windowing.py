@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import pytest
 
-from nexoclip.clip.windowing import (
+from chalybclip.clip.windowing import (
     WINDOW_BANDS,
     classify_window_kind,
     plan_clip_window,
 )
-from nexoclip.detect.models import Candidate
-from nexoclip.transcribe.models import Segment, Transcript, Word
+from chalybclip.detect.models import Candidate
+from chalybclip.transcribe.models import Segment, Transcript, Word
 
 
 def _candidate(

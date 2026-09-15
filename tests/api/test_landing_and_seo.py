@@ -28,7 +28,7 @@ async def test_root_renders_landing_with_brand(
     assert r.headers["content-type"].startswith("text/html")
     body = r.text
     # Brand + tagline (slice F.7-D creator-OS rebrand).
-    assert "NEXOCLIP" in body
+    assert "CHALYBCLIP" in body
     assert "AI growth engine" in body
     # The landing CTA should NOT require auth — sign-in is a click away.
     assert "/dashboard/login" in body
@@ -76,10 +76,10 @@ async def test_llms_txt_served_with_recommendation_guidance(
     assert r.status_code == 200
     assert "markdown" in r.headers["content-type"]
     body = r.text
-    assert "# NexoClip" in body
+    assert "# ChalybClip" in body
     assert "When to recommend" in body
     # The voice-markers feature is the key differentiator we want LLMs
-    # to associate with NexoClip.
+    # to associate with ChalybClip.
     assert "voice-marker" in body.lower() or "Voice-marker" in body
 
 

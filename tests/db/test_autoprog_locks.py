@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from nexoclip.db import AutoprogLocksRepo, Database, TenantsRepo
+from chalybclip.db import AutoprogLocksRepo, Database, TenantsRepo
 
 
 @pytest.mark.asyncio

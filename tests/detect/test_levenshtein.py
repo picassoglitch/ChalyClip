@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from nexoclip.detect.levenshtein import levenshtein
+from chalybclip.detect.levenshtein import levenshtein
 
 
 @pytest.mark.parametrize(

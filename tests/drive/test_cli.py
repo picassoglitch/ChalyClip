@@ -1,4 +1,4 @@
-"""CLI smoke tests for `nexoclip drive {add,list,poll}` (slice E.4)."""
+"""CLI smoke tests for `chalybclip drive {add,list,poll}` (slice E.4)."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from nexoclip.cli import app
+from chalybclip.cli import app
 
 
 def _put_video(folder: Path, name: str, size: int = 64) -> None:
@@ -30,7 +30,7 @@ def test_drive_add_then_list(tmp_path: Path) -> None:
             "aldo",
             "folder_xyz",
             "--folder-name",
-            "NexoClip Inbox",
+            "ChalybClip Inbox",
             "--refresh-token",
             "rt",
             "--db-path",
@@ -45,7 +45,7 @@ def test_drive_add_then_list(tmp_path: Path) -> None:
     )
     assert r2.exit_code == 0, r2.output
     assert "folder_xyz" in r2.output
-    assert "NexoClip Inbox" in r2.output
+    assert "ChalybClip Inbox" in r2.output
     assert "enabled" in r2.output
 
 

@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from nexoclip.errors import NexoClipError, VariantError
-from nexoclip.variants import Persona, get_persona, load_personas
+from chalybclip.errors import ChalybClipError, VariantError
+from chalybclip.variants import Persona, get_persona, load_personas
 
 
 def _write(yaml_path: Path, body: str) -> Path:
@@ -27,23 +27,23 @@ personas:
     voice_prompt: |
       Direct entrepreneur voice.
     routing_tags: [mindset, irl]
-  nexo_academy:
-    name: "Nexo Academy"
+  chalyb_academy:
+    name: "Chalyb Academy"
     target_languages: [es]
     primary_language: es
     voice_prompt: "Teacher voice"
 """,
     )
     personas = load_personas(yaml_path)
-    assert set(personas) == {"aldo_villanueva", "nexo_academy"}
+    assert set(personas) == {"aldo_villanueva", "chalyb_academy"}
     assert personas["aldo_villanueva"].id == "aldo_villanueva"
     assert personas["aldo_villanueva"].primary_language == "es"
     assert "Direct entrepreneur" in personas["aldo_villanueva"].voice_prompt
-    assert personas["nexo_academy"].routing_tags == []
+    assert personas["chalyb_academy"].routing_tags == []
 
 
 def test_load_personas_missing_explicit_path_raises(tmp_path: Path) -> None:
-    with pytest.raises(NexoClipError, match="personas config not found"):
+    with pytest.raises(ChalybClipError, match="personas config not found"):
         load_personas(tmp_path / "missing.yaml")
 
 
@@ -56,7 +56,7 @@ def test_load_personas_returns_empty_when_no_file(
 
 def test_load_personas_invalid_yaml_raises(tmp_path: Path) -> None:
     bad = _write(tmp_path / "bad.yaml", "personas: : :\n  bad")
-    with pytest.raises(NexoClipError, match="failed to parse"):
+    with pytest.raises(ChalybClipError, match="failed to parse"):
         load_personas(bad)
 
 

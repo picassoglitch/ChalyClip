@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest_asyncio
 
-from nexoclip.db import Database, apply_migrations
+from chalybclip.db import Database, apply_migrations
 
 
 @pytest_asyncio.fixture

@@ -1,6 +1,6 @@
-"""Modal app: the full NexoClip VOD pipeline on a CPU worker (Phase 2b).
+"""Modal app: the full ChalybClip VOD pipeline on a CPU worker (Phase 2b).
 
-Deploy from the repo root (the image bundles the local `nexoclip/` source
+Deploy from the repo root (the image bundles the local `chalybclip/` source
 plus `config/`, so deploy re-runs ship code changes):
 
     pip install modal
@@ -8,7 +8,7 @@ plus `config/`, so deploy re-runs ship code changes):
     modal deploy infra/modal_pipeline_app.py
 
 Modal prints the public endpoint URL — copy it into Railway as
-NEXOCLIP_MODAL_PIPELINE_ENDPOINT_URL and set NEXOCLIP_JOB_DISPATCHER=modal.
+CHALYBCLIP_MODAL_PIPELINE_ENDPOINT_URL and set CHALYBCLIP_JOB_DISPATCHER=modal.
 Full env checklist + rollout/rollback: docs/modal_pipeline_runbook.md.
 
 The worker runs the SAME `default_pipeline_runner` the web box runs
@@ -19,9 +19,9 @@ run). The container's disk is scratch: the downloaded source evaporates
 with the container, which is exactly the point — nothing heavy ever
 touches the web box's CPU or volume.
 
-Request JSON (built by nexoclip/jobs/modal.py::ModalJobDispatcher):
+Request JSON (built by chalybclip/jobs/modal.py::ModalJobDispatcher):
     {
-        "auth_token": "<bearer, same as NEXOCLIP_MODAL_TOKEN>",
+        "auth_token": "<bearer, same as CHALYBCLIP_MODAL_TOKEN>",
         "tenant_id": "ten_...",
         "persona_id": "per_...",
         "language": "es" | null,
@@ -47,7 +47,7 @@ import modal
 # Cost ceiling: how many pipeline containers may run at once. Each is one
 # full VOD run (8 CPUs for its duration). Read at DEPLOY time from the
 # operator's shell — re-deploy to change it.
-_MAX_CONTAINERS = int(os.environ.get("NEXOCLIP_MODAL_PIPELINE_MAX_CONTAINERS", "5"))
+_MAX_CONTAINERS = int(os.environ.get("CHALYBCLIP_MODAL_PIPELINE_MAX_CONTAINERS", "5"))
 
 # One full pipeline run: download + analyze + transcribe(remote) + detect
 # + cut + variants. Multi-hour VODs on CPU need hours; 8h is the hard kill.
@@ -69,24 +69,24 @@ _IMAGE = (
     # requirements bump on the web box reaches the worker on redeploy.
     .pip_install_from_pyproject("pyproject.toml")
     .pip_install("fastapi[standard]>=0.115")  # Modal 1.x web endpoint dep
-    # Local files LAST (Modal 1.x constraint): the nexoclip package and
-    # the config/ dir (pipeline reads config/nexoclip[.example].yaml
+    # Local files LAST (Modal 1.x constraint): the chalybclip package and
+    # the config/ dir (pipeline reads config/chalybclip[.example].yaml
     # relative to CWD, which is /root in Modal containers).
     #
-    # The gitignored operator-local config/nexoclip.yaml is EXCLUDED on
-    # purpose: Railway prod deliberately runs on nexoclip.example.yaml
+    # The gitignored operator-local config/chalybclip.yaml is EXCLUDED on
+    # purpose: Railway prod deliberately runs on chalybclip.example.yaml
     # (the real one never ships), and the worker must use the same
     # detection/LLM defaults as the web box — not the deploy machine's
     # local experiments.
     .add_local_dir(
         "config",
         remote_path="/root/config",
-        ignore=["nexoclip.yaml"],
+        ignore=["chalybclip.yaml"],
     )
-    .add_local_python_source("nexoclip")
+    .add_local_python_source("chalybclip")
     # add_local_python_source ships ONLY *.py files. The pipeline also
     # needs the package's data files at runtime, overlaid onto the same
-    # /root/nexoclip tree:
+    # /root/chalybclip tree:
     #   - db/migrations/*.sql + db/pg_baseline.sql — apply_migrations
     #     reads them at every db_session open (even against an
     #     already-migrated Postgres, it must read the files to discover
@@ -96,35 +96,35 @@ _IMAGE = (
     #     degrades to a warning, but worker clips would silently differ
     #     from in-process ones).
     .add_local_dir(
-        "nexoclip/db/migrations", remote_path="/root/nexoclip/db/migrations"
+        "chalybclip/db/migrations", remote_path="/root/chalybclip/db/migrations"
     )
     .add_local_file(
-        "nexoclip/db/pg_baseline.sql",
-        remote_path="/root/nexoclip/db/pg_baseline.sql",
+        "chalybclip/db/pg_baseline.sql",
+        remote_path="/root/chalybclip/db/pg_baseline.sql",
     )
     .add_local_dir(
-        "nexoclip/clip/assets", remote_path="/root/nexoclip/clip/assets"
+        "chalybclip/clip/assets", remote_path="/root/chalybclip/clip/assets"
     )
 )
 
-app = modal.App("nexoclip-pipeline")
+app = modal.App("chalybclip-pipeline")
 
 
 def _materialize_cookies_file() -> None:
-    """Write inline yt-dlp cookies (NEXOCLIP_COOKIES_TXT) to a real file
-    and point NEXOCLIP_COOKIES_FILE at it — the worker-side twin of
+    """Write inline yt-dlp cookies (CHALYBCLIP_COOKIES_TXT) to a real file
+    and point CHALYBCLIP_COOKIES_FILE at it — the worker-side twin of
     run.py's boot step, needed because YouTube bot-gates datacenter IPs
     (Modal's included). Same base64 escape hatch."""
-    raw = (os.environ.get("NEXOCLIP_COOKIES_TXT") or "").strip()
-    if not raw or os.environ.get("NEXOCLIP_COOKIES_FILE"):
+    raw = (os.environ.get("CHALYBCLIP_COOKIES_TXT") or "").strip()
+    if not raw or os.environ.get("CHALYBCLIP_COOKIES_FILE"):
         return
-    if os.environ.get("NEXOCLIP_COOKIES_TXT_B64", "").strip() == "1":
+    if os.environ.get("CHALYBCLIP_COOKIES_TXT_B64", "").strip() == "1":
         import base64
 
         raw = base64.b64decode(raw).decode("utf-8", errors="replace")
     dest = Path("/root/cookies.txt")
     dest.write_text(raw, encoding="utf-8")
-    os.environ["NEXOCLIP_COOKIES_FILE"] = str(dest)
+    os.environ["CHALYBCLIP_COOKIES_FILE"] = str(dest)
 
 
 def _worker_preflight() -> str | None:
@@ -134,19 +134,19 @@ def _worker_preflight() -> str | None:
     env is sane. Two hard requirements:
       * DATABASE_URL — without shared Postgres, rows/events land in a
         container-local SQLite file and the dashboard never sees the run;
-      * NEXOCLIP_OBJECT_STORAGE_BUCKET — without R2, the cut clips die
+      * CHALYBCLIP_OBJECT_STORAGE_BUCKET — without R2, the cut clips die
         with the container's disk (Phase 2a is what makes them durable).
     """
     if not (os.environ.get("DATABASE_URL") or "").strip():
         return (
             "worker misconfigured: DATABASE_URL is not set in the "
-            "nexoclip-pipeline-env Modal secret — the run's rows/events "
+            "chalybclip-pipeline-env Modal secret — the run's rows/events "
             "would be written to a throwaway container-local SQLite file"
         )
-    if not (os.environ.get("NEXOCLIP_OBJECT_STORAGE_BUCKET") or "").strip():
+    if not (os.environ.get("CHALYBCLIP_OBJECT_STORAGE_BUCKET") or "").strip():
         return (
-            "worker misconfigured: NEXOCLIP_OBJECT_STORAGE_BUCKET is not "
-            "set in the nexoclip-pipeline-env Modal secret — cut clips "
+            "worker misconfigured: CHALYBCLIP_OBJECT_STORAGE_BUCKET is not "
+            "set in the chalybclip-pipeline-env Modal secret — cut clips "
             "would evaporate with the container's disk"
         )
     return None
@@ -159,7 +159,7 @@ def _worker_preflight() -> str | None:
     timeout=_TIMEOUT_S,
     scaledown_window=300,  # warm 5 min — channel-poll bursts reuse the box
     max_containers=_MAX_CONTAINERS,
-    secrets=[modal.Secret.from_name("nexoclip-pipeline-env")],
+    secrets=[modal.Secret.from_name("chalybclip-pipeline-env")],
 )
 @modal.fastapi_endpoint(method="POST")
 async def run_pipeline(payload: dict) -> dict:
@@ -168,7 +168,7 @@ async def run_pipeline(payload: dict) -> dict:
 
     expected_token = (
         os.environ.get("MODAL_BEARER_TOKEN")
-        or os.environ.get("NEXOCLIP_MODAL_TOKEN")
+        or os.environ.get("CHALYBCLIP_MODAL_TOKEN")
         or ""
     )
     request_token = str((payload or {}).get("auth_token", ""))
@@ -197,14 +197,14 @@ async def run_pipeline(payload: dict) -> dict:
         )
 
     # Config + cookies live under /root (see _IMAGE); make relative reads
-    # (config/nexoclip.yaml) resolve regardless of Modal's default CWD.
+    # (config/chalybclip.yaml) resolve regardless of Modal's default CWD.
     os.chdir("/root")
     _materialize_cookies_file()
 
-    from nexoclip.api._pipeline import default_pipeline_runner
-    from nexoclip.ingest import Stream
-    from nexoclip.jobs import PipelineKickoff
-    from nexoclip.settings import get_settings
+    from chalybclip.api._pipeline import default_pipeline_runner
+    from chalybclip.ingest import Stream
+    from chalybclip.jobs import PipelineKickoff
+    from chalybclip.settings import get_settings
 
     try:
         stream = Stream.model_validate(stream_raw)
@@ -216,7 +216,7 @@ async def run_pipeline(payload: dict) -> dict:
     # The worker's own scratch root — NEVER the web box's path. The
     # Phase 2a offload inside the run persists what matters to R2.
     output_dir = Path(
-        os.environ.get("NEXOCLIP_DEFAULT_OUTPUT_DIR") or "/tmp/nexoclip-out"
+        os.environ.get("CHALYBCLIP_DEFAULT_OUTPUT_DIR") or "/tmp/chalybclip-out"
     )
     output_dir.mkdir(parents=True, exist_ok=True)
     get_settings.cache_clear()  # pick up the env this container booted with
@@ -231,7 +231,7 @@ async def run_pipeline(payload: dict) -> dict:
 
     started_at = time.time()
     print(
-        f"nexoclip-pipeline: run start stream={stream.id} "
+        f"chalybclip-pipeline: run start stream={stream.id} "
         f"tenant={tenant_id} persona={persona_id}"
     )
     try:
@@ -244,7 +244,7 @@ async def run_pipeline(payload: dict) -> dict:
         # return a terminal body (HTTP 200) so the dispatcher logs it
         # without double-emitting.
         print(
-            f"nexoclip-pipeline: run FAILED stream={stream.id}: "
+            f"chalybclip-pipeline: run FAILED stream={stream.id}: "
             f"{type(e).__name__}: {e}"
         )
         return {
@@ -256,7 +256,7 @@ async def run_pipeline(payload: dict) -> dict:
 
     n_clips = _count_clips_from_manifest(output_dir / stream.id)
     print(
-        f"nexoclip-pipeline: run done stream={stream.id} "
+        f"chalybclip-pipeline: run done stream={stream.id} "
         f"n_clips={n_clips} elapsed_s={time.time() - started_at:.0f}"
     )
     return {

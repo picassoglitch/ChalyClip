@@ -22,8 +22,8 @@ import pytest
 import pytest_asyncio
 import respx
 
-import nexoclip.api._clip_render as _clip_render
-from nexoclip.db import (
+import chalybclip.api._clip_render as _clip_render
+from chalybclip.db import (
     CandidatesRepo,
     ClipsRepo,
     Database,
@@ -31,10 +31,10 @@ from nexoclip.db import (
     TenantsRepo,
     ZernioPublishesRepo,
 )
-from nexoclip.db.models import CandidateRow, ClipRow, StreamRow
-from nexoclip.integrations.nexo_ai.service import sync_tenant_tier
-from nexoclip.settings import get_settings
-from nexoclip.tenancy import bound_tenant
+from chalybclip.db.models import CandidateRow, ClipRow, StreamRow
+from chalybclip.integrations.chalyb.service import sync_tenant_tier
+from chalybclip.settings import get_settings
+from chalybclip.tenancy import bound_tenant
 
 from .conftest import auth
 
@@ -43,8 +43,8 @@ _ZBASE = "https://zernio.com/api/v1"
 
 @pytest.fixture
 def publish_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    monkeypatch.setenv("NEXOCLIP_ZERNIO_API_KEY", "sk_test_p4")
-    monkeypatch.setenv("NEXOCLIP_INTERNAL_SIGNING_SECRET", "sign_me_p4")
+    monkeypatch.setenv("CHALYBCLIP_ZERNIO_API_KEY", "sk_test_p4")
+    monkeypatch.setenv("CHALYBCLIP_INTERNAL_SIGNING_SECRET", "sign_me_p4")
     get_settings.cache_clear()
 
     async def _rendered(**_kw: Any) -> None:

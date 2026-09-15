@@ -10,7 +10,7 @@ import datetime as _dt
 import random
 from itertools import pairwise
 
-from nexoclip.publish.pacing import (
+from chalybclip.publish.pacing import (
     DEFAULT_PLATFORM_RULES,
     PlatformRule,
     canonical_platform,

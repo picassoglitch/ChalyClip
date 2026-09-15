@@ -9,9 +9,9 @@ from pathlib import Path
 
 import pytest
 
-from nexoclip.clip import cut_clips
-from nexoclip.clip import service as clip_service
-from nexoclip.config import ClipConfig
+from chalybclip.clip import cut_clips
+from chalybclip.clip import service as clip_service
+from chalybclip.config import ClipConfig
 
 from ._fixtures import make_candidate, seed_stream
 
@@ -22,12 +22,12 @@ def _unthrottle_governor(monkeypatch: pytest.MonkeyPatch) -> None:
 
     These tests measure `cut_concurrency` in isolation — the barrier(3)
     case needs all three candidates' first ffmpeg call to run at once. The
-    governor (nexoclip.resources) is a SEPARATE, additional cap whose
+    governor (chalybclip.resources) is a SEPARATE, additional cap whose
     default (cpu//2) would throttle below 3 on small CI boxes and break the
     barrier. It has its own coverage in test_resources_governor.py."""
-    from nexoclip import resources
+    from chalybclip import resources
 
-    monkeypatch.setenv("NEXOCLIP_HEAVY_SLOTS", "16")
+    monkeypatch.setenv("CHALYBCLIP_HEAVY_SLOTS", "16")
     resources.reset_for_testing()
 
 

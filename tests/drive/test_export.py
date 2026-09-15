@@ -16,21 +16,21 @@ from pathlib import Path
 
 import pytest
 
-from nexoclip.db import (
+from chalybclip.db import (
     ClipsRepo,
     Database,
     StreamsRepo,
     TenantsRepo,
 )
-from nexoclip.db.models import ClipRow, StreamRow
-from nexoclip.drive.export import (
+from chalybclip.db.models import ClipRow, StreamRow
+from chalybclip.drive.export import (
     DriveExportError,
     DriveExportNotEntitled,
     export_clip_to_drive,
 )
-from nexoclip.drive.upload import FakeDriveUploadClient
-from nexoclip.integrations.nexo_ai.service import sync_tenant_tier
-from nexoclip.tenancy import bound_tenant
+from chalybclip.drive.upload import FakeDriveUploadClient
+from chalybclip.integrations.chalyb.service import sync_tenant_tier
+from chalybclip.tenancy import bound_tenant
 
 
 def _now() -> str:

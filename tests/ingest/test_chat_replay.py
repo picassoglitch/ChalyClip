@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from nexoclip.errors import IngestError
-from nexoclip.ingest import (
+from chalybclip.errors import IngestError
+from chalybclip.ingest import (
     ChatMessage,
     ChatReplay,
     chat_replay_path,

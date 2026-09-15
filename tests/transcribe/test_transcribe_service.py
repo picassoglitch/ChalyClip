@@ -2,7 +2,7 @@
 
 Slice F.8 — `transcribe()` now routes through a `TranscribeProvider`.
 For tests we still monkeypatch the in-process Whisper call, but the
-hook moved into `nexoclip.transcribe.providers.local_whisper`.
+hook moved into `chalybclip.transcribe.providers.local_whisper`.
 """
 
 from __future__ import annotations
@@ -12,9 +12,9 @@ from pathlib import Path
 
 import pytest
 
-from nexoclip.errors import TranscriptionError
-from nexoclip.ingest import Stream
-from nexoclip.transcribe import Transcript, transcribe
+from chalybclip.errors import TranscriptionError
+from chalybclip.ingest import Stream
+from chalybclip.transcribe import Transcript, transcribe
 
 from ._fakes import FakeInfo, FakeSegment, FakeWhisperModel, FakeWord
 
@@ -57,10 +57,10 @@ def _patch_whisper(monkeypatch: pytest.MonkeyPatch) -> None:
     FakeWhisperModel.reset()
     monkeypatch.setattr(fw, "WhisperModel", FakeWhisperModel, raising=False)
     # Force the provider into in-process mode for the test.
-    monkeypatch.setenv("NEXOCLIP_TRANSCRIBE_INPROCESS", "1")
+    monkeypatch.setenv("CHALYBCLIP_TRANSCRIBE_INPROCESS", "1")
     # Defensive: invalidate the Settings singleton so the env-var pick-up
     # actually happens (tests share a cached Settings instance).
-    from nexoclip.settings import get_settings
+    from chalybclip.settings import get_settings
 
     get_settings.cache_clear()
     FakeWhisperModel.canned_info = FakeInfo(language="es", duration=10.5)
@@ -120,7 +120,7 @@ def test_transcribe_runs_and_writes_json(tmp_path: Path) -> None:
     assert transcribe_args == (str(stream.source_audio_path),)
     # The three tuning params below are the long-VOD survival kit
     # (VAD filter, no context accumulation, greedy decode). See
-    # nexoclip.transcribe.service._run_whisper for the rationale.
+    # chalybclip.transcribe.service._run_whisper for the rationale.
     assert transcribe_kwargs == {
         "language": "es",
         "word_timestamps": True,

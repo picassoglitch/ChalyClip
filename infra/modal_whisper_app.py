@@ -1,4 +1,4 @@
-"""Modal app: GPU-backed Whisper for NexoClip.
+"""Modal app: GPU-backed Whisper for ChalybClip.
 
 Run once on the operator's machine to deploy:
 
@@ -7,10 +7,10 @@ Run once on the operator's machine to deploy:
     modal deploy infra/modal_whisper_app.py
 
 Modal prints the public endpoint URL after deploy — copy it into
-Railway as NEXOCLIP_MODAL_ENDPOINT_URL. Also set
-NEXOCLIP_MODAL_TOKEN to a long random string AND deploy this app
+Railway as CHALYBCLIP_MODAL_ENDPOINT_URL. Also set
+CHALYBCLIP_MODAL_TOKEN to a long random string AND deploy this app
 with the same value in MODAL_BEARER_TOKEN (set via Modal Secrets:
-`modal secret create nexoclip-modal-token MODAL_BEARER_TOKEN=...`).
+`modal secret create chalybclip-modal-token MODAL_BEARER_TOKEN=...`).
 
 Cost model (Modal T4 GPU, ~$0.59/hour as of 2026):
   - faster-whisper `small` on T4 transcribes ~10x realtime
@@ -21,7 +21,7 @@ warm for 5 minutes between requests so back-to-back uploads from
 the same user pay it once.
 
 Why this design:
-  - NexoClip serves the audio file at a short-lived HMAC-signed URL
+  - ChalybClip serves the audio file at a short-lived HMAC-signed URL
     on its own Railway domain. Modal pulls from there over HTTPS.
   - Avoids the 32 MB Modal web-endpoint multipart limit that bites
     long VODs.
@@ -77,11 +77,11 @@ _IMAGE = (
 )
 
 # Only sizes we deliberately pay for. A config typo on the caller side
-# (NEXOCLIP_MODAL_MODEL=large-v3) would otherwise silently multiply the
+# (CHALYBCLIP_MODAL_MODEL=large-v3) would otherwise silently multiply the
 # per-VOD GPU cost — this is exactly how a credit balance dies quietly.
 _ALLOWED_MODELS = {"tiny", "base", "small"}
 
-app = modal.App("nexoclip-whisper")
+app = modal.App("chalybclip-whisper")
 
 
 @app.function(
@@ -96,7 +96,7 @@ app = modal.App("nexoclip-whisper")
     # so a crashed run never auto-retries on our dime; the pipeline's
     # recovery loop caps re-dispatch at 3 attempts.
     max_containers=2,
-    secrets=[modal.Secret.from_name("nexoclip-modal-token")],
+    secrets=[modal.Secret.from_name("chalybclip-modal-token")],
 )
 @modal.fastapi_endpoint(method="POST")
 def transcribe(payload: dict) -> dict:
@@ -104,7 +104,7 @@ def transcribe(payload: dict) -> dict:
 
     Expected JSON body:
         {
-            "audio_url": "https://nexoclip.../api/internal/audio/<stream_id>?sig=...",
+            "audio_url": "https://chalybclip.../api/internal/audio/<stream_id>?sig=...",
             "language": "es",  # ISO 639-1 or null for auto-detect
             "model": "small",
             "stream_id": "...",  # echoed back for log correlation
@@ -164,7 +164,7 @@ def transcribe(payload: dict) -> dict:
 
     started_at = time.time()
 
-    # Download the audio from NexoClip's signed URL.
+    # Download the audio from ChalybClip's signed URL.
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
         tmp_path = Path(tmp.name)
     try:

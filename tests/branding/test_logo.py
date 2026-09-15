@@ -6,15 +6,15 @@ from pathlib import Path
 
 import pytest
 
-from nexoclip.branding import (
+from chalybclip.branding import (
     LogoSVG,
     generate_logo,
     is_rasterization_available,
     rasterize_svg_to_png,
     sanitize_svg,
 )
-from nexoclip.llm import LLMRouter
-from nexoclip.llm.config import ProviderConfig
+from chalybclip.llm import LLMRouter
+from chalybclip.llm.config import ProviderConfig
 from tests.llm._fakes import FakeProvider  # type: ignore[import]
 from tests.llm._fixtures import make_llm_config  # type: ignore[import]
 

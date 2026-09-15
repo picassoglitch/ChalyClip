@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from nexoclip.clip.overlay_burn import _format_kick_url
+from chalybclip.clip.overlay_burn import _format_kick_url
 
 
 @pytest.mark.parametrize(

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from nexoclip.integrations.zernio.analytics import (
+from chalybclip.integrations.zernio.analytics import (
     normalize_list,
     normalize_metrics,
     normalize_post,

@@ -14,13 +14,13 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 
-from nexoclip.channels import make_channel_ingest_callback
-from nexoclip.db import Database, StreamsRepo, TenantsRepo, apply_migrations
-from nexoclip.errors import IngestError
-from nexoclip.ids import new_id
-from nexoclip.ingest.models import Stream
-from nexoclip.jobs import JobDispatcher, PipelineKickoff
-from nexoclip.tenancy import bound_tenant
+from chalybclip.channels import make_channel_ingest_callback
+from chalybclip.db import Database, StreamsRepo, TenantsRepo, apply_migrations
+from chalybclip.errors import IngestError
+from chalybclip.ids import new_id
+from chalybclip.ingest.models import Stream
+from chalybclip.jobs import JobDispatcher, PipelineKickoff
+from chalybclip.tenancy import bound_tenant
 
 
 @pytest_asyncio.fixture
@@ -98,7 +98,7 @@ async def test_reingest_reuses_stream_id_no_duplicate_row(
     db: Database, tenant: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake_ingest = _FakeIngest()
-    monkeypatch.setattr("nexoclip.ingest.ingest_vod", fake_ingest)
+    monkeypatch.setattr("chalybclip.ingest.ingest_vod", fake_ingest)
     dispatcher = _FakeDispatcher()
     cb = make_channel_ingest_callback(db, dispatcher, output_dir=tmp_path)
 
@@ -121,7 +121,7 @@ async def test_reingest_reuses_stream_id_no_duplicate_row(
 async def test_pipeline_failure_does_not_propagate(
     db: Database, tenant: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr("nexoclip.ingest.ingest_vod", _FakeIngest())
+    monkeypatch.setattr("chalybclip.ingest.ingest_vod", _FakeIngest())
     dispatcher = _FakeDispatcher(fail=True)
     cb = make_channel_ingest_callback(db, dispatcher, output_dir=tmp_path)
 
@@ -137,7 +137,7 @@ async def test_pipeline_failure_does_not_propagate(
 async def test_download_failure_propagates(
     db: Database, tenant: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr("nexoclip.ingest.ingest_vod", _FakeIngest(raises=True))
+    monkeypatch.setattr("chalybclip.ingest.ingest_vod", _FakeIngest(raises=True))
     dispatcher = _FakeDispatcher()
     cb = make_channel_ingest_callback(db, dispatcher, output_dir=tmp_path)
 
@@ -191,7 +191,7 @@ async def test_detected_vod_visible_as_pending_during_download(
             source_audio_path=output_dir / stream_id / "source" / "audio.wav",
         )
 
-    monkeypatch.setattr("nexoclip.ingest.ingest_vod", _ingest)
+    monkeypatch.setattr("chalybclip.ingest.ingest_vod", _ingest)
     cb = make_channel_ingest_callback(db, _FakeDispatcher(), output_dir=tmp_path)
     await cb(tenant, "https://kick.com/n3on/videos/pend", "vidp", "persona", "es")
 

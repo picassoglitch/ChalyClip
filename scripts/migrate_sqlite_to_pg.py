@@ -11,7 +11,7 @@ Usage:
     # 1. Stop the app (or run during a maintenance window).
     # 2. Point at the live SQLite file and the target Postgres DSN:
     .venv\\Scripts\\python.exe scripts\\migrate_sqlite_to_pg.py \\
-        --sqlite ./nexoclip.db \\
+        --sqlite ./chalybclip.db \\
         --pg postgresql://user:pass@host:5432/dbname
 
     # Re-run safe (idempotent). Use --truncate to wipe the PG tables first
@@ -31,7 +31,7 @@ import sqlite3
 import sys
 from pathlib import Path
 
-from nexoclip.db import Database, apply_migrations
+from chalybclip.db import Database, apply_migrations
 
 # schema_version is owned by the migration runner (apply_migrations stamps it
 # on the PG side); never copy it from SQLite.
@@ -152,7 +152,7 @@ async def migrate(sqlite_path: Path, pg_dsn: str, *, truncate: bool) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--sqlite", required=True, help="Path to the live nexoclip.db")
+    parser.add_argument("--sqlite", required=True, help="Path to the live chalybclip.db")
     parser.add_argument("--pg", required=True, help="Target Postgres DSN (postgres://...)")
     parser.add_argument(
         "--truncate",

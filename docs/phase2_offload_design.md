@@ -16,7 +16,7 @@ stages:
   precondition for running the pipeline on a machine whose disk evaporates
   when the run ends.
 - **2b — the pipeline runs on Modal.** A `ModalJobDispatcher` (the stub in
-  `nexoclip/jobs/modal.py` made real) POSTs the `PipelineKickoff` to a new
+  `chalybclip/jobs/modal.py` made real) POSTs the `PipelineKickoff` to a new
   Modal app (`infra/modal_pipeline_app.py`) that runs the *entire*
   `default_pipeline_runner` — download, analyze, transcribe, detect, cut,
   variants — against the same Railway Postgres and the same R2 bucket. The
@@ -24,7 +24,7 @@ stages:
 
 Everything reuses the pattern proven by `infra/modal_whisper_app.py`:
 bearer-token `fastapi_endpoint`, Modal's 303→poll→200 protocol, secrets via
-Modal Secret, config via `NEXOCLIP_*` env vars.
+Modal Secret, config via `CHALYBCLIP_*` env vars.
 
 ---
 
@@ -39,13 +39,13 @@ reaches R2, and only at publish time. Everything the dashboard shows —
 1. **Key builders move to the storage package.**
    `artifact_key_for_clip()` currently lives in `api/routers/internal.py`;
    the pipeline can't import from `api`. New
-   `nexoclip/integrations/storage/keys.py` with the full key family:
+   `chalybclip/integrations/storage/keys.py` with the full key family:
    `clip_media_key`, `clip_thumbnail_key`, `clip_render_key` — all under the
    existing `clips/{tenant_id}/{clip_id}/…` namespace. `internal.py`
    re-exports for backward compat.
 
 2. **Offload after cut.** `offload_clip_artifacts(store, tenant_id, clips)`
-   in `nexoclip/clip/offload.py`: for each clip, upload `clip.path` and
+   in `chalybclip/clip/offload.py`: for each clip, upload `clip.path` and
    `thumbnail_frame_path` to R2. Idempotent (`exists()` short-circuit),
    non-fatal (an R2 hiccup logs and continues — local serving still works),
    called from `pipeline.py` right after the cut step. No new pipeline step
@@ -69,18 +69,18 @@ reaches R2, and only at publish time. Everything the dashboard shows —
    (reprocess already deletes the render key). R2 mirrors the clip row's
    lifecycle — no orphaned bucket objects.
 
-Opt-in stays as-is: no `NEXOCLIP_OBJECT_STORAGE_BUCKET` → behavior unchanged.
+Opt-in stays as-is: no `CHALYBCLIP_OBJECT_STORAGE_BUCKET` → behavior unchanged.
 
 ## Stage B (PR 2) — Phase 2b: ModalJobDispatcher
 
 1. **Shared Modal HTTP client.** Extract the 303-poll protocol + error
    classification from `transcribe/providers/modal_whisper.py` into
-   `nexoclip/integrations/modal_http.py`; the whisper provider and the new
+   `chalybclip/integrations/modal_http.py`; the whisper provider and the new
    dispatcher both use it.
 
-2. **Real `ModalJobDispatcher`** (`nexoclip/jobs/modal.py`):
-   - Config: `NEXOCLIP_MODAL_PIPELINE_ENDPOINT_URL` (new) +
-     `NEXOCLIP_MODAL_TOKEN` (existing). Missing config → constructor raises →
+2. **Real `ModalJobDispatcher`** (`chalybclip/jobs/modal.py`):
+   - Config: `CHALYBCLIP_MODAL_PIPELINE_ENDPOINT_URL` (new) +
+     `CHALYBCLIP_MODAL_TOKEN` (existing). Missing config → constructor raises →
      `create_app`'s existing defensive boot falls back to in-process.
    - `dispatch_pipeline`: same dedup as in-process (skip if
      `stream_id in active_stream_ids()`), `register(stream_id)`, spawn a
@@ -107,20 +107,20 @@ Opt-in stays as-is: no `NEXOCLIP_OBJECT_STORAGE_BUCKET` → behavior unchanged.
 
 4. **Worker-mode audio for Modal Whisper.** On the worker, the whisper
    provider can't hand Modal a Railway-signed audio URL (the WAV was never
-   on Railway). New flag `NEXOCLIP_TRANSCRIBE_AUDIO_VIA_OBJECT_STORAGE`
+   on Railway). New flag `CHALYBCLIP_TRANSCRIBE_AUDIO_VIA_OBJECT_STORAGE`
    (default off; on in the worker env): upload `source/audio.wav` to R2 and
    pass a presigned URL as `audio_url`. AssemblyAI needs nothing — it
    uploads bytes directly.
 
 ## Stage C (PR 3) — Phase 2b: the Modal pipeline app + rollout docs
 
-1. **`infra/modal_pipeline_app.py`** — Modal app `nexoclip-pipeline`:
+1. **`infra/modal_pipeline_app.py`** — Modal app `chalybclip-pipeline`:
    - Image: `debian_slim(python 3.11)` + `apt ffmpeg` + deps from
-     `pyproject.toml` + `add_local_python_source("nexoclip")`. CPU-only
+     `pyproject.toml` + `add_local_python_source("chalybclip")`. CPU-only
      (transcription is remote; diarization stays disabled as in prod).
    - Function: `cpu=8`, `memory=16 GiB`, `timeout=8 h`,
      `max_containers` env-tunable (the real concurrency/cost ceiling),
-     secret `nexoclip-pipeline-env`.
+     secret `chalybclip-pipeline-env`.
    - Endpoint: POST, verifies bearer, reconstructs the kickoff, and calls
      **the same `default_pipeline_runner`** used in-process — so events,
      `pipeline.failed` surfacing, source reclaim, base-fee charge, and
@@ -131,7 +131,7 @@ Opt-in stays as-is: no `NEXOCLIP_OBJECT_STORAGE_BUCKET` → behavior unchanged.
      rasterized from in-package SVG) — no web-box asset files needed.
 2. **`docs/modal_pipeline_runbook.md`** — the secret's env checklist
    (DATABASE_PUBLIC_URL, Anthropic key, R2 vars, whisper endpoint vars,
-   cookies for yt-dlp, `NEXOCLIP_TRANSCRIBE_AUDIO_VIA_OBJECT_STORAGE=1`),
+   cookies for yt-dlp, `CHALYBCLIP_TRANSCRIBE_AUDIO_VIA_OBJECT_STORAGE=1`),
    deploy commands, Railway flip, verification steps, rollback.
 
 ### Rollout / rollback
@@ -139,9 +139,9 @@ Opt-in stays as-is: no `NEXOCLIP_OBJECT_STORAGE_BUCKET` → behavior unchanged.
 1. Merge A → Railway deploy. R2 vars are already set in prod, so uploads +
    fallback serving activate immediately; behavior otherwise unchanged.
 2. `modal deploy infra/modal_pipeline_app.py`, create the
-   `nexoclip-pipeline-env` secret, set
-   `NEXOCLIP_MODAL_PIPELINE_ENDPOINT_URL` on Railway.
-3. Flip `NEXOCLIP_JOB_DISPATCHER=modal`. Rollback at any point = unset it
+   `chalybclip-pipeline-env` secret, set
+   `CHALYBCLIP_MODAL_PIPELINE_ENDPOINT_URL` on Railway.
+3. Flip `CHALYBCLIP_JOB_DISPATCHER=modal`. Rollback at any point = unset it
    (in-flight Modal runs finish on their own; events keep flowing).
 
 ### Explicitly out of scope (follow-ups)

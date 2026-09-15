@@ -11,15 +11,15 @@ import pytest
 import pytest_asyncio
 import respx
 
-from nexoclip.db import (
+from chalybclip.db import (
     Database,
     TenantsRepo,
     ZernioEventsRepo,
     ZernioWhatsappNumbersRepo,
 )
-from nexoclip.integrations.nexo_ai.service import sync_tenant_tier
-from nexoclip.integrations.zernio.events import process_zernio_event
-from nexoclip.settings import get_settings
+from chalybclip.integrations.chalyb.service import sync_tenant_tier
+from chalybclip.integrations.zernio.events import process_zernio_event
+from chalybclip.settings import get_settings
 
 from .conftest import auth
 
@@ -28,9 +28,9 @@ _ACC = "acct_ig_1"
 
 
 def _env(monkeypatch: pytest.MonkeyPatch, *, ads: bool, whatsapp: bool) -> None:
-    monkeypatch.setenv("NEXOCLIP_ZERNIO_API_KEY", "sk_test_flags")
-    monkeypatch.setenv("NEXOCLIP_FEATURE_ADS", "1" if ads else "0")
-    monkeypatch.setenv("NEXOCLIP_FEATURE_WHATSAPP", "1" if whatsapp else "0")
+    monkeypatch.setenv("CHALYBCLIP_ZERNIO_API_KEY", "sk_test_flags")
+    monkeypatch.setenv("CHALYBCLIP_FEATURE_ADS", "1" if ads else "0")
+    monkeypatch.setenv("CHALYBCLIP_FEATURE_WHATSAPP", "1" if whatsapp else "0")
     get_settings.cache_clear()
 
 

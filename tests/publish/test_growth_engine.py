@@ -5,9 +5,9 @@ from __future__ import annotations
 import datetime as _dt
 import random
 
-from nexoclip.llm import GrowthScoreCard, PlatformGrowthScore
-from nexoclip.publish.growth_engine import ClipContent, plan_growth_publish
-from nexoclip.publish.pacing import DEFAULT_PLATFORM_RULES
+from chalybclip.llm import GrowthScoreCard, PlatformGrowthScore
+from chalybclip.publish.growth_engine import ClipContent, plan_growth_publish
+from chalybclip.publish.pacing import DEFAULT_PLATFORM_RULES
 
 _NOW = _dt.datetime(2026, 6, 10, 8, 0, tzinfo=_dt.UTC)
 
@@ -92,7 +92,7 @@ def test_two_consecutive_sweeps_respect_future_day_caps() -> None:
     # so min_gap pushes part of each allocation past midnight: sweep 1 spills
     # 2 posts onto tomorrow, and sweep 2 — seeded with sweep 1's per-day
     # counts — must top tomorrow up to the cap at most, never past it.
-    from nexoclip.publish.pacing import PlatformRule
+    from chalybclip.publish.pacing import PlatformRule
 
     rules = {"tiktok": PlatformRule(
         platform="tiktok", max_per_day=3, min_gap_minutes=240, jitter_minutes=0,

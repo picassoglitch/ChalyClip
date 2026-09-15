@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Editar {{ persona.id }} - ChalybClip{% endblock %}
+{% block content %}
+
+<div class="nc-page-header">
+  <div>
+    <h2>Edita tu firma</h2>
+    <small><span class="nc-mono">{{ persona.id }}</span></small>
+  </div>
+  <div class="nc-page-summary">
+    <a href="/dashboard/personas" class="nc-btn nc-btn--sm">
+      <i class="ti ti-arrow-left" aria-hidden="true"></i>
+      <span>Todas tus firmas</span>
+    </a>
+  </div>
+</div>
+
+<div class="nc-panel">
+  <div class="nc-panel__body">
+    <form action="/dashboard/personas/{{ persona.id }}" method="post">
+      <div class="nc-grid-2">
+        <label class="nc-label">Nombre
+          <input class="nc-input" name="name" value="{{ persona.name }}">
+        </label>
+        <label class="nc-label">Idioma principal
+          <input class="nc-input nc-input--mono" name="primary_language" value="{{ persona.primary_language }}">
+        </label>
+      </div>
+      <label class="nc-label">Tu tono y estilo
+        <textarea class="nc-textarea" name="voice_prompt" rows="4">{{ persona.voice_prompt }}</textarea>
+      </label>
+      <div class="nc-grid-2">
+        <label class="nc-label">Idiomas en los que publicas
+          <input class="nc-input" name="target_languages" value="{{ persona.target_languages|join(', ') }}">
+        </label>
+        <label class="nc-label">Etiquetas para encontrarla
+          <input class="nc-input" name="routing_tags" value="{{ persona.routing_tags|join(', ') }}">
+        </label>
+      </div>
+      <div class="nc-row">
+        <button type="submit" class="nc-btn nc-btn--primary">
+          <i class="ti ti-device-floppy" aria-hidden="true"></i>
+          <span>Guardar</span>
+        </button>
+        <a href="/dashboard/personas" class="nc-btn">Cancelar</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

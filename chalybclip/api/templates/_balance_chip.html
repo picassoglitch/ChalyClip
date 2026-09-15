@@ -1,0 +1,87 @@
+{# Slice O.47 — token-balance chip fragment.
+   Slice O.56 — hardened against missing / partial dict shapes.
+
+   Standalone <a> fragment the nav swaps in place (outerHTML) whenever the
+   `balance-poll` event fires on <body> — no more 30s polling. That event is
+   dispatched (a) after token-consuming actions (clip finalize, publish,
+   download) and (b) by the SSE relay in base.html when the server pushes a
+   `balance` change (see /dashboard/_balance/stream + balance_bus). So a
+   refetch happens on an actual change, not on a timer.
+
+   _bal is either None (no cache yet) or a dict with these keys:
+     - remaining (int | None)
+     - unlimited (bool, 0/1, or None)
+     - monthly_used (int | None)
+     - at (iso string | None)
+   We do NOT trust the keys to exist — every access guards with `or`
+   defaults so a partial dict from a future shape change still
+   renders a sensible chip rather than 500ing the HTMX poll. #}
+
+{%- set _has_bal = (_bal is not none) -%}
+{%- set _unlimited = (_bal.get('unlimited') if _has_bal else False) -%}
+{%- set _remaining = (_bal.get('remaining') if _has_bal else None) or 0 -%}
+{%- set _monthly_used = (_bal.get('monthly_used') if _has_bal else 0) or 0 -%}
+{# Token T1 — when the last usage report FAILED, the cached numbers are
+   stale (Chalyb never deducted). Surface it so the operator knows the
+   chip is lying rather than trusting a frozen number. report_ok is
+   tri-state: True (fresh), False (sync failing), None (never reported). #}
+{%- set _report_failing = _has_bal and (_bal.get('report_ok') == false) -%}
+{%- set _sync_err = (_bal.get('report_error') if _has_bal else None) or 'No estamos sincronizando con Chalyb — este número puede estar desactualizado. Haz clic para reintentar.' -%}
+
+{%- if not _has_bal -%}
+<a href="/dashboard/_balance/refresh"
+   id="nc-balance-chip"
+   class="nc-chip nc-chip--muted"
+   title="Todavía no tenemos tu saldo. Haz clic para actualizarlo."
+   hx-get="/dashboard/_balance/chip"
+   hx-trigger="balance-poll from:body"
+   hx-swap="outerHTML"
+   style="text-decoration: none;">
+  <i class="ti ti-coin" aria-hidden="true"></i>
+  <span>— tokens · actualizar</span>
+</a>
+{%- elif _unlimited -%}
+<a href="/dashboard/_balance/refresh"
+   id="nc-balance-chip"
+   class="nc-chip nc-chip--success"
+   title="Admin · tokens sin límite. Llevas usados este mes: {{ '{:,}'.format(_monthly_used) }}."
+   hx-get="/dashboard/_balance/chip"
+   hx-trigger="balance-poll from:body"
+   hx-swap="outerHTML"
+   style="text-decoration: none;">
+  <i class="ti ti-infinity" aria-hidden="true"></i>
+  <span>∞ tokens</span>
+</a>
+{%- elif _report_failing -%}
+  {# Sync is failing → the number can't be trusted. Danger chip + a
+     warning icon + the actual error in the tooltip; click refreshes. #}
+  {%- set _short = _remaining // 1000 -%}
+<a href="/dashboard/_balance/refresh"
+   id="nc-balance-chip"
+   class="nc-chip nc-chip--danger"
+   title="⚠ {{ _sync_err }}"
+   hx-get="/dashboard/_balance/chip"
+   hx-trigger="balance-poll from:body"
+   hx-swap="outerHTML"
+   style="text-decoration: none;">
+  <i class="ti ti-alert-triangle" aria-hidden="true"></i>
+  <span>{{ _short }}k · sin sincronizar ⚠</span>
+</a>
+{%- else -%}
+  {%- set _low = _remaining < 50000 -%}
+  {%- set _short = _remaining // 1000 -%}
+  {# Healthy balance reads GREEN (success), low balance amber. Red is
+     reserved for an actual sync failure (handled above) — the default
+     state should look fine, not alarming. #}
+<a href="/dashboard/_balance/refresh"
+   id="nc-balance-chip"
+   class="nc-chip nc-chip--{% if _low %}warn{% else %}success{% endif %}"
+   title="Te quedan {{ '{:,}'.format(_remaining) }} tokens. Llevas usados este mes: {{ '{:,}'.format(_monthly_used) }}."
+   hx-get="/dashboard/_balance/chip"
+   hx-trigger="balance-poll from:body"
+   hx-swap="outerHTML"
+   style="text-decoration: none;">
+  <i class="ti ti-coin" aria-hidden="true"></i>
+  <span>{{ _short }}k tokens</span>
+</a>
+{%- endif -%}

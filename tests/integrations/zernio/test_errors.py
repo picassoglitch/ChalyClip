@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from nexoclip.integrations.zernio.errors import (
+from chalybclip.integrations.zernio.errors import (
     classify_category,
     is_transient,
     post_is_auto_retryable,

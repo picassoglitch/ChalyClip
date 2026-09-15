@@ -11,8 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from nexoclip.config import DiarizationConfig
-from nexoclip.db import (
+from chalybclip.config import DiarizationConfig
+from chalybclip.db import (
     Database,
     SpeakersRepo,
     StreamsRepo,
@@ -20,15 +20,15 @@ from nexoclip.db import (
     VodSpeakersRepo,
     apply_migrations,
 )
-from nexoclip.db.models import StreamRow
-from nexoclip.diarize import resolve_speakers
-from nexoclip.diarize.identity import _cosine_sim, _weighted_merge
-from nexoclip.diarize.models import (
+from chalybclip.db.models import StreamRow
+from chalybclip.diarize import resolve_speakers
+from chalybclip.diarize.identity import _cosine_sim, _weighted_merge
+from chalybclip.diarize.models import (
     Diarization,
     DiarizationSegment,
     SpeakerEmbedding,
 )
-from nexoclip.tenancy import bound_tenant
+from chalybclip.tenancy import bound_tenant
 
 
 def _now() -> str:

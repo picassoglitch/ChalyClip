@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from nexoclip.errors import IngestError
-from nexoclip.ingest import Stream, load_stream
+from chalybclip.errors import IngestError
+from chalybclip.ingest import Stream, load_stream
 
 
 def _seed_stream(tmp_path: Path) -> Stream:

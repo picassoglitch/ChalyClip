@@ -7,9 +7,9 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from nexoclip.llm import LLMRouter, MemoryFrameStore
-from nexoclip.llm.config import ProviderConfig
-from nexoclip.vision.face_emotion_vision import detect_face_emotions_vision
+from chalybclip.llm import LLMRouter, MemoryFrameStore
+from chalybclip.llm.config import ProviderConfig
+from chalybclip.vision.face_emotion_vision import detect_face_emotions_vision
 from tests.llm._fakes import FakeProvider  # type: ignore[import]
 from tests.llm._fixtures import make_llm_config  # type: ignore[import]
 

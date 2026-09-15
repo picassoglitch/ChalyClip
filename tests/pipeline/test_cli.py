@@ -1,4 +1,4 @@
-"""CLI smoke tests for `nexoclip process`."""
+"""CLI smoke tests for `chalybclip process`."""
 
 from __future__ import annotations
 
@@ -8,13 +8,13 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from nexoclip.cli import app
-from nexoclip.clip import service as clip_service
-from nexoclip.config import NexoClipConfig, VoiceDetectorConfig
-from nexoclip.ingest import service as ingest_service
-from nexoclip.llm import config as llm_config_module
-from nexoclip.llm import router as router_module
-from nexoclip.variants import personas as personas_module
+from chalybclip.cli import app
+from chalybclip.clip import service as clip_service
+from chalybclip.config import ChalybClipConfig, VoiceDetectorConfig
+from chalybclip.ingest import service as ingest_service
+from chalybclip.llm import config as llm_config_module
+from chalybclip.llm import router as router_module
+from chalybclip.variants import personas as personas_module
 from tests.llm._fakes import FakeProvider  # type: ignore[import]
 from tests.llm._fixtures import make_llm_config  # type: ignore[import]
 from tests.pipeline.test_process_vod import (  # type: ignore[import]
@@ -73,23 +73,23 @@ def _stub_everything(
     monkeypatch.setattr(clip_service, "_run_ffmpeg", fake_ffmpeg)
 
     # YAML configs
-    config = NexoClipConfig()
+    config = ChalybClipConfig()
     config.detection.voice = VoiceDetectorConfig(
         enabled=True, weight=1.0, fuzzy_distance=2, phrases={"es": ["clipéalo"]}
     )
-    monkeypatch.setattr("nexoclip.pipeline.load_config", lambda: config)
+    monkeypatch.setattr("chalybclip.pipeline.load_config", lambda: config)
     monkeypatch.setattr(
         llm_config_module,
         "load_llm_config",
         lambda *_a, **_k: make_llm_config(retry_attempts=1, purpose="hook_generation"),
     )
     monkeypatch.setattr(
-        "nexoclip.pipeline.load_llm_config",
+        "chalybclip.pipeline.load_llm_config",
         lambda: make_llm_config(retry_attempts=1, purpose="hook_generation"),
     )
 
     # Personas
-    from nexoclip.variants import Persona
+    from chalybclip.variants import Persona
 
     personas = {
         "aldo_villanueva": Persona(
@@ -101,7 +101,7 @@ def _stub_everything(
         )
     }
     monkeypatch.setattr(personas_module, "load_personas", lambda *_a, **_k: personas)
-    monkeypatch.setattr("nexoclip.pipeline.load_personas", lambda: personas)
+    monkeypatch.setattr("chalybclip.pipeline.load_personas", lambda: personas)
 
     # LLM provider — wire the fake into the default factory so the router
     # the orchestrator builds picks it up.

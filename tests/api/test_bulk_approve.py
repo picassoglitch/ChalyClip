@@ -8,9 +8,9 @@ import datetime as _dt
 import httpx
 import pytest
 
-from nexoclip.db import ClipsRepo, Database, StreamsRepo
-from nexoclip.db.models import ClipRow, StreamRow
-from nexoclip.tenancy import bound_tenant
+from chalybclip.db import ClipsRepo, Database, StreamsRepo
+from chalybclip.db.models import ClipRow, StreamRow
+from chalybclip.tenancy import bound_tenant
 
 from .conftest import auth
 

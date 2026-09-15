@@ -11,9 +11,9 @@ from pathlib import Path
 
 import pytest
 
-from nexoclip.db import Database, TenantsRepo, ZernioPublishesRepo
-from nexoclip.db.migrations import apply_migrations
-from nexoclip.tenancy import bound_tenant
+from chalybclip.db import Database, TenantsRepo, ZernioPublishesRepo
+from chalybclip.db.migrations import apply_migrations
+from chalybclip.tenancy import bound_tenant
 
 
 @pytest.fixture

@@ -11,7 +11,7 @@ coercion.
 
 from __future__ import annotations
 
-from nexoclip.api.routers.dashboard import _coerce_balance_to_scalars
+from chalybclip.api.routers.dashboard import _coerce_balance_to_scalars
 
 
 def test_none_balance_passes_through_as_none() -> None:

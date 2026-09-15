@@ -9,9 +9,9 @@ from __future__ import annotations
 
 import datetime as _dt
 
-from nexoclip.db import Database, LLMCallsRepo, TenantsRepo
-from nexoclip.db.models import LLMCallRow
-from nexoclip.tenancy import bound_tenant
+from chalybclip.db import Database, LLMCallsRepo, TenantsRepo
+from chalybclip.db.models import LLMCallRow
+from chalybclip.tenancy import bound_tenant
 
 
 def _now() -> str:

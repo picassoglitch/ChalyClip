@@ -2,7 +2,7 @@
 
 Reference: screenshots Aldo dropped of a Spanish-localized clipping tool
 ("Convertir video largo en cortos" flow). The competitor's pipeline UX
-exposes nine features that NexoClip either lacks today or has in a
+exposes nine features that ChalybClip either lacks today or has in a
 weaker form. This doc triages each one to a future slice so nothing
 gets lost while Phase 0 lands.
 
@@ -14,10 +14,10 @@ exit criteria for Phase 0.
 
 ## What the competitor shows
 
-Each row maps a competitor feature → status in NexoClip today → target
+Each row maps a competitor feature → status in ChalybClip today → target
 slice. Effort estimates: S = half-day, M = 1–2 days, L = 3+ days.
 
-| # | Competitor feature | NexoClip today | Target | Effort | Notes |
+| # | Competitor feature | ChalybClip today | Target | Effort | Notes |
 |---|--------------------|----------------|--------|--------|-------|
 | 1 | Pre-trim range slider over VOD timeline before processing ("26 minutos seleccionados") | Whole VOD is always processed | F.1 | M | Massive cost saver — skips diarization + transcribe + detect for unselected ranges. Reuse `clip/breakdown.py` window math. |
 | 2 | Visual caption preset cards (rendered preview, not text dropdown) | Dropdown with text labels (slice D.2) | F.2 | S | Render the four presets in `branding/captions.py` as inline SVG previews. Pure template change, no backend work. |
@@ -96,6 +96,6 @@ Group the table above into shippable slices:
 - **All-or-nothing.** Each F-slice is independently valuable. F.2 (card
   grid) and F.10 (skeleton) are ~half-day wins; F.5/F.6 are the
   meaningful UX upgrade.
-- **Feature parity for parity's sake.** NexoClip's voice-marker triggers
+- **Feature parity for parity's sake.** ChalybClip's voice-marker triggers
   + per-speaker brand kits are *differentiators* the competitor doesn't
   have. Don't trade those for a prettier upload bar.

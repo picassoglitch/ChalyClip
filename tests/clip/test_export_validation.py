@@ -20,7 +20,7 @@ from unittest.mock import patch
 
 import pytest
 
-from nexoclip.clip.preview_recorder import (
+from chalybclip.clip.preview_recorder import (
     _DURATION_TOLERANCE_MS,
     _validate_export,
     _write_manifest,
@@ -245,7 +245,7 @@ def test_duration_tolerance_documented() -> None:
 
 def test_ffprobe_duration_returns_seconds(tmp_path: Path) -> None:
     """The probe should parse ffprobe -show_format JSON into seconds."""
-    from nexoclip.clip.preview_recorder import _ffprobe_duration_s
+    from chalybclip.clip.preview_recorder import _ffprobe_duration_s
 
     fake_file = tmp_path / "clip.mp4"
     fake_file.write_bytes(b"x")
@@ -258,7 +258,7 @@ def test_ffprobe_duration_returns_seconds(tmp_path: Path) -> None:
 def test_ffprobe_duration_no_binary_returns_none(tmp_path: Path) -> None:
     """Missing ffprobe binary must NOT raise — return None so callers
     fall back to the DB duration."""
-    from nexoclip.clip.preview_recorder import _ffprobe_duration_s
+    from chalybclip.clip.preview_recorder import _ffprobe_duration_s
 
     fake_file = tmp_path / "clip.mp4"
     fake_file.write_bytes(b"x")
@@ -268,7 +268,7 @@ def test_ffprobe_duration_no_binary_returns_none(tmp_path: Path) -> None:
 
 def test_ffprobe_duration_nonzero_rc_returns_none(tmp_path: Path) -> None:
     """An ffprobe error must NOT raise — same fall-back contract."""
-    from nexoclip.clip.preview_recorder import _ffprobe_duration_s
+    from chalybclip.clip.preview_recorder import _ffprobe_duration_s
 
     fake_file = tmp_path / "clip.mp4"
     fake_file.write_bytes(b"x")
@@ -282,7 +282,7 @@ def test_ffprobe_duration_zero_returns_none(tmp_path: Path) -> None:
     """A 0-second file isn't usable as canonical duration — None
     forces the caller back to the DB value rather than producing a
     zero-frame export."""
-    from nexoclip.clip.preview_recorder import _ffprobe_duration_s
+    from chalybclip.clip.preview_recorder import _ffprobe_duration_s
 
     fake_file = tmp_path / "clip.mp4"
     fake_file.write_bytes(b"x")
@@ -370,7 +370,7 @@ def test_clip_render_banner_is_inside_safe_zone() -> None:
     file the assertions read."""
     template_path = (
         Path(__file__).resolve().parents[2]
-        / "nexoclip" / "api" / "templates" / "_overlay_styles.html"
+        / "chalybclip" / "api" / "templates" / "_overlay_styles.html"
     )
     css = template_path.read_text(encoding="utf-8")
 

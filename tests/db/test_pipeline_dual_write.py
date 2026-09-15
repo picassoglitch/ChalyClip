@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from nexoclip.db import (
+from chalybclip.db import (
     CandidatesRepo,
     ClipsRepo,
     Database,
@@ -25,8 +25,8 @@ from nexoclip.db import (
     VariantsRepo,
     apply_migrations,
 )
-from nexoclip.pipeline import PipelineDeps, process_vod
-from nexoclip.tenancy import bound_tenant
+from chalybclip.pipeline import PipelineDeps, process_vod
+from chalybclip.tenancy import bound_tenant
 
 from tests.llm._fakes import FakeProvider  # type: ignore[import]
 from tests.llm._fixtures import make_llm_config  # type: ignore[import]
@@ -64,7 +64,7 @@ def _patch_default_anthropic_provider(
     monkeypatch: pytest.MonkeyPatch, fake: FakeProvider
 ) -> None:
     """Force the real LLMRouter's default factory to return our FakeProvider."""
-    from nexoclip.llm import router as router_module
+    from chalybclip.llm import router as router_module
 
     def factory(name, _config, _api_key):
         return fake if name == "anthropic" else None

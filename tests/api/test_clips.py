@@ -6,19 +6,19 @@ import datetime as _dt
 
 import httpx
 
-from nexoclip.db import (
+from chalybclip.db import (
     ClipsRepo,
     Database,
     StreamsRepo,
     VariantsRepo,
 )
-from nexoclip.db.models import (
+from chalybclip.db.models import (
     CandidateRow,
     ClipRow,
     StreamRow,
     VariantRow,
 )
-from nexoclip.tenancy import bound_tenant
+from chalybclip.tenancy import bound_tenant
 
 from .conftest import auth
 
@@ -38,7 +38,7 @@ async def _seed(
     variant_id: str,
 ) -> None:
     """Seed the full chain so publish/clip endpoints have something to find."""
-    from nexoclip.db import CandidatesRepo, PersonasRepo
+    from chalybclip.db import CandidatesRepo, PersonasRepo
 
     with bound_tenant(tenant_id):
         await StreamsRepo(db).upsert(

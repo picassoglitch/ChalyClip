@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 
-from nexoclip.db import (
+from chalybclip.db import (
     CandidatesRepo,
     Database,
     EventsRepo,
@@ -17,15 +17,15 @@ from nexoclip.db import (
     TenantsRepo,
     apply_migrations,
 )
-from nexoclip.db.adapters import candidate_pk
-from nexoclip.db.models import StreamRow
-from nexoclip.detect import Candidate, rescore_candidates
-from nexoclip.errors import LLMError
-from nexoclip.governance import BudgetGovernor
-from nexoclip.ingest.models import Stream
-from nexoclip.llm import LLMRouter, MemoryFrameStore
-from nexoclip.llm.config import ProviderConfig
-from nexoclip.tenancy import bound_tenant
+from chalybclip.db.adapters import candidate_pk
+from chalybclip.db.models import StreamRow
+from chalybclip.detect import Candidate, rescore_candidates
+from chalybclip.errors import LLMError
+from chalybclip.governance import BudgetGovernor
+from chalybclip.ingest.models import Stream
+from chalybclip.llm import LLMRouter, MemoryFrameStore
+from chalybclip.llm.config import ProviderConfig
+from chalybclip.tenancy import bound_tenant
 from tests.llm._fakes import FakeProvider  # type: ignore[import]
 from tests.llm._fixtures import make_llm_config  # type: ignore[import]
 
@@ -93,7 +93,7 @@ async def _seed_candidates(
     db: Database, stream: Stream, candidates: list[Candidate]
 ) -> None:
     """Persist heuristic candidate rows so update_rescore can find them."""
-    from nexoclip.db.models import CandidateRow
+    from chalybclip.db.models import CandidateRow
 
     rows = [
         CandidateRow(
@@ -121,7 +121,7 @@ def _stub_sample_frames(monkeypatch: pytest.MonkeyPatch) -> list[float]:
         calls.append(float(ts))
         return [f"frame@{ts:.2f}#{i}".encode() for i in range(n)]
 
-    monkeypatch.setattr("nexoclip.detect.vision_rescore.sample_frames", fake_sample)
+    monkeypatch.setattr("chalybclip.detect.vision_rescore.sample_frames", fake_sample)
     return calls
 
 

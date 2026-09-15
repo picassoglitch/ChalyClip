@@ -6,8 +6,8 @@ under daily caps, the publish-floor (Phase 5), and the queued/held buckets.
 
 from __future__ import annotations
 
-from nexoclip.publish.allocation import ClipPlatformFit, allocate
-from nexoclip.publish.pacing import PlatformRule
+from chalybclip.publish.allocation import ClipPlatformFit, allocate
+from chalybclip.publish.pacing import PlatformRule
 
 
 def _fit(clip: str, platform: str, score: float, overall: float | None = None) -> ClipPlatformFit:

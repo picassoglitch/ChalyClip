@@ -15,17 +15,17 @@ import datetime as _dt
 import json
 from pathlib import Path
 
-from nexoclip.db import Database, EventsRepo, PersonasRepo, StreamsRepo, TenantsRepo
-from nexoclip.db.models import Event, StreamRow
-from nexoclip.events.log import STREAM_PROCESSED
-from nexoclip.recovery import classify_streams, recover_orphaned_pipelines
-from nexoclip.recovery.service import (
+from chalybclip.db import Database, EventsRepo, PersonasRepo, StreamsRepo, TenantsRepo
+from chalybclip.db.models import Event, StreamRow
+from chalybclip.events.log import STREAM_PROCESSED
+from chalybclip.recovery import classify_streams, recover_orphaned_pipelines
+from chalybclip.recovery.service import (
     IN_FLIGHT_SILENCE_S,
     MAX_ATTEMPTS,
     NEVER_STARTED_GRACE_S,
     RECOVERY_DISPATCHED,
 )
-from nexoclip.tenancy import bound_tenant
+from chalybclip.tenancy import bound_tenant
 
 _NOW = _dt.datetime(2026, 6, 21, 12, 0, 0, tzinfo=_dt.UTC)
 

@@ -1,4 +1,4 @@
-"""Export NexoClip's SQLite DB + on-disk artifacts to a folder for external
+"""Export ChalybClip's SQLite DB + on-disk artifacts to a folder for external
 analysis (pandas / Excel / BI tools) or for archival before a schema migration.
 
 Usage:
@@ -122,8 +122,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--db",
-        default=os.environ.get("NEXOCLIP_DB_PATH", "./nexoclip.db"),
-        help="Path to nexoclip.db (default: ./nexoclip.db or NEXOCLIP_DB_PATH).",
+        default=os.environ.get("CHALYBCLIP_DB_PATH", "./chalybclip.db"),
+        help="Path to chalybclip.db (default: ./chalybclip.db or CHALYBCLIP_DB_PATH).",
     )
     parser.add_argument(
         "--out",
@@ -143,7 +143,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--out-dir",
-        default=os.environ.get("NEXOCLIP_DEFAULT_OUTPUT_DIR", "./out"),
+        default=os.environ.get("CHALYBCLIP_DEFAULT_OUTPUT_DIR", "./out"),
         help="Path to the on-disk stream artifact dir (where manifest.json files live).",
     )
     args = parser.parse_args()

@@ -7,8 +7,8 @@ import datetime as _dt
 import httpx
 import respx
 
-from nexoclip.db.models import ConnectedAccount, PublishJob
-from nexoclip.metrics import (
+from chalybclip.db.models import ConnectedAccount, PublishJob
+from chalybclip.metrics import (
     fetch_buffer_metric,
     fetch_tiktok_metric,
     fetch_youtube_metric,

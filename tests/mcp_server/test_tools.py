@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 
-from nexoclip.db import (
+from chalybclip.db import (
     ApiTokensRepo,
     CandidatesRepo,
     ClipsRepo,
@@ -28,15 +28,15 @@ from nexoclip.db import (
     VariantsRepo,
     apply_migrations,
 )
-from nexoclip.db.models import (
+from chalybclip.db.models import (
     CandidateRow,
     ClipRow,
     LLMCallRow,
     StreamRow,
     VariantRow,
 )
-from nexoclip.errors import NexoClipError, TenancyError
-from nexoclip.mcp_server.server import (
+from chalybclip.errors import ChalybClipError, TenancyError
+from chalybclip.mcp_server.server import (
     build_server,
     resolve_tenant_from_token,
     tool_get_calibration,
@@ -49,7 +49,7 @@ from nexoclip.mcp_server.server import (
     tool_list_streams,
     tool_update_clip_status,
 )
-from nexoclip.tenancy import bound_tenant, hash_token, mint_token
+from chalybclip.tenancy import bound_tenant, hash_token, mint_token
 
 
 def _now() -> str:
@@ -210,13 +210,13 @@ async def test_get_stream_returns_counts(db: Database) -> None:
 
 async def test_get_stream_unknown_raises(db: Database) -> None:
     seeded = await _seed_basic(db)
-    with pytest.raises(NexoClipError, match="not found"):
+    with pytest.raises(ChalybClipError, match="not found"):
         await tool_get_stream(db, seeded["tenant_id"], stream_id="str_does_not_exist")
 
 
 async def test_list_candidates_404s_for_unknown_stream(db: Database) -> None:
     seeded = await _seed_basic(db)
-    with pytest.raises(NexoClipError, match="not found"):
+    with pytest.raises(ChalybClipError, match="not found"):
         await tool_list_candidates(db, seeded["tenant_id"], stream_id="str_x")
 
 
@@ -298,7 +298,7 @@ async def test_update_clip_status_walks_transition_map(db: Database) -> None:
 
 async def test_update_clip_status_invalid_transition_raises(db: Database) -> None:
     seeded = await _seed_basic(db)
-    with pytest.raises(NexoClipError, match="cannot transition"):
+    with pytest.raises(ChalybClipError, match="cannot transition"):
         await tool_update_clip_status(
             db,
             seeded["tenant_id"],
@@ -348,7 +348,7 @@ async def test_publish_metrics_repo_unused_in_mcp_module(db: Database) -> None:
     surface, even though it's imported transitively. Phase 3 #1 surfaces
     metrics through `get_calibration`/`get_cost_projection`, not direct
     repo access from agents — keeps the read surface curated."""
-    import nexoclip.mcp_server.server as srv
+    import chalybclip.mcp_server.server as srv
 
     src = Path(srv.__file__).read_text(encoding="utf-8")
     assert "PublishMetricsRepo" not in src
