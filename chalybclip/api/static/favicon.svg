@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Slice O.10 — ChalyClip favicon. Square 32x32, dark navy bg
+     matching the dashboard surface, lime accent matching the brand
+     wordmark. "NC" monogram echoes the CHALYBCLIP nav logo where
+     "CHALYB" is dim and "CLIP" is lime. Rounded corners so the icon
+     reads cleanly in browser tabs / iOS home screens. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <rect width="32" height="32" rx="6" fill="#0b1220"/>
+  <!-- N (left, dim white) -->
+  <path d="M6 9 L6 23 L8.6 23 L8.6 13.2 L14.4 23 L17 23 L17 9 L14.4 9 L14.4 18.8 L8.6 9 Z"
+        fill="#e6edf3" opacity="0.85"/>
+  <!-- C (right, lime accent) -->
+  <path d="M27 12.2 C26.1 10.4 24.4 9 22.2 9 C19.0 9 16.4 12.1 16.4 16 C16.4 19.9 19.0 23 22.2 23 C24.4 23 26.1 21.6 27 19.8 L24.6 18.7 C24.1 19.7 23.2 20.5 22.2 20.5 C20.5 20.5 19.1 18.5 19.1 16 C19.1 13.5 20.5 11.5 22.2 11.5 C23.2 11.5 24.1 12.3 24.6 13.3 Z"
+        fill="#c8ff5c"/>
+</svg>

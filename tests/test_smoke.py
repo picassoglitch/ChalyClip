@@ -1,15 +1,15 @@
 """Smoke test — proves the package installs and imports cleanly."""
 
 def test_import() -> None:
-    import nexoclip
+    import chalybclip
 
-    assert nexoclip.__version__
+    assert chalybclip.__version__
 
 
 def test_cli_help_does_not_crash() -> None:
     from typer.testing import CliRunner
 
-    from nexoclip.cli import app
+    from chalybclip.cli import app
 
     runner = CliRunner()
     result = runner.invoke(app, ["--help"])

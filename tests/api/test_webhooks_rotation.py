@@ -93,8 +93,8 @@ async def test_rotate_requires_full_scope(
     client: httpx.AsyncClient, db, tenants: dict[str, dict[str, str]]  # type: ignore[no-untyped-def]
 ) -> None:
     """A read-only token can't rotate."""
-    from nexoclip.db import ApiTokensRepo
-    from nexoclip.tenancy import bound_tenant, hash_token, mint_token
+    from chalybclip.db import ApiTokensRepo
+    from chalybclip.tenancy import bound_tenant, hash_token, mint_token
 
     create = await client.post(
         "/webhooks",

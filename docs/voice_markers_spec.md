@@ -1,9 +1,9 @@
-# NexoClip — Voice-Marker Clip Extraction + Branding System
+# ChalyClip — Voice-Marker Clip Extraction + Branding System
 
-Spec for Claude Code. Phase 0 add-on to existing NexoClip scaffold.
+Spec for Claude Code. Phase 0 add-on to existing ChalyClip scaffold.
 
 **Execution model:** POST-STREAM BATCH. Users upload finished VODs or
-connect Google Drive / cloud storage for automated ingestion. NexoClip
+connect Google Drive / cloud storage for automated ingestion. ChalyClip
 scans the audio for voice-trigger phrases and extracts clips around those
 timestamps. Nothing runs during the stream itself.
 
@@ -14,7 +14,7 @@ timestamps. Nothing runs during the stream itself.
 ### 1.1 Concept
 
 The streamer says trigger phrases during their stream as natural verbal
-bookmarks. After the stream, NexoClip processes the VOD, transcribes the
+bookmarks. After the stream, ChalyClip processes the VOD, transcribes the
 audio, finds those phrases, and extracts clips around each timestamp.
 
 Two phrases, two extraction behaviors:
@@ -33,7 +33,7 @@ full VOD is the buffer. We just seek into it.
 
 ### 1.2 Input sources
 
-Three ways VODs reach NexoClip:
+Three ways VODs reach ChalyClip:
 
 | Source | Mechanism | Tenant action |
 |---|---|---|
@@ -49,10 +49,10 @@ enqueues a `process_vod` job.
 Setup once, then forget:
 
 1. User connects Google Drive (OAuth)
-2. User picks/creates a folder, e.g. "/NexoClip Inbox"
+2. User picks/creates a folder, e.g. "/ChalyClip Inbox"
 3. User configures their streaming setup to save VODs there
    (OBS → Output → save to Drive-synced folder; or Streamlabs Cloud)
-4. NexoClip's Drive watcher polls folder every 60s (or uses Drive push
+4. ChalyClip's Drive watcher polls folder every 60s (or uses Drive push
    notifications)
 5. New file → download to S3/R2 → enqueue `process_vod`
 6. User sees clips in their inbox the next morning
@@ -140,7 +140,7 @@ auto-detect on multi-tenant cloud. For Spanglish streams, `small` with
 ### 1.5 Job orchestration
 
 ```
-Redis + RQ (existing NexoClip queue)
+Redis + RQ (existing ChalyClip queue)
 
 Queues:
   - drive_ingest        (light)
@@ -239,7 +239,7 @@ Visual ML in Phase 2.
 CREATE TABLE brand_kits (
   id UUID PRIMARY KEY,
   tenant_id UUID NOT NULL REFERENCES tenants(id),
-  name TEXT NOT NULL,              -- "AARA", "Aldo Villanueva", "Nexo Academy"
+  name TEXT NOT NULL,              -- "AARA", "Aldo Villanueva", "Chalyb Academy"
   is_default BOOLEAN DEFAULT false,
   -- Colors
   primary_color TEXT NOT NULL,     -- "#FF3366"
@@ -500,7 +500,7 @@ Each step is a discrete worker job so failures retry idempotently.
 | SVG rasterize | `cairosvg` |
 | Thumbnail compositing | `Pillow` |
 | Frame analysis | `opencv-python` (face detection, scene change) |
-| Job queue | Redis + RQ (consistent with NexoClip v0.5) |
+| Job queue | Redis + RQ (consistent with ChalyClip v0.5) |
 | Upload protocol | `tus.py` (server side) or S3 multipart presigned URLs |
 | WebSocket UI events | FastAPI WebSocket + Angular RxJS |
 

@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from nexoclip.errors import DetectionError
-from nexoclip.vision import detect_scene_cuts
+from chalybclip.errors import DetectionError
+from chalybclip.vision import detect_scene_cuts
 
 from ._synth import build_scene_cut_clip, write_video
 

@@ -12,20 +12,20 @@ import pytest
 import pytest_asyncio
 import respx
 
-from nexoclip.db import (
+from chalybclip.db import (
     Database,
     TenantsRepo,
     ZernioCommunityRepo,
     ZernioEventsRepo,
     apply_migrations,
 )
-from nexoclip.integrations.zernio.community import (
+from chalybclip.integrations.zernio.community import (
     build_discord_embed,
     build_notification_payload,
     build_weekly_digest_text,
 )
-from nexoclip.integrations.zernio.events import process_zernio_event
-from nexoclip.settings import get_settings
+from chalybclip.integrations.zernio.events import process_zernio_event
+from chalybclip.settings import get_settings
 
 _ZBASE = "https://zernio.com/api/v1"
 
@@ -86,7 +86,7 @@ def test_weekly_digest_text_handles_missing_metrics() -> None:
 
 @pytest.fixture
 def comm_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    monkeypatch.setenv("NEXOCLIP_ZERNIO_API_KEY", "sk_test_comm")
+    monkeypatch.setenv("CHALYBCLIP_ZERNIO_API_KEY", "sk_test_comm")
     get_settings.cache_clear()
     try:
         yield

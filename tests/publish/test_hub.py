@@ -13,13 +13,13 @@ import httpx
 import pytest
 import respx
 
-from nexoclip.publish.hub import (
+from chalybclip.publish.hub import (
     HubPublishError,
     next_best_time,
     plan_batch_times,
     validate_media_url,
 )
-from nexoclip.settings import Settings
+from chalybclip.settings import Settings
 
 _NOW = _dt.datetime(2026, 6, 10, 8, 0, tzinfo=_dt.UTC)  # Wednesday 08:00 UTC
 
@@ -76,7 +76,7 @@ def test_batch_prefers_best_time_hours_for_matching_weekday() -> None:
 
 def test_engagement_path_does_not_pad_with_fallback_hours() -> None:
     # One engagement slot, on Wednesdays only, at a NON-fallback hour.
-    from nexoclip.publish.hub import _FALLBACK_HOURS
+    from chalybclip.publish.hub import _FALLBACK_HOURS
     slots = [{"day_of_week": 2, "hour": 14, "avg_engagement": 500.0, "post_count": 9}]
     times = plan_batch_times(
         3, now=_NOW, cap_per_day=4, existing_today=0, best_slots=slots,
@@ -92,7 +92,7 @@ def test_engagement_path_does_not_pad_with_fallback_hours() -> None:
 
 
 def test_fallback_path_uses_fallback_hours_when_no_slots() -> None:
-    from nexoclip.publish.hub import _FALLBACK_HOURS
+    from chalybclip.publish.hub import _FALLBACK_HOURS
     times = plan_batch_times(3, now=_NOW, cap_per_day=4, existing_today=0)
     assert len(times) == 3
     assert all(t.hour in _FALLBACK_HOURS for t in times)
@@ -102,7 +102,7 @@ def test_engagement_short_falls_back_as_last_resort() -> None:
     # One proven slot (Wed 14:00) but a batch too big for the Wednesdays in
     # the horizon to absorb → leftovers must land on fallback hours, NOT be
     # dropped (which would make the caller post them immediately).
-    from nexoclip.publish.hub import _FALLBACK_HOURS
+    from chalybclip.publish.hub import _FALLBACK_HOURS
     slots = [{"day_of_week": 2, "hour": 14, "avg_engagement": 500.0, "post_count": 9}]
     times = plan_batch_times(
         8, now=_NOW, cap_per_day=4, existing_today=0, best_slots=slots,
@@ -257,8 +257,8 @@ async def test_media_url_non_http_rejected() -> None:
 
 
 def test_hub_service_token_map_parses_pairs() -> None:
-    s = Settings(hub_service_tokens="nexoobs:tok_a, nexoai:tok_b,broken,:empty")
-    assert s.hub_service_token_map() == {"tok_a": "nexoobs", "tok_b": "nexoai"}
+    s = Settings(hub_service_tokens="chalybobs:tok_a, chalyb:tok_b,broken,:empty")
+    assert s.hub_service_token_map() == {"tok_a": "chalybobs", "tok_b": "chalyb"}
 
 
 def test_hub_service_token_map_empty_when_unset() -> None:

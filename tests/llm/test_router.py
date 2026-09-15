@@ -10,9 +10,9 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel
 
-from nexoclip.errors import LLMError
-from nexoclip.llm import LLMRouter, VariantBatch
-from nexoclip.llm.config import ProviderConfig
+from chalybclip.errors import LLMError
+from chalybclip.llm import LLMRouter, VariantBatch
+from chalybclip.llm.config import ProviderConfig
 
 from ._fakes import FakeProvider
 from ._fixtures import make_llm_config
@@ -239,7 +239,7 @@ def test_billing_error_trips_lockout_and_skips_provider(tmp_path: Path) -> None:
     the first failure must trip a per-provider lockout so subsequent calls
     fail fast WITHOUT hitting the API — one drained account produced 1,868
     identical failed calls in two weeks before this breaker existed."""
-    from nexoclip.llm.router import reset_billing_lockouts
+    from chalybclip.llm.router import reset_billing_lockouts
 
     reset_billing_lockouts()
     try:
@@ -280,7 +280,7 @@ def test_billing_error_trips_lockout_and_skips_provider(tmp_path: Path) -> None:
 def test_billing_lockout_expires_with_the_clock(tmp_path: Path) -> None:
     import datetime as _dt
 
-    from nexoclip.llm.router import reset_billing_lockouts
+    from chalybclip.llm.router import reset_billing_lockouts
 
     reset_billing_lockouts()
     try:

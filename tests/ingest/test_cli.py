@@ -9,8 +9,8 @@ from typing import Any
 import pytest
 from typer.testing import CliRunner
 
-from nexoclip.cli import app
-from nexoclip.ingest import service as ingest_service
+from chalybclip.cli import app
+from chalybclip.ingest import service as ingest_service
 
 
 def test_ingest_help() -> None:

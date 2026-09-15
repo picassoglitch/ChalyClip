@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from nexoclip.detect.framing import (
+from chalybclip.detect.framing import (
     FramingVerdict,
     SubjectBox,
     _verdict_horizontal,

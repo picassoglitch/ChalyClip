@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from nexoclip.llm import FrameCache, FrameStore, MemoryFrameStore
+from chalybclip.llm import FrameCache, FrameStore, MemoryFrameStore
 
 
 def test_memory_frame_store_is_alias_for_frame_cache() -> None:

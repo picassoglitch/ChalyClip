@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from nexoclip.errors import DetectionError
-from nexoclip.vision import compute_motion_energy
+from chalybclip.errors import DetectionError
+from chalybclip.vision import compute_motion_energy
 
 from ._synth import build_motion_clip
 

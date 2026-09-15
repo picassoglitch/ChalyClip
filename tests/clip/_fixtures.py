@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from nexoclip.detect import Candidate
-from nexoclip.ingest import Stream
+from chalybclip.detect import Candidate
+from chalybclip.ingest import Stream
 
 
 def seed_stream(

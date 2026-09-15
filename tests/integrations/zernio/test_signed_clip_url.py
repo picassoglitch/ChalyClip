@@ -16,14 +16,14 @@ import time
 
 import pytest
 
-from nexoclip.api.routers.internal import (
+from chalybclip.api.routers.internal import (
     _IMMEDIATE_PUBLISH_TTL_S,
     _SIGNED_CLIP_MAX_TTL_S,
     _verify_signed_params,
     mint_signed_clip_url,
     signed_clip_ttl_for_schedule,
 )
-from nexoclip.settings import get_settings
+from chalybclip.settings import get_settings
 
 
 @pytest.fixture(autouse=True)
@@ -40,11 +40,11 @@ def test_mint_then_parse_url_roundtrip() -> None:
     url = mint_signed_clip_url(
         clip_id="clp_xyz",
         tenant_id="ten_alice",
-        base_url="https://nexoclip.test",
+        base_url="https://chalybclip.test",
         ttl_seconds=600,
     )
     assert url.startswith(
-        "https://nexoclip.test/api/internal/clip/clp_xyz?tenant=ten_alice&exp="
+        "https://chalybclip.test/api/internal/clip/clp_xyz?tenant=ten_alice&exp="
     )
     assert "&sig=" in url
 
@@ -54,7 +54,7 @@ def test_verify_accepts_signed_url() -> None:
     url = mint_signed_clip_url(
         clip_id="clp_xyz",
         tenant_id="ten_alice",
-        base_url="https://nexoclip.test",
+        base_url="https://chalybclip.test",
         ttl_seconds=600,
     )
     exp = int(re.search(r"exp=(\d+)", url).group(1))
@@ -75,7 +75,7 @@ def test_verify_rejects_tampered_sig() -> None:
     url = mint_signed_clip_url(
         clip_id="clp_xyz",
         tenant_id="ten_alice",
-        base_url="https://nexoclip.test",
+        base_url="https://chalybclip.test",
         ttl_seconds=600,
     )
     exp = int(re.search(r"exp=(\d+)", url).group(1))
@@ -173,7 +173,7 @@ def test_clip_route_accepts_a_scheduled_url_days_out() -> None:
     url = mint_signed_clip_url(
         clip_id="clp_sched",
         tenant_id="ten_alice",
-        base_url="https://nexoclip.test",
+        base_url="https://chalybclip.test",
         ttl_seconds=signed_clip_ttl_for_schedule(when),
     )
     import re
@@ -192,23 +192,23 @@ async def test_resolver_falls_back_to_local_url_without_store(
     monkeypatch: pytest.MonkeyPatch, tmp_path: object
 ) -> None:
     """No object storage configured → the local signed-URL path (unchanged)."""
-    import nexoclip.integrations.storage as storage_mod
-    from nexoclip.api.routers.internal import resolve_publish_media_url
+    import chalybclip.integrations.storage as storage_mod
+    from chalybclip.api.routers.internal import resolve_publish_media_url
 
     monkeypatch.setattr(storage_mod, "build_artifact_store", lambda _s: None)
     url = await resolve_publish_media_url(
-        clip_id="clp_x", tenant_id="ten_a", base_url="https://nexoclip.test",
+        clip_id="clp_x", tenant_id="ten_a", base_url="https://chalybclip.test",
         rendered_path=__import__("pathlib").Path("x.mp4"), ttl_seconds=600,
     )
-    assert url.startswith("https://nexoclip.test/api/internal/clip/clp_x")
+    assert url.startswith("https://chalybclip.test/api/internal/clip/clp_x")
 
 
 async def test_resolver_uploads_once_and_returns_public_url(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """With a public bucket → upload once, return the STABLE public url."""
-    import nexoclip.integrations.storage as storage_mod
-    from nexoclip.api.routers.internal import resolve_publish_media_url
+    import chalybclip.integrations.storage as storage_mod
+    from chalybclip.api.routers.internal import resolve_publish_media_url
 
     uploads: list[str] = []
 
@@ -228,7 +228,7 @@ async def test_resolver_uploads_once_and_returns_public_url(
     monkeypatch.setattr(storage_mod, "build_artifact_store", lambda _s: _Store())
     import pathlib
     url = await resolve_publish_media_url(
-        clip_id="clp_x", tenant_id="ten_a", base_url="https://nexoclip.test",
+        clip_id="clp_x", tenant_id="ten_a", base_url="https://chalybclip.test",
         rendered_path=pathlib.Path("x.mp4"), ttl_seconds=600,
     )
     assert url == "https://pub.r2.dev/clips/ten_a/clp_x/clip_render_1080.mp4"
@@ -239,8 +239,8 @@ async def test_resolver_presigns_when_no_public_base(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Bucket without a public base → presigned (≤7d) url, still off-box."""
-    import nexoclip.integrations.storage as storage_mod
-    from nexoclip.api.routers.internal import resolve_publish_media_url
+    import chalybclip.integrations.storage as storage_mod
+    from chalybclip.api.routers.internal import resolve_publish_media_url
 
     class _Store:
         async def exists(self, *, key: str) -> bool:
@@ -258,7 +258,7 @@ async def test_resolver_presigns_when_no_public_base(
     monkeypatch.setattr(storage_mod, "build_artifact_store", lambda _s: _Store())
     import pathlib
     url = await resolve_publish_media_url(
-        clip_id="clp_x", tenant_id="ten_a", base_url="https://nexoclip.test",
+        clip_id="clp_x", tenant_id="ten_a", base_url="https://chalybclip.test",
         rendered_path=pathlib.Path("x.mp4"), ttl_seconds=600,
     )
     assert "presigned" in url and "clips/ten_a/clp_x" in url
@@ -268,7 +268,7 @@ def test_mint_refuses_without_secret(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         get_settings(), "internal_signing_secret", "", raising=False,
     )
-    with pytest.raises(RuntimeError, match="NEXOCLIP_INTERNAL_SIGNING_SECRET"):
+    with pytest.raises(RuntimeError, match="CHALYBCLIP_INTERNAL_SIGNING_SECRET"):
         mint_signed_clip_url(
             clip_id="x", tenant_id="y", base_url="https://x.test",
         )

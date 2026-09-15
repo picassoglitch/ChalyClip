@@ -1,0 +1,361 @@
+/* ChalyClip shell + ingest hub — sidebar nav + single hero ingest card.
+ *
+ * Loaded by base.html AFTER chalybclip-theme.css, so it reuses every token
+ * defined there (--nc-lime, --nc-bg-*, --nc-text-*, --nc-warn, --nc-radius,
+ * --nc-font-mono, --nc-hairline). No new colors — the theme is already the
+ * electric-lime chalyb palette. Only two NEW layout-only tokens below.
+ */
+
+:root {
+  --nc-side-w: 236px;            /* sidebar width; the rail collapse re-sets it */
+  --nc-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+/* ---------- Site shell: fixed left sidebar ---------- */
+
+/* Offset all page content past the fixed sidebar. The sidebar overlays this
+ * padding band; .nc-page keeps its own max-width centering inside it. */
+body {
+  padding-left: var(--nc-side-w);
+}
+
+.nc-side {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: var(--nc-side-w);
+  background: var(--nc-bg-surface);
+  border-right: var(--nc-hairline);
+  display: flex;
+  flex-direction: column;
+  padding: 18px 12px;
+  z-index: 60;
+}
+
+.nc-side__brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  font-size: 16px;
+  color: #fff;
+  text-decoration: none;
+  padding: 6px 10px 18px;
+}
+.nc-side__brand:hover { text-decoration: none; opacity: 0.92; }
+.nc-side__brand-accent { color: var(--nc-lime); }
+.nc-side__brand-mini { display: none; color: var(--nc-lime); font-size: 18px; font-weight: 700; }
+
+.nc-side__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.nc-side__nav::-webkit-scrollbar { display: none; }
+
+.nc-side__link {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 11px;
+  border-radius: 9px;
+  color: var(--nc-text-muted);
+  text-decoration: none;
+  font-size: 13.5px;
+  font-weight: 500;
+  position: relative;
+  transition: background 140ms ease, color 140ms ease;
+  white-space: nowrap;
+}
+.nc-side__link i { font-size: 18px; width: 18px; flex-shrink: 0; text-align: center; }
+.nc-side__link:hover { background: rgba(255, 255, 255, 0.03); color: var(--nc-text); text-decoration: none; }
+.nc-side__link.is-active { color: var(--nc-lime); background: var(--nc-lime-faint); }
+.nc-side__link.is-active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--nc-lime);
+  box-shadow: 0 0 8px var(--nc-lime-dim);
+}
+.nc-side__link:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--nc-lime-faint);
+}
+
+.nc-side__sep {
+  height: 1px;
+  margin: 8px 10px;
+  background: var(--nc-hairline-color, rgba(200, 255, 92, 0.12));
+}
+
+.nc-side__foot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 14px;
+  margin-top: 8px;
+  border-top: var(--nc-hairline);
+}
+.nc-side__foot form { margin: 0; }
+.nc-side__foot .nc-chip {
+  width: 100%;
+  justify-content: flex-start;
+  padding: 7px 11px;
+  font-size: 12px;
+  border-radius: 10px;
+}
+.nc-side__foot .nc-btn {
+  width: 100%;
+  justify-content: center;
+}
+
+/* ---------- Ingest hub: centered stage ---------- */
+
+.nc-page--ingest {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 2 * var(--nc-pad-page));
+  max-width: none;
+}
+
+.nc-ingest { width: 100%; max-width: 560px; }
+
+.nc-ingest__alert { margin-bottom: 20px; }
+
+.nc-ingest-card {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(180deg, var(--nc-bg-panel) 0%, var(--nc-bg-base) 100%);
+  border: var(--nc-hairline);
+  border-radius: 16px;
+  padding: 30px;
+  box-shadow: 0 30px 80px -40px rgba(0, 0, 0, 0.9);
+}
+/* Faint lime gradient border accent, top-left. */
+.nc-ingest-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 16px;
+  padding: 1px;
+  background: linear-gradient(120deg, var(--nc-lime-dim), transparent 40%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.nc-ingest__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.nc-ingest__title { font-size: 18px; font-weight: 600; margin: 0; color: var(--nc-text); }
+.nc-ingest__tag { font-size: 11px; color: var(--nc-text-muted); white-space: nowrap; font-weight: 500; }
+.nc-ingest__tag.is-accent { color: var(--nc-lime); }
+.nc-ingest__help { color: var(--nc-text-muted); font-size: 13.5px; line-height: 1.55; margin: 0 0 20px; }
+
+.nc-ingest__flabel {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--nc-text-muted);
+  margin-bottom: 8px;
+  display: block;
+}
+.nc-ingest__supported { font-size: 12px; color: var(--nc-text-muted); margin-top: 10px; }
+.nc-ingest__supported b { color: var(--nc-text-body); font-weight: 500; }
+.nc-ingest__foot { font-size: 12px; color: var(--nc-text-muted); margin-top: 16px; line-height: 1.6; }
+.nc-ingest__cta { margin-top: 22px; }
+
+.nc-envchip {
+  font-family: var(--nc-font-mono);
+  font-size: 11.5px;
+  background: var(--nc-bg-base);
+  border: var(--nc-hairline);
+  color: var(--nc-lime);
+  padding: 2px 7px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+/* Panel cross-fade on mode change */
+.nc-ingest__panel[hidden] { display: none; }
+.nc-ingest__panel { animation: nc-ingest-fade 0.32s var(--nc-ease); }
+@keyframes nc-ingest-fade {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Dropzone (upload) */
+.nc-drop {
+  border: 1.5px dashed var(--nc-text-muted);
+  border-radius: 12px;
+  padding: 34px 20px;
+  text-align: center;
+  transition: border-color 0.18s, background 0.18s;
+  cursor: pointer;
+}
+.nc-drop:hover, .nc-drop.is-drag {
+  border-color: var(--nc-lime);
+  background: var(--nc-lime-faint);
+}
+.nc-drop__ic { font-size: 34px; color: var(--nc-text-muted); margin-bottom: 8px; }
+.nc-drop strong { display: block; font-size: 14px; font-weight: 600; margin-bottom: 4px; color: var(--nc-text); }
+.nc-drop span { font-size: 12.5px; color: var(--nc-text-muted); }
+.nc-drop__formats { margin-top: 10px; font-family: var(--nc-font-mono); font-size: 11px; color: var(--nc-text-muted); }
+.nc-drop__name { margin-top: 10px; font-size: 12.5px; color: var(--nc-lime); font-family: var(--nc-font-mono); word-break: break-all; }
+
+/* Read-only credential rows (live) */
+.nc-ro {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--nc-bg-raised);
+  border: var(--nc-hairline);
+  border-radius: 10px;
+  padding: 11px 13px;
+}
+.nc-ro__v {
+  flex: 1;
+  font-family: var(--nc-font-mono);
+  font-size: 12.5px;
+  color: var(--nc-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Connected folder row (drive) */
+.nc-connected {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--nc-bg-raised);
+  border: var(--nc-hairline);
+  border-radius: 10px;
+  padding: 13px 15px;
+}
+.nc-connected__ic {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: var(--nc-lime-faint);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--nc-lime);
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.nc-connected__nm { flex: 1; min-width: 0; }
+.nc-connected__nm b { font-size: 13.5px; display: block; color: var(--nc-text); }
+.nc-connected__nm small { font-size: 11.5px; color: var(--nc-text-muted); }
+
+/* ---------- Mode selector (tablist) ---------- */
+
+.nc-modes-hint {
+  text-align: center;
+  font-size: 12px;
+  color: var(--nc-text-muted);
+  margin-top: 28px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.nc-modes {
+  display: flex;
+  gap: 18px;
+  justify-content: center;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+.nc-mode {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 11px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  width: 96px;
+  font-family: var(--nc-font);
+}
+.nc-mode__ic {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--nc-bg-raised);
+  border: var(--nc-hairline);
+  transition: background 0.22s var(--nc-ease), border-color 0.22s var(--nc-ease),
+    color 0.22s var(--nc-ease), box-shadow 0.22s var(--nc-ease), transform 0.22s var(--nc-ease);
+  color: var(--nc-text-muted);
+}
+.nc-mode__ic i { font-size: 28px; }
+.nc-mode__lbl {
+  font-size: 12px;
+  color: var(--nc-text-muted);
+  font-weight: 500;
+  transition: color 0.2s;
+  text-align: center;
+  line-height: 1.2;
+}
+.nc-mode:hover .nc-mode__ic { border-color: var(--nc-lime-dim); color: var(--nc-text); transform: translateY(-2px); }
+.nc-mode:hover .nc-mode__lbl { color: var(--nc-text); }
+.nc-mode[aria-selected="true"] .nc-mode__ic {
+  background: var(--nc-lime-faint);
+  border-color: var(--nc-lime);
+  color: var(--nc-lime);
+  box-shadow: 0 0 0 4px var(--nc-lime-faint), 0 8px 26px -8px var(--nc-lime-dim);
+}
+.nc-mode[aria-selected="true"] .nc-mode__lbl { color: var(--nc-lime); }
+.nc-mode:focus-visible { outline: none; }
+.nc-mode:focus-visible .nc-mode__ic { box-shadow: 0 0 0 3px var(--nc-lime-faint); }
+
+/* ---------- Responsive: 64px icon rail ---------- */
+
+@media (max-width: 860px) {
+  :root { --nc-side-w: 64px; }
+  .nc-side__link span,
+  .nc-side__foot .nc-chip span,
+  .nc-side__brand-prefix,
+  .nc-side__brand-accent { display: none; }
+  .nc-side__brand { justify-content: center; padding: 6px 0 18px; }
+  .nc-side__brand-mini { display: inline; }
+  .nc-side__link { justify-content: center; padding: 11px; }
+  .nc-side__foot .nc-chip { justify-content: center; padding: 9px; }
+  .nc-side__foot .nc-btn span { display: none; }
+}
+
+@media (max-width: 560px) {
+  .nc-page--ingest { padding: 28px 16px; }
+  .nc-ingest-card { padding: 22px; }
+  .nc-modes { gap: 12px; }
+  .nc-mode { width: 76px; }
+  .nc-mode__ic { width: 60px; height: 60px; }
+  .nc-mode__ic i { font-size: 24px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nc-ingest__panel { animation: none; }
+  .nc-mode:hover .nc-mode__ic { transform: none; }
+  .nc-mode__ic { transition: none; }
+}

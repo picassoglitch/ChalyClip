@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from nexoclip.config import DetectionConfig, VoiceDetectorConfig
-from nexoclip.ingest import Stream
-from nexoclip.transcribe import Segment, Transcript, Word
+from chalybclip.config import DetectionConfig, VoiceDetectorConfig
+from chalybclip.ingest import Stream
+from chalybclip.transcribe import Segment, Transcript, Word
 
 
 def make_stream(stream_id: str = "str_01TEST", tenant_id: str = "default") -> Stream:

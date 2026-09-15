@@ -8,9 +8,9 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from nexoclip.db import Database, LLMCallsRepo, TenantsRepo, apply_migrations
-from nexoclip.llm import LLMRouter
-from nexoclip.tenancy import bound_tenant
+from chalybclip.db import Database, LLMCallsRepo, TenantsRepo, apply_migrations
+from chalybclip.llm import LLMRouter
+from chalybclip.tenancy import bound_tenant
 
 from ._fakes import FakeProvider
 from ._fixtures import make_llm_config

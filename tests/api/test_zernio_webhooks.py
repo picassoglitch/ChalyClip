@@ -22,7 +22,7 @@ import pytest
 import pytest_asyncio
 import respx
 
-from nexoclip.db import (
+from chalybclip.db import (
     Database,
     EventsRepo,
     TenantsRepo,
@@ -30,8 +30,8 @@ from nexoclip.db import (
     ZernioEventsRepo,
     ZernioPublishesRepo,
 )
-from nexoclip.settings import get_settings
-from nexoclip.tenancy import bound_tenant
+from chalybclip.settings import get_settings
+from chalybclip.tenancy import bound_tenant
 
 _SECRET = "zernio_webhook_secret_x"
 _PATH = "/api/webhooks/zernio"
@@ -39,7 +39,7 @@ _PATH = "/api/webhooks/zernio"
 
 @pytest.fixture
 def webhook_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    monkeypatch.setenv("NEXOCLIP_ZERNIO_WEBHOOK_SECRET", _SECRET)
+    monkeypatch.setenv("CHALYBCLIP_ZERNIO_WEBHOOK_SECRET", _SECRET)
     get_settings.cache_clear()
     try:
         yield
@@ -83,7 +83,7 @@ async def alice(
 async def test_missing_secret_config_is_503(
     client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.delenv("NEXOCLIP_ZERNIO_WEBHOOK_SECRET", raising=False)
+    monkeypatch.delenv("CHALYBCLIP_ZERNIO_WEBHOOK_SECRET", raising=False)
     get_settings.cache_clear()
     try:
         resp = await client.post(_PATH, content=b"{}")
@@ -324,7 +324,7 @@ async def test_fanout_delivers_to_tenant_subscriber_with_hmac(
 ) -> None:
     with bound_tenant(alice["id"]):
         await WebhookSubscriptionsRepo(db).create(
-            url="https://nexoobs.test/hooks/nexoclip",
+            url="https://chalybobs.test/hooks/chalybclip",
             types=["zernio.*"],
             secret="sub_secret_1",
         )
@@ -339,7 +339,7 @@ async def test_fanout_delivers_to_tenant_subscriber_with_hmac(
         },
     }
     with respx.mock() as mock:
-        route = mock.post("https://nexoobs.test/hooks/nexoclip").mock(
+        route = mock.post("https://chalybobs.test/hooks/chalybclip").mock(
             return_value=httpx.Response(200)
         )
         resp = await _post_event(client, payload)
@@ -347,7 +347,7 @@ async def test_fanout_delivers_to_tenant_subscriber_with_hmac(
     assert route.called
     delivered = route.calls.last.request
     # Our own HMAC, verifiable by the subscriber.
-    sig = delivered.headers["X-Nexoclip-Signature"]
+    sig = delivered.headers["X-Chalybclip-Signature"]
     expected = hmac.new(
         b"sub_secret_1", delivered.content, hashlib.sha256
     ).hexdigest()

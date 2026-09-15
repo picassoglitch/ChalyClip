@@ -6,7 +6,7 @@ import datetime as _dt
 
 import pytest
 
-from nexoclip.db import (
+from chalybclip.db import (
     CandidatesRepo,
     ClipsRepo,
     ConnectedAccountsRepo,
@@ -18,14 +18,14 @@ from nexoclip.db import (
     TenantsRepo,
     VariantsRepo,
 )
-from nexoclip.db.models import (
+from chalybclip.db.models import (
     CandidateRow,
     ClipRow,
     StreamRow,
     VariantRow,
 )
-from nexoclip.errors import TenancyError
-from nexoclip.tenancy import bound_tenant
+from chalybclip.errors import TenancyError
+from chalybclip.tenancy import bound_tenant
 
 
 def _now() -> str:

@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from nexoclip.db import Database, StreamsRepo, TenantsRepo
-from nexoclip.db.models import StreamRow
-from nexoclip.retention import reclaim_sources_until_free
-from nexoclip.tenancy import bound_tenant
+from chalybclip.db import Database, StreamsRepo, TenantsRepo
+from chalybclip.db.models import StreamRow
+from chalybclip.retention import reclaim_sources_until_free
+from chalybclip.tenancy import bound_tenant
 
 from .conftest import days_ago_iso
 
@@ -153,7 +153,7 @@ async def test_skips_stream_with_pipeline_in_flight(
     stretches, so the mtime check can't see it — the in-flight registry
     must protect it. Regression: the reclaimer ate a source mid-run and
     the run died at the next step that read the file."""
-    from nexoclip.jobs import pipeline_active
+    from chalybclip.jobs import pipeline_active
 
     t = await TenantsRepo(retention_db).create(name="Aldo")
     running = await _seed_source(

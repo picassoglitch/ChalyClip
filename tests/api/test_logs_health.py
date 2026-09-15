@@ -12,7 +12,7 @@ import logging
 
 import pytest
 
-from nexoclip.logbuffer import (
+from chalybclip.logbuffer import (
     MAX_FIELD_CHARS,
     LogEntry,
     LogRingBuffer,
@@ -133,9 +133,9 @@ def test_counts_bucket_by_recency_and_level() -> None:
 @pytest.fixture
 def _admin(tenants, monkeypatch):
     """Make alice an admin for the duration of the test."""
-    from nexoclip.settings import get_settings
+    from chalybclip.settings import get_settings
 
-    monkeypatch.setenv("NEXOCLIP_ADMIN_TENANT_IDS", tenants["alice"]["id"])
+    monkeypatch.setenv("CHALYBCLIP_ADMIN_TENANT_IDS", tenants["alice"]["id"])
     get_settings.cache_clear()
     yield tenants["alice"]
     get_settings.cache_clear()

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from nexoclip.publish.assets import build_platform_assets
+from chalybclip.publish.assets import build_platform_assets
 
 
 def test_distinct_filenames_per_platform() -> None:

@@ -14,11 +14,11 @@ from pathlib import Path
 
 import pytest
 
-from nexoclip.db import Database, TenantsRepo, VisualSignalsRepo, apply_migrations
-from nexoclip.errors import DetectionError
-from nexoclip.ingest import Stream
-from nexoclip.tenancy import bound_tenant
-from nexoclip.vision import (
+from chalybclip.db import Database, TenantsRepo, VisualSignalsRepo, apply_migrations
+from chalybclip.errors import DetectionError
+from chalybclip.ingest import Stream
+from chalybclip.tenancy import bound_tenant
+from chalybclip.vision import (
     FaceFrame,
     MotionFrame,
     SceneCut,
@@ -26,7 +26,7 @@ from nexoclip.vision import (
     analyze_video,
     load_visual_signals,
 )
-from nexoclip.vision import service as vision_service
+from chalybclip.vision import service as vision_service
 
 
 def _stub_detectors(
@@ -185,8 +185,8 @@ def test_writes_to_db_when_provided(
             with bound_tenant("ten_a"):
                 stream = _stream(tmp_path)
                 # Streams FK requires the row to exist.
-                from nexoclip.db.adapters import stream_to_row
-                from nexoclip.db.repos import StreamsRepo
+                from chalybclip.db.adapters import stream_to_row
+                from chalybclip.db.repos import StreamsRepo
 
                 await StreamsRepo(db).upsert(stream_to_row(stream))
                 await analyze_video(
@@ -222,8 +222,8 @@ def test_db_rerun_replaces_prior_batch(
         try:
             with bound_tenant("ten_a"):
                 stream = _stream(tmp_path)
-                from nexoclip.db.adapters import stream_to_row
-                from nexoclip.db.repos import StreamsRepo
+                from chalybclip.db.adapters import stream_to_row
+                from chalybclip.db.repos import StreamsRepo
 
                 await StreamsRepo(db).upsert(stream_to_row(stream))
                 await analyze_video(

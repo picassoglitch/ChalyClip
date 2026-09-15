@@ -19,7 +19,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from nexoclip.api.status_gate import require_paid_tier, require_top_tier
+from chalybclip.api.status_gate import require_paid_tier, require_top_tier
 
 
 def _req(tier: str | None) -> SimpleNamespace:

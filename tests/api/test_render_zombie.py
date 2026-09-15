@@ -24,8 +24,8 @@ from pathlib import Path
 import httpx
 import pytest
 
-from nexoclip.db import Database
-from nexoclip.tenancy import bound_tenant
+from chalybclip.db import Database
+from chalybclip.tenancy import bound_tenant
 
 from .conftest import auth
 
@@ -120,7 +120,7 @@ async def test_render_status_marks_zombie_failed_after_timeout(
     # DB row was flipped to failed (idempotent on subsequent polls).
     with bound_tenant(tenant_id):
         clip = await __import__(
-            "nexoclip.db", fromlist=["ClipsRepo"]
+            "chalybclip.db", fromlist=["ClipsRepo"]
         ).ClipsRepo(db).get("clp_zombie")
     assert clip is not None
     assert clip.render_state == "failed"
@@ -212,7 +212,7 @@ async def test_download_auto_recovers_zombie_render(
     async def fake_runner(**kwargs: object) -> None:
         scheduled.append(dict(kwargs))
     monkeypatch.setattr(
-        "nexoclip.api._clip_render.render_clip_in_background", fake_runner,
+        "chalybclip.api._clip_render.render_clip_in_background", fake_runner,
     )
 
     r = await client.get(
@@ -340,7 +340,7 @@ async def test_download_does_not_recover_fresh_render(
     async def fake_runner(**kwargs: object) -> None:
         scheduled.append(dict(kwargs))
     monkeypatch.setattr(
-        "nexoclip.api._clip_render.render_clip_in_background", fake_runner,
+        "chalybclip.api._clip_render.render_clip_in_background", fake_runner,
     )
 
     r = await client.get(

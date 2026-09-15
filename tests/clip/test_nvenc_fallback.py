@@ -18,10 +18,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from nexoclip.clip import encoders
-from nexoclip.clip import service as clip_service
-from nexoclip.config import ClipConfig
-from nexoclip.errors import ClipError
+from chalybclip.clip import encoders
+from chalybclip.clip import service as clip_service
+from chalybclip.config import ClipConfig
+from chalybclip.errors import ClipError
 
 
 @pytest.fixture(autouse=True)

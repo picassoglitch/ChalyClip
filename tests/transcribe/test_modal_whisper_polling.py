@@ -23,16 +23,16 @@ import pytest
 # into the autouse no-op patch.
 _REAL_SLEEP = asyncio.sleep
 
-from nexoclip.errors import TranscriptionError
-from nexoclip.transcribe.models import Transcript
-from nexoclip.transcribe.providers import modal_whisper
-from nexoclip.transcribe.providers.base import TranscribeRequest
+from chalybclip.errors import TranscriptionError
+from chalybclip.transcribe.models import Transcript
+from chalybclip.transcribe.providers import modal_whisper
+from chalybclip.transcribe.providers.base import TranscribeRequest
 
 
 @pytest.fixture(autouse=True)
 def _no_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
     """Make the poll loop tick instantly. The loop lives in
-    `nexoclip.integrations.modal_http` (shared since Phase 2b) and calls
+    `chalybclip.integrations.modal_http` (shared since Phase 2b) and calls
     `asyncio.sleep` — patching the module attribute is global, so this
     covers it regardless of which module runs the loop."""
     async def _noop(_s: float) -> None:
@@ -45,7 +45,7 @@ def _make_provider(endpoint: str = "https://modal.test") -> modal_whisper.ModalW
         endpoint_url=endpoint,
         bearer_token="bear",
         signing_secret="sigsig",
-        public_base_url="https://nexoclip.test",
+        public_base_url="https://chalybclip.test",
         model="small",
         # Short deadline so the polling-deadline tests don't have to
         # wait through a long timeout.
@@ -221,7 +221,7 @@ async def test_polling_respects_deadline(
         endpoint_url="https://modal.test",
         bearer_token="bear",
         signing_secret="sigsig",
-        public_base_url="https://nexoclip.test",
+        public_base_url="https://chalybclip.test",
         model="small",
         request_timeout_s=0.05,  # 50ms — polls expire fast
     )
@@ -256,8 +256,8 @@ async def test_429_billing_cap_surfaces_actionable_assemblyai_hint(
     # The classifier should mention BOTH options the operator has:
     # AssemblyAI swap + bumping the Modal spend cap.
     assert "billing/spend cap" in msg or "billing" in msg.lower()
-    assert "NEXOCLIP_TRANSCRIBE_PROVIDER=assemblyai" in msg
-    assert "NEXOCLIP_ASSEMBLYAI_API_KEY" in msg
+    assert "CHALYBCLIP_TRANSCRIBE_PROVIDER=assemblyai" in msg
+    assert "CHALYBCLIP_ASSEMBLYAI_API_KEY" in msg
     assert "modal.com/settings/billing" in msg
     # Raw body is preserved at the tail so the operator can see what
     # Modal actually said.
@@ -276,10 +276,10 @@ async def test_401_surfaces_bearer_hint(
     with pytest.raises(TranscriptionError) as excinfo:
         await provider.transcribe(_req())
     msg = str(excinfo.value)
-    assert "NEXOCLIP_MODAL_TOKEN" in msg
+    assert "CHALYBCLIP_MODAL_TOKEN" in msg
     assert "MODAL_BEARER_TOKEN" in msg
     # AAI escape hatch still surfaces in the auth path.
-    assert "NEXOCLIP_TRANSCRIBE_PROVIDER=assemblyai" in msg
+    assert "CHALYBCLIP_TRANSCRIBE_PROVIDER=assemblyai" in msg
 
 
 @pytest.mark.asyncio
@@ -334,4 +334,4 @@ async def test_429_without_billing_keyword_falls_through_to_generic(
     msg = str(excinfo.value)
     assert "modal whisper returned 429" in msg
     # NO billing-cliff hint when the body doesn't say "billing/spend".
-    assert "NEXOCLIP_TRANSCRIBE_PROVIDER=assemblyai" not in msg
+    assert "CHALYBCLIP_TRANSCRIBE_PROVIDER=assemblyai" not in msg

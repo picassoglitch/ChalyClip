@@ -12,7 +12,7 @@ import datetime as _dt
 
 import pytest
 
-from nexoclip.db import (
+from chalybclip.db import (
     ApiTokensRepo,
     Database,
     EventsRepo,
@@ -22,9 +22,9 @@ from nexoclip.db import (
     TenantsRepo,
     UsersRepo,
 )
-from nexoclip.db.models import LLMCallRow, StreamRow
-from nexoclip.errors import TenancyError
-from nexoclip.tenancy import bound_tenant, hash_token, mint_token
+from chalybclip.db.models import LLMCallRow, StreamRow
+from chalybclip.errors import TenancyError
+from chalybclip.tenancy import bound_tenant, hash_token, mint_token
 
 from .._db_backend import INTEGRITY_ERRORS
 
@@ -339,8 +339,8 @@ async def test_clips_count_for_tenant_with_status(migrated_db: Database) -> None
     """The un-capped COUNT companion to list_for_tenant_with_status —
     labels the Auto-programar button with the REAL backlog size instead
     of the 60-row display page. Tenant-scoped like everything else."""
-    from nexoclip.db import ClipsRepo
-    from nexoclip.db.models import ClipRow
+    from chalybclip.db import ClipsRepo
+    from chalybclip.db.models import ClipRow
 
     await _seed_two_tenants(migrated_db)
     with bound_tenant("ten_a"):

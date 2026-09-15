@@ -9,19 +9,19 @@ from typing import cast
 
 import pytest
 
-from nexoclip.errors import NexoClipError
-from nexoclip.jobs import (
+from chalybclip.errors import ChalybClipError
+from chalybclip.jobs import (
     InProcessJobDispatcher,
     ModalJobDispatcher,
     PipelineKickoff,
     get_dispatcher,
 )
-from nexoclip.settings import get_settings
+from chalybclip.settings import get_settings
 
 
 @dataclass
 class _FakeStream:
-    """Duck-typed stand-in for nexoclip.ingest.Stream that PipelineKickoff
+    """Duck-typed stand-in for chalybclip.ingest.Stream that PipelineKickoff
     only needs as an opaque attribute — the dispatcher never inspects it."""
 
     id: str = "str_TEST"
@@ -64,7 +64,7 @@ def _clean_active_registry() -> None:
     """The jobs.active registry is module-global; a test that dispatches
     without draining its deferred task would leak a registration into the
     next test and trip the in-flight dedupe."""
-    from nexoclip.jobs import active
+    from chalybclip.jobs import active
 
     active._active.clear()
 
@@ -120,10 +120,10 @@ def test_modal_raises_when_unconfigured(monkeypatch: pytest.MonkeyPatch) -> None
     """Constructing without endpoint/token must fail loudly with an
     actionable message — `create_app`'s defensive boot catches this and
     falls back to in-process, so a half-configured deploy still serves."""
-    monkeypatch.delenv("NEXOCLIP_MODAL_PIPELINE_ENDPOINT_URL", raising=False)
-    monkeypatch.delenv("NEXOCLIP_MODAL_TOKEN", raising=False)
+    monkeypatch.delenv("CHALYBCLIP_MODAL_PIPELINE_ENDPOINT_URL", raising=False)
+    monkeypatch.delenv("CHALYBCLIP_MODAL_TOKEN", raising=False)
     get_settings.cache_clear()
-    with pytest.raises(NexoClipError, match="misconfigured"):
+    with pytest.raises(ChalybClipError, match="misconfigured"):
         ModalJobDispatcher()
 
 
@@ -139,7 +139,7 @@ def test_modal_name_is_stable() -> None:
 
 def test_factory_defaults_to_in_process(monkeypatch: pytest.MonkeyPatch) -> None:
     """No env override → in-process dispatcher."""
-    monkeypatch.delenv("NEXOCLIP_JOB_DISPATCHER", raising=False)
+    monkeypatch.delenv("CHALYBCLIP_JOB_DISPATCHER", raising=False)
     get_settings.cache_clear()
     probe = _RunnerProbe()
     d = get_dispatcher(runner=probe)
@@ -147,13 +147,13 @@ def test_factory_defaults_to_in_process(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 def test_factory_picks_modal_when_configured(monkeypatch: pytest.MonkeyPatch) -> None:
-    """NEXOCLIP_JOB_DISPATCHER=modal (+ endpoint/token) → ModalJobDispatcher,
+    """CHALYBCLIP_JOB_DISPATCHER=modal (+ endpoint/token) → ModalJobDispatcher,
     with the in-process fallback wired when a runner is available."""
-    monkeypatch.setenv("NEXOCLIP_JOB_DISPATCHER", "modal")
+    monkeypatch.setenv("CHALYBCLIP_JOB_DISPATCHER", "modal")
     monkeypatch.setenv(
-        "NEXOCLIP_MODAL_PIPELINE_ENDPOINT_URL", "https://modal.test/pipeline"
+        "CHALYBCLIP_MODAL_PIPELINE_ENDPOINT_URL", "https://modal.test/pipeline"
     )
-    monkeypatch.setenv("NEXOCLIP_MODAL_TOKEN", "bear")
+    monkeypatch.setenv("CHALYBCLIP_MODAL_TOKEN", "bear")
     get_settings.cache_clear()
     try:
         d = get_dispatcher(runner=_RunnerProbe())
@@ -168,18 +168,18 @@ def test_factory_picks_modal_when_configured(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_factory_rejects_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("NEXOCLIP_JOB_DISPATCHER", "kubernetes")
+    monkeypatch.setenv("CHALYBCLIP_JOB_DISPATCHER", "kubernetes")
     get_settings.cache_clear()
-    with pytest.raises(NexoClipError, match="unknown job_dispatcher"):
+    with pytest.raises(ChalybClipError, match="unknown job_dispatcher"):
         get_dispatcher(runner=None)
 
 
 def test_factory_requires_runner_for_in_process(monkeypatch: pytest.MonkeyPatch) -> None:
     """In-process needs an actual runner to wrap; calling without one
     is a programmer error and should error early, not at dispatch time."""
-    monkeypatch.delenv("NEXOCLIP_JOB_DISPATCHER", raising=False)
+    monkeypatch.delenv("CHALYBCLIP_JOB_DISPATCHER", raising=False)
     get_settings.cache_clear()
-    with pytest.raises(NexoClipError, match="runner"):
+    with pytest.raises(ChalybClipError, match="runner"):
         get_dispatcher(runner=None)
 
 

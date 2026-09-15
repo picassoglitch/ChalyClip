@@ -14,10 +14,10 @@ from pathlib import Path
 import httpx
 import pytest
 
-from nexoclip.errors import TranscriptionError
-from nexoclip.transcribe.models import Transcript
-from nexoclip.transcribe.providers import assemblyai
-from nexoclip.transcribe.providers.base import TranscribeRequest
+from chalybclip.errors import TranscriptionError
+from chalybclip.transcribe.models import Transcript
+from chalybclip.transcribe.providers import assemblyai
+from chalybclip.transcribe.providers.base import TranscribeRequest
 
 # Capture before any monkeypatching so the deadline test (which needs a
 # real micro-sleep to advance time.monotonic) doesn't recurse into the

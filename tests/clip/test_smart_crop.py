@@ -9,13 +9,13 @@ import cv2
 import numpy as np
 import pytest
 
-from nexoclip.clip.models import SmartCropBox
-from nexoclip.clip.smart_crop import (
+from chalybclip.clip.models import SmartCropBox
+from chalybclip.clip.smart_crop import (
     _detect_face_centers,
     compute_smart_crop_box,
     crop_box_to_ffmpeg_filter,
 )
-from nexoclip.errors import ClipError
+from chalybclip.errors import ClipError
 
 
 def _write_solid_video(path: Path, *, w: int, h: int, fps: float, duration_s: float) -> None:
@@ -59,7 +59,7 @@ def test_face_detection_shifts_crop_to_face(tmp_path: Path) -> None:
 
     # Mock the face-center detector to return faces at x=1500 (right side).
     with patch(
-        "nexoclip.clip.smart_crop._detect_face_centers",
+        "chalybclip.clip.smart_crop._detect_face_centers",
         return_value=[1500.0, 1500.0, 1500.0],
     ):
         box = compute_smart_crop_box(video, start_s=0.0, end_s=2.0)
@@ -78,7 +78,7 @@ def test_crop_clamps_to_frame_bounds(tmp_path: Path) -> None:
     _write_solid_video(video, w=1920, h=1080, fps=30.0, duration_s=1.0)
 
     with patch(
-        "nexoclip.clip.smart_crop._detect_face_centers",
+        "chalybclip.clip.smart_crop._detect_face_centers",
         return_value=[1900.0],  # almost at the right edge
     ):
         box = compute_smart_crop_box(video, start_s=0.0, end_s=1.0)
@@ -93,7 +93,7 @@ def test_crop_clamps_to_zero_when_face_is_left_edge(tmp_path: Path) -> None:
     _write_solid_video(video, w=1920, h=1080, fps=30.0, duration_s=1.0)
 
     with patch(
-        "nexoclip.clip.smart_crop._detect_face_centers",
+        "chalybclip.clip.smart_crop._detect_face_centers",
         return_value=[20.0],
     ):
         box = compute_smart_crop_box(video, start_s=0.0, end_s=1.0)

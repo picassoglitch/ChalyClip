@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from nexoclip.clip.captions_ass import generate_ass
+from chalybclip.clip.captions_ass import generate_ass
 
 
 def _lines(words: list[tuple[str, float, float]], *, end_pad: float = 0.0):

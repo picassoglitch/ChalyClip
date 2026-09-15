@@ -9,14 +9,14 @@ import pytest
 import pytest_asyncio
 import respx
 
-from nexoclip.db import (
+from chalybclip.db import (
     Database,
     TenantsRepo,
     ZernioCalendarRepo,
     ZernioPublishesRepo,
 )
-from nexoclip.integrations.nexo_ai.service import sync_tenant_tier
-from nexoclip.settings import get_settings
+from chalybclip.integrations.chalyb.service import sync_tenant_tier
+from chalybclip.settings import get_settings
 
 from .conftest import auth
 
@@ -25,7 +25,7 @@ _ZBASE = "https://zernio.com/api/v1"
 
 @pytest.fixture
 def zernio_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    monkeypatch.setenv("NEXOCLIP_ZERNIO_API_KEY", "sk_test_cal")
+    monkeypatch.setenv("CHALYBCLIP_ZERNIO_API_KEY", "sk_test_cal")
     get_settings.cache_clear()
     try:
         yield

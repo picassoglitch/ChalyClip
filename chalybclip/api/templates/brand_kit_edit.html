@@ -1,0 +1,329 @@
+{% extends "base.html" %}
+{% block title %}{% if kit %}{{ kit.name }} - Tu estilo{% else %}Nuevo estilo{% endif %} - ChalyClip{% endblock %}
+{% block content %}
+
+<div class="nc-page-header">
+  <div>
+    <h2>{% if kit %}Edita tu estilo{% else %}Nuevo estilo{% endif %}</h2>
+    <small>
+      {% if kit %}<span class="nc-mono">{{ kit.id }}</span>{% else %}Define tus cuentas y las frases que disparan clips para un streamer.{% endif %}
+    </small>
+  </div>
+  <div class="nc-page-summary">
+    <a href="/dashboard/brand-kits" class="nc-btn nc-btn--sm">
+      <i class="ti ti-arrow-left" aria-hidden="true"></i>
+      <span>Todos tus estilos</span>
+    </a>
+  </div>
+</div>
+
+<form action="{% if kit %}/dashboard/brand-kits/{{ kit.id }}{% else %}/dashboard/brand-kits{% endif %}" method="post">
+
+  <div class="nc-panel">
+    <div class="nc-panel__header">
+      <i class="ti ti-id-badge-2" aria-hidden="true" style="color: var(--nc-blue-bright);"></i>
+      <span class="nc-panel__title">Tu identidad</span>
+    </div>
+    <div class="nc-panel__body">
+      <label class="nc-label">Nombre
+        <input class="nc-input" type="text" name="name" required
+               value="{{ kit.name if kit else '' }}"
+               placeholder="ej. AARA, Aldo Villanueva">
+      </label>
+      {% if not kit %}
+      <label class="nc-checkbox">
+        <input type="checkbox" name="is_default" value="1">
+        <span>Que este sea tu estilo por defecto</span>
+      </label>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="nc-panel">
+    <div class="nc-panel__header">
+      <i class="ti ti-at" aria-hidden="true" style="color: var(--nc-blue-bright);"></i>
+      <span class="nc-panel__title">Tus cuentas</span>
+    </div>
+    <div class="nc-panel__body">
+      <div class="nc-grid-2">
+        <label class="nc-label">TikTok
+          <input class="nc-input nc-input--mono" type="text" name="handle_tiktok"
+                 value="{{ kit.handle_tiktok if kit else '' }}" placeholder="@yourhandle">
+        </label>
+        <label class="nc-label">YouTube
+          <input class="nc-input nc-input--mono" type="text" name="handle_youtube"
+                 value="{{ kit.handle_youtube if kit else '' }}" placeholder="@yourhandle">
+        </label>
+        <label class="nc-label">Instagram
+          <input class="nc-input nc-input--mono" type="text" name="handle_instagram"
+                 value="{{ kit.handle_instagram if kit else '' }}" placeholder="@yourhandle">
+        </label>
+        <label class="nc-label">Kick
+          <input class="nc-input nc-input--mono" type="text" name="handle_kick"
+                 value="{{ kit.handle_kick if kit else '' }}" placeholder="tu_usuario">
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div class="nc-panel">
+    <div class="nc-panel__header">
+      <i class="ti ti-typography" aria-hidden="true" style="color: var(--nc-blue-bright);"></i>
+      <span class="nc-panel__title">Subtítulos</span>
+      <small>— van pegados en cada clip que hagas con este estilo</small>
+    </div>
+    <div class="nc-panel__body">
+      <label class="nc-label">Estilo de subtítulos
+        <select class="nc-select" name="caption_preset">
+          {% for choice_id, choice_label in caption_preset_choices %}
+          <option value="{{ choice_id }}" {% if caption_style.preset == choice_id %}selected{% endif %}>{{ choice_label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <small>
+        <strong>Estilo actual:</strong>
+        {{ caption_style.font_family }} {{ caption_style.font_weight }},
+        {{ caption_style.font_size_px }}px,
+        {{ caption_style.position }}, animation: {{ caption_style.animation }}.
+        {% if caption_style.censor_swears %}Groserías censuradas.{% endif %}
+      </small>
+    </div>
+  </div>
+
+  <div class="nc-panel">
+    <div class="nc-panel__header">
+      <i class="ti ti-message-2-code" aria-hidden="true" style="color: var(--nc-blue-bright);"></i>
+      <span class="nc-panel__title">Tus frases para cortar clips</span>
+      <small>— se suman a la lista base de tu cuenta</small>
+    </div>
+    <div class="nc-panel__body">
+
+      {# How clipping actually works — concrete worked examples so the
+         operator doesn't have to reverse-engineer "forward" vs
+         "retroactive" from the field labels. #}
+      <div class="nc-trigger-help">
+        <div class="nc-trigger-help__intro">
+          ChalyClip escucha el audio de tu stream. Cuando lo que dices coincide
+          con una de estas frases, saca un clip alrededor de ese momento:
+        </div>
+        <div class="nc-grid-2 nc-trigger-help__cards">
+          <div class="nc-trigger-card">
+            <div class="nc-trigger-card__head">
+              <i class="ti ti-arrow-right" aria-hidden="true"></i>
+              <strong>Hacia adelante — para lo que ves venir</strong>
+            </div>
+            <div class="nc-trigger-card__example">
+              <span class="nc-mono">"mira esto — <em>clipea esto</em>"</span>
+              <span class="nc-trigger-card__arrow">→</span>
+              <span class="nc-mono">clip = los siguientes <strong>30s</strong></span>
+            </div>
+            <div class="nc-trigger-card__tape">
+              <span class="nc-trigger-card__tape-marker">frase</span>
+              <span class="nc-trigger-card__tape-clip nc-trigger-card__tape-clip--right">+30s</span>
+            </div>
+            <small>Úsalo para momentos que puedes ver venir antes de que pasen.</small>
+          </div>
+          <div class="nc-trigger-card">
+            <div class="nc-trigger-card__head">
+              <i class="ti ti-arrow-left" aria-hidden="true"></i>
+              <strong>Hacia atrás — para lo que acaba de pasar</strong>
+            </div>
+            <div class="nc-trigger-card__example">
+              <span class="nc-mono">"<em>clipeaste eso</em> jajaja"</span>
+              <span class="nc-trigger-card__arrow">→</span>
+              <span class="nc-mono">clip = los <strong>60s</strong> de antes</span>
+            </div>
+            <div class="nc-trigger-card__tape">
+              <span class="nc-trigger-card__tape-clip nc-trigger-card__tape-clip--left">−60s</span>
+              <span class="nc-trigger-card__tape-marker">frase</span>
+            </div>
+            <small>La más natural — el momento chistoso termina y luego lo dices.</small>
+          </div>
+        </div>
+        <div class="nc-trigger-help__note">
+          <i class="ti ti-info-circle" aria-hidden="true"></i>
+          Las frases se reconocen <strong>sin importar mayúsculas</strong> y con
+          cierta tolerancia (la transcripción no es perfecta). Agrega todas las
+          variantes que quieras — una por línea. Se <em>suman</em> a las que ya
+          trae tu cuenta por defecto (ya tienes listas:
+          <span class="nc-mono">clipea esto</span>,
+          <span class="nc-mono">clipeaste eso</span> y sus equivalentes en inglés).
+        </div>
+      </div>
+
+      <div class="nc-grid-2">
+        <label class="nc-label">Frases hacia adelante
+          <small>toma 30s <strong>HACIA ADELANTE</strong> desde el momento</small>
+          <textarea class="nc-textarea" name="forward_phrases" rows="6"
+                    placeholder="córtalo&#10;saca eso&#10;guarda esto">{{ kit.custom_trigger_phrases.forward|join('\n') if kit else '' }}</textarea>
+        </label>
+        <label class="nc-label">Frases hacia atrás
+          <small>toma 60s <strong>HACIA ATRÁS</strong> desde el momento</small>
+          <textarea class="nc-textarea" name="retroactive_phrases" rows="6"
+                    placeholder="lo clipeaste&#10;monchi eso&#10;eso quedó épico">{{ kit.custom_trigger_phrases.retroactive|join('\n') if kit else '' }}</textarea>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  {# Auto-publish moved to the Publish Center → "Piloto automático" tab
+     (per-tenant, routed through Zernio). The old per-kit toggle is gone —
+     it fed the retired publish_jobs worker. #}
+
+  <div class="nc-panel">
+    <div class="nc-panel__header">
+      <i class="ti ti-shield-check" aria-hidden="true" style="color: var(--nc-blue-bright);"></i>
+      <span class="nc-panel__title">Publicación segura</span>
+      <small>— horarios que evitan que te castiguen el alcance</small>
+    </div>
+    <div class="nc-panel__body">
+      <label class="nc-checkbox">
+        <input type="checkbox" name="safe_schedule_enabled" value="1"
+               {% if kit and kit.safe_schedule_enabled %}checked{% endif %}>
+        <span>Programar solo en horarios seguros</span>
+      </label>
+      <small style="display: block; margin: 4px 0 10px;">
+        Cuando está activo, tus clips se publican espaciados para que las
+        plataformas no los marquen como spam, y se posponen los que caen en un
+        horario bloqueado. Cuando está apagado, solo te mostramos un aviso de
+        riesgo en la pantalla de publicar.
+      </small>
+      {# Timezone is detected from the browser — the operator never types an
+         IANA name. JS fills the hidden input on load (keeping the saved value
+         if there is one) and shows it read-only below. #}
+      <input type="hidden" name="content_timezone" id="bk-tz"
+             value="{{ kit.content_timezone if kit and kit.content_timezone else '' }}">
+      <small style="display: block; margin-bottom: 10px;">
+        Tu zona horaria: <span class="nc-mono" id="bk-tz-label">detectando…</span>
+        <span class="nc-text--muted">— la detectamos sola, para respetar tus horas de descanso.</span>
+      </small>
+      <label class="nc-label">¿Qué tan seguido publicas?
+        <select class="nc-select" name="safety_preset">
+          <option value="recommended"{% if safety_preset == 'recommended' %} selected{% endif %}>Recomendado — lo más seguro</option>
+          <option value="cautious"{% if safety_preset == 'cautious' %} selected{% endif %}>Más cuidadoso — menos posts, más espaciados</option>
+          <option value="active"{% if safety_preset == 'active' %} selected{% endif %}>Más activo — más posts, más seguido</option>
+        </select>
+      </label>
+      <small style="display: block; margin-top: 4px;">
+        Nosotros nos encargamos del espaciado y los topes por plataforma para que
+        no te marquen como spam.
+      </small>
+    </div>
+  </div>
+
+  {#- Slice O.1 — ChalyClip credit toggle.
+
+      Only PAID tenants can disable the bottom-right "chalybclip.com"
+      watermark; free tenants see an info chip explaining the watermark
+      and a link toward upgrade. The toggle posts the
+      `show_chalybclip_credit` form value the brand-kit save handler
+      already accepts in its update branch. -#}
+  {%- set _tier = (request.state.tenant_tier if request and request.state else 'free') -%}
+  <div class="nc-panel">
+    <div class="nc-panel__header">
+      <i class="ti ti-license" aria-hidden="true" style="color: var(--nc-lime, #c8ff5c);"></i>
+      <span class="nc-panel__title">Marca ChalyClip</span>
+      <small>— el sello "chalybclip.com" abajo a la derecha de tus clips</small>
+    </div>
+    <div class="nc-panel__body">
+      {% if _tier == 'free' %}
+      <div class="nc-empty" style="margin: 0; padding: 12px 14px; text-align: left;">
+        <strong style="color: var(--nc-lime, #c8ff5c);">Plan gratis</strong>
+        <span style="color: var(--nc-text-muted);">
+          — el sello <code>chalybclip.com</code> se queda en todos tus clips.
+          Pásate a un plan Pro para quitarlo.
+        </span>
+      </div>
+      {# Hidden input so the form submission still carries the value
+         (always 1 on free tier — the server enforces this anyway). #}
+      <input type="hidden" name="show_chalybclip_credit" value="1">
+      {% else %}
+      <label class="nc-checkbox">
+        <input type="checkbox" name="show_chalybclip_credit" value="1"
+               {% if not kit or kit.show_chalybclip_credit %}checked{% endif %}>
+        <span>Mostrar el sello "chalybclip.com" en tus clips
+          <small style="display:block;color:var(--nc-text-muted);">
+            Activado por defecto — un pequeño gracias por usar la herramienta. Apágalo para un clip totalmente limpio.
+          </small>
+        </span>
+      </label>
+      {% endif %}
+    </div>
+  </div>
+
+  {#- ChalyClip end-card outro toggle (migration 050).
+
+      A short bundled chalybclip end card is appended to every exported
+      clip. Free tenants always get it (hidden value=1 + info chip);
+      paid tenants can switch it off via `show_chalybclip_outro`. The
+      server forces it ON for free tier regardless of what's posted. -#}
+  <div class="nc-panel">
+    <div class="nc-panel__header">
+      <i class="ti ti-movie" aria-hidden="true" style="color: var(--nc-lime, #c8ff5c);"></i>
+      <span class="nc-panel__title">Cierre ChalyClip</span>
+      <small>— una breve placa final de ChalyClip al terminar cada clip</small>
+    </div>
+    <div class="nc-panel__body">
+      {% if _tier == 'free' %}
+      <div class="nc-empty" style="margin: 0; padding: 12px 14px; text-align: left;">
+        <strong style="color: var(--nc-lime, #c8ff5c);">Plan gratis</strong>
+        <span style="color: var(--nc-text-muted);">
+          — la placa final de ChalyClip se añade a todos tus clips.
+          Pásate a un plan Pro para quitarla.
+        </span>
+      </div>
+      <input type="hidden" name="show_chalybclip_outro" value="1">
+      {% else %}
+      <label class="nc-checkbox">
+        <input type="checkbox" name="show_chalybclip_outro" value="1"
+               {% if not kit or kit.show_chalybclip_outro %}checked{% endif %}>
+        <span>Añadir la placa final de ChalyClip a tus clips
+          <small style="display:block;color:var(--nc-text-muted);">
+            Activado por defecto. Apágalo para terminar el clip sin cierre de marca.
+          </small>
+        </span>
+      </label>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="nc-row" style="margin-top: 12px;">
+    <button type="submit" class="nc-btn nc-btn--primary">
+      <i class="ti ti-device-floppy" aria-hidden="true"></i>
+      <span>{% if kit %}Guardar cambios{% else %}Crear estilo{% endif %}</span>
+    </button>
+    {% if kit and not kit.is_default %}
+    <button type="submit"
+            formaction="/dashboard/brand-kits/{{ kit.id }}/default"
+            class="nc-btn">
+      <i class="ti ti-star" aria-hidden="true"></i>
+      <span>Hacer mi estilo por defecto</span>
+    </button>
+    {% endif %}
+    <div class="nc-spacer"></div>
+    {% if kit %}
+    <button type="submit"
+            formaction="/dashboard/brand-kits/{{ kit.id }}/delete"
+            class="nc-btn nc-btn--danger"
+            onclick="return confirm('¿Borrar este estilo? Los streamers que lo usan pasarán a tu estilo por defecto.');">
+      <i class="ti ti-trash" aria-hidden="true"></i>
+      <span>Borrar</span>
+    </button>
+    {% endif %}
+  </div>
+</form>
+
+<script>
+  // Auto-detect the operator's timezone from the browser so they never type
+  // an IANA name. Keep any value already saved on the kit; otherwise detect.
+  (function () {
+    var input = document.getElementById("bk-tz");
+    var label = document.getElementById("bk-tz-label");
+    var detected = "UTC";
+    try { detected = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"; } catch (e) {}
+    var tz = (input && input.value) ? input.value : detected;
+    if (input) input.value = tz;
+    if (label) label.textContent = tz;
+  })();
+</script>
+{% endblock %}

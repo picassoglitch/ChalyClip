@@ -10,7 +10,7 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-# /healthz is exempt from BearerAuthMiddleware (see nexoclip/api/auth.py
+# /healthz is exempt from BearerAuthMiddleware (see chalybclip/api/auth.py
 # _PUBLIC_PATHS). Returns {"status": "ok"} — zero deps, no DB query.
 healthcheckPath = "/healthz"
 # 30s gives Whisper model warm-up + DB migration time on cold start.

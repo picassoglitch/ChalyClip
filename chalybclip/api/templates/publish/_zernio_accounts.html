@@ -1,0 +1,58 @@
+{# Connected-accounts row — included by zernio_dashboard.html AND
+   served alone by GET /dashboard/publish/zernio/accounts-panel so the
+   connect popup's postMessage can refresh chips without a full page
+   reload. Context: profile_id, account_limit, account_count,
+   supported_platforms, connected_set, account_by_platform. #}
+<div class="nc-panel" style="margin-bottom: 16px;">
+  <div class="nc-pc-acct-row">
+    {% set at_limit = account_limit is not none and account_count >= account_limit %}
+    {% if account_limit is not none %}
+    <span class="nc-pc-acct-chip" title="Cuántas cuentas puedes conectar con tu plan. Pásate a All-Access y conecta las que quieras.">
+      <i class="ti ti-lock" aria-hidden="true"></i>
+      <span>{{ account_count }}/{{ account_limit }} cuenta{{ '' if account_limit == 1 else 's' }} (Pro)</span>
+    </span>
+    {% endif %}
+    {% for key, label, icon in supported_platforms %}
+      {% set is_conn = key in connected_set %}
+      {% if is_conn %}
+      {% set acct_id = account_by_platform.get(key) %}
+      <span class="nc-pc-acct-chip is-connected">
+        <i class="ti {{ icon }}" aria-hidden="true"></i>
+        <span>{{ label }}</span>
+        {% if acct_id %}
+        <button type="button" class="js-zn-disconnect"
+                data-account-id="{{ acct_id }}" data-label="{{ label }}"
+                title="Desconectar {{ label }}"
+                style="background:none;border:none;color:inherit;cursor:pointer;padding:0 0 0 4px;line-height:1;">
+          <i class="ti ti-x" aria-hidden="true"></i>
+        </button>
+        {% else %}
+        <i class="ti ti-check" aria-hidden="true"></i>
+        {% endif %}
+      </span>
+      {% elif at_limit %}
+      <button type="button" class="nc-pc-connect-btn" disabled
+              style="opacity: 0.4; cursor: not-allowed;"
+              title="Ya llegaste al máximo de cuentas de tu plan. Desconecta una o pásate a All-Access.">
+        <i class="ti {{ icon }}" aria-hidden="true"></i>
+        <span>Conectar {{ label }}</span>
+      </button>
+      {% else %}
+      <button type="button" class="nc-pc-connect-btn js-zn-connect"
+              data-platform="{{ key }}" title="Conecta {{ label }} con Zernio (se abre en otra pestaña)">
+        <i class="ti {{ icon }}" aria-hidden="true"></i>
+        <span>Conectar {{ label }}</span>
+      </button>
+      {% endif %}
+    {% endfor %}
+
+    <span style="flex: 1;"></span>
+
+    <form action="/dashboard/publish/zernio/unlink" method="post" style="margin: 0;"
+          onsubmit="return confirm('¿Desvincular el perfil de Zernio de esta cuenta de ChalyClip? Tus conexiones siguen en Zernio.');">
+      <button type="submit" class="nc-btn nc-btn--danger" style="padding: 4px 8px; font-size: 12px;" title="Desvincular {{ profile_id }}">
+        <i class="ti ti-unlink" aria-hidden="true"></i>
+      </button>
+    </form>
+  </div>
+</div>

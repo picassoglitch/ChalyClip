@@ -1,4 +1,4 @@
-"""CLI smoke tests for `nexoclip transcribe`."""
+"""CLI smoke tests for `chalybclip transcribe`."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from nexoclip.cli import app
-from nexoclip.ingest import Stream
+from chalybclip.cli import app
+from chalybclip.ingest import Stream
 
 from ._fakes import FakeInfo, FakeSegment, FakeWhisperModel, FakeWord
 
@@ -28,8 +28,8 @@ def _patch_whisper(monkeypatch: pytest.MonkeyPatch) -> None:
         sys.modules["faster_whisper"] = fw
     FakeWhisperModel.reset()
     monkeypatch.setattr(fw, "WhisperModel", FakeWhisperModel, raising=False)
-    monkeypatch.setenv("NEXOCLIP_TRANSCRIBE_INPROCESS", "1")
-    from nexoclip.settings import get_settings
+    monkeypatch.setenv("CHALYBCLIP_TRANSCRIBE_INPROCESS", "1")
+    from chalybclip.settings import get_settings
 
     get_settings.cache_clear()
     FakeWhisperModel.canned_info = FakeInfo(language="es", duration=5.0)

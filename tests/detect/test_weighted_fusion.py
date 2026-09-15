@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import pytest
 
-from nexoclip.detect.fusion import (
+from chalybclip.detect.fusion import (
     FusionBonuses,
     FusionConfig,
     FusionWeights,
     fuse_candidates,
 )
-from nexoclip.detect.models import Candidate
+from chalybclip.detect.models import Candidate
 
 
 def _c(

@@ -7,7 +7,7 @@ styles to `platform_band`. The logo-free minimal variant is platform-agnostic.
 
 from __future__ import annotations
 
-from nexoclip.clip.ai_fixes import apply_ai_fixes
+from chalybclip.clip.ai_fixes import apply_ai_fixes
 
 
 def _variant_for(*, style: str, platform: str) -> str | None:

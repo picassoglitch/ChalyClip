@@ -1,7 +1,7 @@
 """ModalWhisperProvider — worker-mode audio via the object store (Phase 2b).
 
 On the pipeline worker the WAV lives on ephemeral disk and never existed
-on the web box, so the provider can't mint a NEXOCLIP_PUBLIC_URL-signed
+on the web box, so the provider can't mint a CHALYBCLIP_PUBLIC_URL-signed
 audio URL (it would 410). With `audio_via_object_storage=True` it uploads
 the WAV to R2, hands Modal a presigned URL, and drops the transient object
 once the transcript lands.
@@ -17,10 +17,10 @@ from typing import Any
 import httpx
 import pytest
 
-import nexoclip.integrations.storage as storage_mod
-from nexoclip.errors import TranscriptionError
-from nexoclip.transcribe.providers import modal_whisper
-from nexoclip.transcribe.providers.base import TranscribeRequest
+import chalybclip.integrations.storage as storage_mod
+from chalybclip.errors import TranscriptionError
+from chalybclip.transcribe.providers import modal_whisper
+from chalybclip.transcribe.providers.base import TranscribeRequest
 
 _REAL_ASYNC_CLIENT = httpx.AsyncClient
 
@@ -167,7 +167,7 @@ async def test_web_box_mode_unchanged_without_flag(
         endpoint_url="https://modal.test",
         bearer_token="bear",
         signing_secret="",
-        public_base_url="https://nexoclip.test",
+        public_base_url="https://chalybclip.test",
         model="small",
     )
     with pytest.raises(TranscriptionError, match="SIGNING_SECRET"):

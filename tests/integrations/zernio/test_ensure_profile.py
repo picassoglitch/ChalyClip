@@ -11,9 +11,9 @@ import pytest
 import pytest_asyncio
 import respx
 
-from nexoclip.db import Database, TenantsRepo, apply_migrations
-from nexoclip.integrations.zernio.client import ZernioClient
-from nexoclip.integrations.zernio.profiles import ensure_zernio_profile_for_tenant
+from chalybclip.db import Database, TenantsRepo, apply_migrations
+from chalybclip.integrations.zernio.client import ZernioClient
+from chalybclip.integrations.zernio.profiles import ensure_zernio_profile_for_tenant
 
 _ZBASE = "https://zernio.com/api/v1"
 
@@ -54,7 +54,7 @@ async def test_creates_when_none_exists(db: Database) -> None:
             )
             create = mock.post(f"{_ZBASE}/profiles").mock(
                 return_value=httpx.Response(
-                    201, json={"profile": {"_id": "prof_new", "name": f"NexoClip {t.id}"}}
+                    201, json={"profile": {"_id": "prof_new", "name": f"ChalyClip {t.id}"}}
                 )
             )
             pid = await ensure_zernio_profile_for_tenant(
@@ -68,7 +68,7 @@ async def test_creates_when_none_exists(db: Database) -> None:
 
 @pytest.mark.asyncio
 async def test_relinks_existing_named_profile_without_creating(db: Database) -> None:
-    """A profile named `NexoClip <tenant_id>` already on Zernio (e.g. a
+    """A profile named `ChalyClip <tenant_id>` already on Zernio (e.g. a
     prior auto-create whose local link was lost) is re-linked, not
     duplicated."""
     t = await TenantsRepo(db).create(name="Lost Link")
@@ -79,7 +79,7 @@ async def test_relinks_existing_named_profile_without_creating(db: Database) -> 
                     200,
                     json={"profiles": [
                         {"_id": "prof_other", "name": "Some other brand"},
-                        {"_id": "prof_mine", "name": f"NexoClip {t.id}"},
+                        {"_id": "prof_mine", "name": f"ChalyClip {t.id}"},
                     ]},
                 )
             )

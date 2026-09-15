@@ -10,7 +10,7 @@ scheduling. Modal, Anthropic and AssemblyAI are no longer in the hot path.
 ```
 Railway (web box)                          Quantor PC
 ─────────────────                          ──────────
-ModalJobDispatcher ── POST kickoff ──────▶ nexoclip worker :8100
+ModalJobDispatcher ── POST kickoff ──────▶ chalybclip worker :8100
   (unchanged code;      via tunnel          ├─ default_pipeline_runner
    endpoint URL is                          │   ├─ yt-dlp ingest (home IP —
    the PC tunnel)                           │   │   no datacenter bot-gate)
@@ -28,13 +28,13 @@ is reused as-is.
 
 1. `scripts\make_worker_env.ps1` — writes `worker.env` (gitignored) from
    the Railway project's variables: public Postgres URL, R2 creds, the
-   shared worker token (`NEXOCLIP_MODAL_TOKEN`), Zernio key, signing
-   secret. Plus PC-local settings (`NEXOCLIP_TRANSCRIBE_PROVIDER=local`,
-   `NEXOCLIP_WHISPER_DEVICE=cuda`).
+   shared worker token (`CHALYBCLIP_MODAL_TOKEN`), Zernio key, signing
+   secret. Plus PC-local settings (`CHALYBCLIP_TRANSCRIBE_PROVIDER=local`,
+   `CHALYBCLIP_WHISPER_DEVICE=cuda`).
 2. Ollama with `qwen2.5:7b-instruct-q4_K_M` pulled (config/llm.yaml points
    at that tag). For the vision purposes pull `qwen2.5vl:7b` too.
 3. Tunnel (stable public URL for Railway → PC): Tailscale Funnel —
-   `nexo-ai.world` DNS is on GoDaddy, so a named Cloudflare Tunnel isn't
+   `chalyb.com` DNS is on GoDaddy, so a named Cloudflare Tunnel isn't
    available without a DNS move.
 
    ```
@@ -58,23 +58,23 @@ R2 bucket — regenerate worker.env).
 To survive reboots, register it as a scheduled task at logon:
 
 ```
-schtasks /Create /TN "NexoClip PC Worker" /SC ONLOGON ^
+schtasks /Create /TN "ChalyClip PC Worker" /SC ONLOGON ^
   /TR "powershell -ExecutionPolicy Bypass -File C:\Users\picasso\Projects\QuantorClipAI\scripts\run_pc_worker.ps1"
 ```
 
 ## Railway side (the flip)
 
 ```
-NEXOCLIP_JOB_DISPATCHER=modal                     # the dispatcher is protocol-generic
-NEXOCLIP_MODAL_PIPELINE_ENDPOINT_URL=https://<funnel-host>/
-NEXOCLIP_OPENLLM_BASE_URL=https://<funnel-host>/v1
-OPENLLM_API_KEY=<value of NEXOCLIP_MODAL_TOKEN>   # the /v1 proxy's bearer
+CHALYBCLIP_JOB_DISPATCHER=modal                     # the dispatcher is protocol-generic
+CHALYBCLIP_MODAL_PIPELINE_ENDPOINT_URL=https://<funnel-host>/
+CHALYBCLIP_OPENLLM_BASE_URL=https://<funnel-host>/v1
+OPENLLM_API_KEY=<value of CHALYBCLIP_MODAL_TOKEN>   # the /v1 proxy's bearer
 ```
 
-`NEXOCLIP_MODAL_TOKEN` already exists on Railway and is what the worker
+`CHALYBCLIP_MODAL_TOKEN` already exists on Railway and is what the worker
 validates. After a green week, the paid keys can be deleted:
-`ANTHROPIC_API_KEY`, `NEXOCLIP_ASSEMBLYAI_API_KEY`,
-`NEXOCLIP_MODAL_ENDPOINT_URL` (whisper) — see limitations first.
+`ANTHROPIC_API_KEY`, `CHALYBCLIP_ASSEMBLYAI_API_KEY`,
+`CHALYBCLIP_MODAL_ENDPOINT_URL` (whisper) — see limitations first.
 
 ## Failure modes
 

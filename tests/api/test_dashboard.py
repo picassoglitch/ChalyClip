@@ -6,17 +6,17 @@ import datetime as _dt
 
 import httpx
 
-from nexoclip.db import (
+from chalybclip.db import (
     ClipsRepo,
     Database,
     StreamsRepo,
 )
-from nexoclip.db.models import (
+from chalybclip.db.models import (
     CandidateRow,
     ClipRow,
     StreamRow,
 )
-from nexoclip.tenancy import bound_tenant
+from chalybclip.tenancy import bound_tenant
 
 
 def _now() -> str:
@@ -54,7 +54,7 @@ async def test_login_with_valid_token_sets_cookie(
     )
     assert r.status_code == 303
     assert r.headers["location"] == "/dashboard/streams"
-    assert "nexoclip_token" in r.headers.get("set-cookie", "")
+    assert "chalybclip_token" in r.headers.get("set-cookie", "")
 
 
 async def test_streams_page_renders_with_cookie_auth(

@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 
-from nexoclip.db import (
+from chalybclip.db import (
     ApiTokensRepo,
     Database,
     LLMCallsRepo,
@@ -23,16 +23,16 @@ from nexoclip.db import (
     TenantsRepo,
     apply_migrations,
 )
-from nexoclip.db.models import (
+from chalybclip.db.models import (
     CandidateRow,
     ClipRow,
     LLMCallRow,
     StreamRow,
     VariantRow,
 )
-from nexoclip.errors import BudgetExceeded, CooldownActive, NexoClipError, QuotaExceeded
-from nexoclip.governance import BudgetGovernor
-from nexoclip.tenancy import bound_tenant
+from chalybclip.errors import BudgetExceeded, CooldownActive, ChalybClipError, QuotaExceeded
+from chalybclip.governance import BudgetGovernor
+from chalybclip.tenancy import bound_tenant
 
 
 def _now() -> str:
@@ -121,7 +121,7 @@ async def test_check_llm_spend_at_cap_raises(db: Database) -> None:
 
 async def test_check_llm_spend_unknown_tenant_raises(db: Database) -> None:
     gov = BudgetGovernor(db)
-    with pytest.raises(NexoClipError, match="tenant not found"):
+    with pytest.raises(ChalybClipError, match="tenant not found"):
         await gov.check_llm_spend("ten_does_not_exist")
 
 
@@ -130,7 +130,7 @@ async def test_check_llm_spend_unknown_tenant_raises(db: Database) -> None:
 
 async def _seed_clip_chain(db: Database, tenant_id: str) -> tuple[str, str, str]:
     """Minimal scaffolding for a publish_job FK chain."""
-    from nexoclip.db import (
+    from chalybclip.db import (
         CandidatesRepo,
         ClipsRepo,
         ConnectedAccountsRepo,
@@ -302,7 +302,7 @@ async def test_concurrency_cap_blocks_extra_callers(db: Database) -> None:
 
 async def test_concurrency_cap_unknown_tenant_raises(db: Database) -> None:
     gov = BudgetGovernor(db)
-    with pytest.raises(NexoClipError, match="tenant not found"):
+    with pytest.raises(ChalybClipError, match="tenant not found"):
         async with gov.acquire_rescore_slot("ten_nope"):
             pass
 
@@ -372,7 +372,7 @@ async def test_cooldown_resets_on_high_verdict_in_window(db: Database) -> None:
 
 
 async def test_governor_rejects_invalid_lookback(db: Database) -> None:
-    with pytest.raises(NexoClipError, match="lookback must be"):
+    with pytest.raises(ChalybClipError, match="lookback must be"):
         BudgetGovernor(db, low_confidence_lookback=0)
 
 
@@ -381,7 +381,7 @@ async def test_api_tokens_repo_works_for_test_setup(db: Database) -> None:
     t = await TenantsRepo(db).create(name="Aldo")
     with bound_tenant(t.id):
         # mint a token via helpers used in api fixtures
-        from nexoclip.tenancy import hash_token, mint_token
+        from chalybclip.tenancy import hash_token, mint_token
 
         raw, _ = mint_token()
         await ApiTokensRepo(db).create(hash_=hash_token(raw), scope="full")

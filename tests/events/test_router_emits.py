@@ -8,11 +8,11 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel
 
-from nexoclip.db import Database, EventsRepo, TenantsRepo, apply_migrations
-from nexoclip.errors import LLMError
-from nexoclip.events import LLM_EXHAUSTED, LLM_FALLBACK
-from nexoclip.llm import LLMRouter
-from nexoclip.tenancy import bound_tenant
+from chalybclip.db import Database, EventsRepo, TenantsRepo, apply_migrations
+from chalybclip.errors import LLMError
+from chalybclip.events import LLM_EXHAUSTED, LLM_FALLBACK
+from chalybclip.llm import LLMRouter
+from chalybclip.tenancy import bound_tenant
 
 from tests.llm._fakes import FakeProvider  # type: ignore[import]
 from tests.llm._fixtures import make_llm_config  # type: ignore[import]

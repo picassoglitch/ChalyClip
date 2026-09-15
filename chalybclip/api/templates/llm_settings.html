@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Tu motor de IA - ChalyClip{% endblock %}
+{% block content %}
+
+<div class="nc-page-header">
+  <div>
+    <h2>Cómo trabaja tu IA</h2>
+    <small>
+      Esto sale de <code>config/llm.yaml</code>.
+      Por ahora solo lo ves, no lo tocas. Para cambiarlo se ajusta el archivo y se reinicia.
+    </small>
+  </div>
+</div>
+
+<div class="nc-panel">
+  <div class="nc-panel__header">
+    <i class="ti ti-server-2" aria-hidden="true" style="color: var(--nc-blue-bright);"></i>
+    <span class="nc-panel__title">Quién genera tu contenido</span>
+  </div>
+  <div class="nc-panel__body" style="padding: 0;">
+    <table class="nc-table">
+      <thead>
+        <tr>
+          <th>Servicio</th>
+          <th>Modelo estándar</th>
+          <th>Modelo premium</th>
+          <th class="nc-num">Tiempo de espera</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for name, p in providers.items() %}
+        <tr>
+          <td><strong style="color: var(--nc-text);">{{ name }}</strong></td>
+          <td><span class="nc-mono">{{ p.models.standard }}</span></td>
+          <td><span class="nc-mono">{{ p.models.premium or "—" }}</span></td>
+          <td class="nc-num nc-mono">{{ p.timeout_s }}s</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="nc-panel">
+  <div class="nc-panel__header">
+    <i class="ti ti-route" aria-hidden="true" style="color: var(--nc-blue-bright);"></i>
+    <span class="nc-panel__title">Qué modelo se usa para cada cosa</span>
+    <small>— para qué → qué tan bueno → servicio → modelo</small>
+  </div>
+  <div class="nc-panel__body" style="padding: 0;">
+    <table class="nc-table">
+      <thead>
+        <tr>
+          <th>Para qué</th>
+          <th>Calidad por defecto</th>
+          <th>Principal</th>
+          <th>De respaldo</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for purpose, rule in routing.items() %}
+        <tr>
+          <td><span class="nc-chip nc-chip--code">{{ purpose }}</span></td>
+          <td>
+            {% if rule.default_quality == "premium" %}
+            <span class="nc-chip">{{ rule.default_quality }}</span>
+            {% else %}
+            <span class="nc-chip nc-chip--muted">{{ rule.default_quality }}</span>
+            {% endif %}
+          </td>
+          <td>{{ rule.primary }}</td>
+          <td>
+            {% if rule.fallbacks %}
+              {% for fb in rule.fallbacks %}
+              <span class="nc-chip nc-chip--muted">{{ fb }}</span>
+              {% endfor %}
+            {% else %}
+            <span style="color: var(--nc-text-muted);">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

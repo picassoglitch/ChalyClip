@@ -24,8 +24,8 @@ from pathlib import Path
 import httpx
 import pytest
 
-from nexoclip.db import Database
-from nexoclip.tenancy import bound_tenant
+from chalybclip.db import Database
+from chalybclip.tenancy import bound_tenant
 
 from .conftest import auth
 

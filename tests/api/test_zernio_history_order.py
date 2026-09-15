@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from nexoclip.api.routers.zernio import _order_publish_history
+from chalybclip.api.routers.zernio import _order_publish_history
 
 
 def _row(

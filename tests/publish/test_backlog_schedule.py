@@ -7,9 +7,9 @@ import datetime as _dt
 import random
 from itertools import pairwise
 
-from nexoclip.publish.growth_engine import ClipContent, plan_backlog_schedule
-from nexoclip.publish.pacing import DEFAULT_PLATFORM_RULES
-from nexoclip.score.growth import GrowthInput, fallback_card
+from chalybclip.publish.growth_engine import ClipContent, plan_backlog_schedule
+from chalybclip.publish.pacing import DEFAULT_PLATFORM_RULES
+from chalybclip.score.growth import GrowthInput, fallback_card
 
 _NOW = _dt.datetime(2026, 6, 10, 8, 0, tzinfo=_dt.UTC)
 

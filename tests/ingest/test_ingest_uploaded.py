@@ -7,8 +7,8 @@ from unittest.mock import patch
 
 import pytest
 
-from nexoclip.errors import IngestError
-from nexoclip.ingest import Stream, ingest_uploaded
+from chalybclip.errors import IngestError
+from chalybclip.ingest import Stream, ingest_uploaded
 
 
 def _stub_ffmpeg(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -21,8 +21,8 @@ def _stub_ffmpeg(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_ffprobe(_video: Path) -> float:
         return 42.0
 
-    monkeypatch.setattr("nexoclip.ingest.service._extract_audio", fake_extract_audio)
-    monkeypatch.setattr("nexoclip.ingest.service._ffprobe_duration", fake_ffprobe)
+    monkeypatch.setattr("chalybclip.ingest.service._extract_audio", fake_extract_audio)
+    monkeypatch.setattr("chalybclip.ingest.service._ffprobe_duration", fake_ffprobe)
 
 
 async def test_ingest_uploaded_writes_layout(

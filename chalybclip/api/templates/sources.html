@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block title %}Canales conectados - ChalyClip{% endblock %}
+{% block content %}
+
+<div class="nc-page-header">
+  <div>
+    <h2>Canales conectados</h2>
+    <small>Vigila el canal de un creador — cada VOD nuevo entra solo y pasa por todo el proceso (corte → versiones → publicación automática segura).</small>
+  </div>
+</div>
+
+{% if request.query_params.get('error') == 'already_watching' %}
+<div class="nc-panel" role="alert" style="border-color: rgba(230,80,80,0.35); margin-bottom: 14px;">
+  <div class="nc-panel__body" style="display:flex; align-items:center; gap:10px; color:#ff9090;">
+    <i class="ti ti-alert-triangle" aria-hidden="true"></i>
+    <span>Ya estás vigilando ese canal — la liga ya está en tu lista de abajo.</span>
+  </div>
+</div>
+{% elif request.query_params.get('added') %}
+<div class="nc-panel" role="status" style="border-color: rgba(72,187,120,0.35); margin-bottom: 14px;">
+  <div class="nc-panel__body" style="display:flex; align-items:center; gap:10px; color: var(--nc-green, #48bb78);">
+    <i class="ti ti-check" aria-hidden="true"></i>
+    <span>Canal conectado — lo revisaremos según la frecuencia que elegiste.</span>
+  </div>
+</div>
+{% elif request.query_params.get('scanning') %}
+<div class="nc-panel" role="status" style="border-color: rgba(72,187,120,0.35); margin-bottom: 14px;">
+  <div class="nc-panel__body" style="display:flex; align-items:center; gap:10px; color: var(--nc-green, #48bb78);">
+    <i class="ti ti-radar" aria-hidden="true"></i>
+    <span>Escaneando el canal ahora — los VODs nuevos aparecerán en Streams en cuanto terminen de procesarse.</span>
+  </div>
+</div>
+{% endif %}
+
+<div class="nc-panel">
+  <div class="nc-panel__header">
+    <i class="ti ti-plug-connected" aria-hidden="true" style="color: var(--nc-blue-bright);"></i>
+    <span class="nc-panel__title">Conecta un canal</span>
+  </div>
+  <div class="nc-panel__body">
+    {% if personas %}
+    <form action="/dashboard/sources" method="post">
+      <label class="nc-label">Liga del canal
+        <input class="nc-input nc-input--mono" type="text" name="channel_url" required
+               placeholder="https://www.youtube.com/@creator/videos">
+      </label>
+      <div class="nc-grid-3">
+        <label class="nc-label">Plataforma <small>(déjalo vacío y lo detectamos)</small>
+          <select class="nc-input" name="platform">
+            <option value="">automático</option>
+            <option value="youtube">youtube</option>
+            <option value="twitch">twitch</option>
+            <option value="kick">kick</option>
+          </select>
+        </label>
+        <label class="nc-label">Persona
+          <select class="nc-input" name="persona_id" required>
+            {% for p in personas %}
+            <option value="{{ p.id }}">{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="nc-label">Máximo por revisión
+          <input class="nc-input" type="number" name="max_per_poll" min="1" max="25" value="3">
+        </label>
+      </div>
+      <div class="nc-grid-3">
+        <label class="nc-label">Nombre <small>(opcional)</small>
+          <input class="nc-input" type="text" name="label" placeholder="ej. Mi YouTube principal">
+        </label>
+        <label class="nc-label">Idioma <small>(pista opcional)</small>
+          <input class="nc-input nc-input--mono" type="text" name="language" placeholder="es">
+        </label>
+        <label class="nc-label">Revisiones por día <small>(cada cuánto checamos)</small>
+          <select class="nc-input" name="polls_per_day">
+            <option value="1" selected>1 — una vez al día</option>
+            <option value="2">2 — cada 12 h</option>
+            <option value="4">4 — cada 6 h</option>
+            <option value="6">6 — cada 4 h</option>
+            <option value="12">12 — cada 2 h</option>
+            <option value="24">24 — cada hora</option>
+          </select>
+        </label>
+      </div>
+      <div style="margin-top: 12px;">
+        <button type="submit" class="nc-btn nc-btn--primary">
+          <i class="ti ti-plus" aria-hidden="true"></i>
+          <span>Conectar canal</span>
+        </button>
+      </div>
+    </form>
+    {% else %}
+    <p class="nc-empty__body">
+      Primero crea una persona — los VODs que entran solos la necesitan para
+      armar las versiones. <a href="/dashboard/personas">Administrar personas</a>.
+    </p>
+    {% endif %}
+  </div>
+</div>
+
+{% if watches %}
+<div class="nc-panel">
+  <div class="nc-panel__header">
+    <i class="ti ti-broadcast" aria-hidden="true" style="color: var(--nc-blue-bright);"></i>
+    <span class="nc-panel__title">{{ watches|length }} canal{{ "es" if watches|length != 1 else "" }}</span>
+  </div>
+  <div class="nc-panel__body" style="padding: 0;">
+    <table class="nc-table">
+      <thead>
+        <tr>
+          <th>Canal</th>
+          <th>Plataforma</th>
+          <th>Estado</th>
+          <th>Frecuencia</th>
+          <th>Vistos</th>
+          <th>Última revisión</th>
+          <th class="nc-cell-actions"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for w in watches %}
+        <tr>
+          <td>
+            <strong style="color: var(--nc-text);">{{ w.channel_label or w.channel_url }}</strong>
+            <div><span class="nc-mono nc-mono--muted" style="font-size: 11px;">{{ w.channel_url }}</span></div>
+          </td>
+          <td><span class="nc-chip nc-chip--code">{{ w.platform }}</span></td>
+          <td>
+            {% if w.enabled %}
+            <span class="nc-chip nc-chip--success">
+              <span class="nc-status-dot nc-status-dot--success"></span>
+              <span>vigilando</span>
+            </span>
+            {% else %}
+            <span class="nc-chip nc-chip--muted">en pausa</span>
+            {% endif %}
+          </td>
+          <td>
+            <form action="/dashboard/sources/{{ w.id }}/schedule" method="post" style="margin: 0;">
+              <select class="nc-input nc-input--sm" name="polls_per_day"
+                      onchange="this.form.submit()" aria-label="Revisiones por día">
+                <option value="1"{{ " selected" if w.polls_per_day == 1 else "" }}>1×/día</option>
+                <option value="2"{{ " selected" if w.polls_per_day == 2 else "" }}>2×/día</option>
+                <option value="4"{{ " selected" if w.polls_per_day == 4 else "" }}>4×/día</option>
+                <option value="6"{{ " selected" if w.polls_per_day == 6 else "" }}>6×/día</option>
+                <option value="12"{{ " selected" if w.polls_per_day == 12 else "" }}>12×/día</option>
+                <option value="24"{{ " selected" if w.polls_per_day == 24 else "" }}>24×/día</option>
+              </select>
+            </form>
+          </td>
+          <td><span class="nc-mono">{{ w.seen_video_ids|length }}</span></td>
+          <td><span class="nc-mono" style="font-size: 11px;"{% if w.last_polled_at %} data-localtime="{{ w.last_polled_at }}"{% endif %}>{{ w.last_polled_at[:19] if w.last_polled_at else 'nunca' }}</span></td>
+          <td class="nc-cell-actions">
+            <form action="/dashboard/sources/{{ w.id }}/poll" method="post" style="display: inline; margin: 0;">
+              <button type="submit" class="nc-btn nc-btn--sm" title="Buscar VODs nuevos ahora, sin esperar a la próxima revisión">
+                <i class="ti ti-radar" aria-hidden="true"></i>
+                <span>Escanear ahora</span>
+              </button>
+            </form>
+            <form action="/dashboard/sources/{{ w.id }}/toggle" method="post" style="display: inline; margin: 0;">
+              <button type="submit" class="nc-btn nc-btn--sm">{{ "Pausar" if w.enabled else "Reanudar" }}</button>
+            </form>
+            <form action="/dashboard/sources/{{ w.id }}/delete" method="post" style="display: inline; margin: 0;"
+                  onsubmit="return confirm('¿Quitar este canal?');">
+              <button type="submit" class="nc-btn nc-btn--sm nc-btn--danger">Quitar</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="nc-panel">
+  <div class="nc-empty">
+    <div class="nc-empty__icon"><i class="ti ti-broadcast" aria-hidden="true"></i></div>
+    <div class="nc-empty__title">Aún no conectas canales</div>
+    <p class="nc-empty__body">
+      Conecta arriba un canal de YouTube, Twitch o Kick. ChalyClip lo revisa
+      cada cierto tiempo en busca de VODs nuevos y pasa cada uno por todo el
+      proceso solito — no tienes que subir nada a mano.
+    </p>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

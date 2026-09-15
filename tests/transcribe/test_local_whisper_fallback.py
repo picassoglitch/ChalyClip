@@ -8,9 +8,9 @@ from typing import Any
 
 import pytest
 
-from nexoclip.errors import TranscriptionError
-from nexoclip.transcribe.models import Transcript
-from nexoclip.transcribe.providers.local_whisper import LocalWhisperProvider
+from chalybclip.errors import TranscriptionError
+from chalybclip.transcribe.models import Transcript
+from chalybclip.transcribe.providers.local_whisper import LocalWhisperProvider
 
 
 def _transcript_json(stream_id: str = "str_x") -> str:
@@ -34,7 +34,7 @@ def _patch_run(monkeypatch: pytest.MonkeyPatch, behavior) -> list[list[str]]:
         return behavior(cmd)
 
     monkeypatch.setattr(
-        "nexoclip.transcribe.providers.local_whisper.subprocess.run", fake_run
+        "chalybclip.transcribe.providers.local_whisper.subprocess.run", fake_run
     )
     return calls
 
@@ -96,7 +96,7 @@ async def test_double_crash_surfaces_second_error(
 
 
 def _req(tmp_path: Path):
-    from nexoclip.transcribe.providers.base import TranscribeRequest
+    from chalybclip.transcribe.providers.base import TranscribeRequest
 
     audio = tmp_path / "audio.wav"
     audio.write_bytes(b"\x00")

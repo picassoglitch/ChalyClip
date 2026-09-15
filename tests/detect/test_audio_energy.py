@@ -13,10 +13,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from nexoclip.config import AudioEnergyConfig
-from nexoclip.detect import detect_audio_energy
-from nexoclip.errors import DetectionError
-from nexoclip.ingest import Stream
+from chalybclip.config import AudioEnergyConfig
+from chalybclip.detect import detect_audio_energy
+from chalybclip.errors import DetectionError
+from chalybclip.ingest import Stream
 
 _SAMPLE_RATE = 16000
 

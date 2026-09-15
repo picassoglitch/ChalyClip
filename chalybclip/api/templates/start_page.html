@@ -1,0 +1,319 @@
+{% extends "base.html" %}
+{% block title %}{{ t('nav.new_clip') }} · ChalyClip{% endblock %}
+{% block main_class %}nc-page--ingest{% endblock %}
+{% block content %}
+
+<div class="nc-ingest">
+
+  {# Functional gating warnings — pre-existing, shown above the card only
+     when something blocks a run (no persona / ffmpeg missing). #}
+  {% if not personas %}
+  <div class="nc-alert nc-alert--danger nc-ingest__alert">
+    <div class="nc-alert__icon"><i class="ti ti-user-off" aria-hidden="true"></i></div>
+    <div class="nc-alert__body">
+      <div class="nc-alert__title">Primero necesitas una firma</div>
+      <div class="nc-alert__detail">
+        Tus textos y versiones salen con la voz de tu firma. Crea una en
+        <a href="/dashboard/personas">/dashboard/personas</a> y vuelve aquí.
+      </div>
+    </div>
+  </div>
+  {% endif %}
+  {% if personas and not ffmpeg_ok %}
+  <div class="nc-alert nc-alert--danger nc-ingest__alert">
+    <div class="nc-alert__icon"><i class="ti ti-alert-triangle" aria-hidden="true"></i></div>
+    <div class="nc-alert__body">
+      <div class="nc-alert__title">Falta ffmpeg en el servidor</div>
+      <div class="nc-alert__detail">
+        Lo necesitamos para sacar el audio de tu video. Instálalo y reinicia el panel.
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {# Single hero card. All four panels are server-rendered (so the real
+     <form>s, persona_id hidden field, and live creds survive); JS just
+     toggles `hidden` + aria-selected. Only the URL panel starts visible. #}
+  <div class="nc-ingest-card">
+
+    {# ---- URL ---- #}
+    <div class="nc-ingest__panel" id="nc-panel-url" role="tabpanel" aria-labelledby="nc-tab-url">
+      <div class="nc-ingest__head">
+        <h2 class="nc-ingest__title">{{ t('newClip.url.title') }}</h2>
+        <span class="nc-ingest__tag is-accent">{{ t('newClip.url.tag') }}</span>
+      </div>
+      <p class="nc-ingest__help">{{ t('newClip.url.help') }}</p>
+      <form id="urlForm" action="/dashboard/url-jobs" method="post">
+        <label class="nc-ingest__flabel" for="urlInput">{{ t('newClip.url.fieldLabel') }}</label>
+        <input type="url" id="urlInput" class="nc-input nc-input--mono" name="vod_url"
+               placeholder="{{ t('newClip.url.placeholder') }}" autocomplete="off" required>
+        <div id="urlHint" class="nc-ingest__supported">
+          {{ t('newClip.url.supportedPre') }} <b>kick.com&nbsp;·&nbsp;twitch.tv&nbsp;·&nbsp;youtube.com&nbsp;·&nbsp;youtu.be</b>
+        </div>
+        <div id="urlError" class="nc-alert nc-alert--danger" role="alert"
+             style="display:none; margin-top:10px; font-size:12px; padding:8px 10px;"></div>
+        <button type="submit" id="urlSubmit" class="nc-btn nc-btn--primary nc-btn--full nc-ingest__cta"
+                {% if not personas or not ffmpeg_ok %}disabled{% endif %}>
+          <i class="ti ti-player-play" aria-hidden="true"></i><span>{{ t('newClip.url.start') }}</span>
+        </button>
+      </form>
+      {% if not cookies_configured %}
+      <p class="nc-ingest__foot">
+        {{ t('newClip.url.cookiesPre') }}
+        <code class="nc-envchip">CHALYBCLIP_COOKIES_FILE=/data/cookies.txt</code>
+        {{ t('newClip.url.cookiesMid') }}
+      </p>
+      {% endif %}
+    </div>
+
+    {# ---- UPLOAD ---- #}
+    <div class="nc-ingest__panel" id="nc-panel-upload" role="tabpanel" aria-labelledby="nc-tab-upload" hidden>
+      <div class="nc-ingest__head">
+        <h2 class="nc-ingest__title">{{ t('newClip.upload.title') }}</h2>
+        <span class="nc-ingest__tag">{{ t('newClip.upload.tag') }}</span>
+      </div>
+      <p class="nc-ingest__help">{{ t('newClip.upload.help') }}</p>
+      <form id="uploadForm" action="/dashboard/streams/upload" method="post" enctype="multipart/form-data">
+        <label class="nc-ingest__flabel" for="uploadFile">{{ t('newClip.upload.fieldLabel') }}</label>
+        <div class="nc-drop" id="uploadDrop" role="button" tabindex="0" aria-controls="uploadFile">
+          <div class="nc-drop__ic"><i class="ti ti-cloud-upload" aria-hidden="true"></i></div>
+          <strong>{{ t('newClip.upload.dropTitle') }}</strong>
+          <span>{{ t('newClip.upload.dropHint') }}</span>
+          <div class="nc-drop__formats">MP4 · MKV · WebM · MOV</div>
+          <div class="nc-drop__name" id="uploadName" hidden></div>
+        </div>
+        <input type="file" id="uploadFile" name="file" accept="video/*,.mp4,.mkv,.webm,.mov"
+               required style="position:absolute; width:1px; height:1px; opacity:0; pointer-events:none;">
+        {% if default_persona %}
+        <input type="hidden" name="persona_id" value="{{ default_persona.id }}">
+        {% endif %}
+        <button type="submit" id="uploadSubmit" class="nc-btn nc-btn--primary nc-btn--full nc-ingest__cta"
+                {% if not personas or not ffmpeg_ok %}disabled{% endif %}>
+          <i class="ti ti-upload" aria-hidden="true"></i><span>{{ t('newClip.upload.cta') }}</span>
+        </button>
+      </form>
+      <p class="nc-ingest__foot">{{ t('newClip.upload.largeFiles') }}</p>
+    </div>
+
+    {# ---- LIVE (RTMP) ---- #}
+    <div class="nc-ingest__panel" id="nc-panel-live" role="tabpanel" aria-labelledby="nc-tab-live" hidden>
+      <div class="nc-ingest__head">
+        <h2 class="nc-ingest__title">{{ t('newClip.live.title') }}</h2>
+        <span class="nc-ingest__tag">{{ t('newClip.live.tag') }}</span>
+      </div>
+      {% if live_configured %}
+      <p class="nc-ingest__help">{{ t('newClip.live.help') }}</p>
+      <label class="nc-ingest__flabel">{{ t('newClip.live.serverLabel') }}</label>
+      <div class="nc-ro">
+        <span class="nc-ro__v">{{ live_rtmp_base_url }}</span>
+        <button type="button" class="nc-btn nc-btn--sm" data-copy="{{ live_rtmp_base_url }}">{{ t('newClip.live.copy') }}</button>
+      </div>
+      <label class="nc-ingest__flabel" style="margin-top:14px;">{{ t('newClip.live.keyLabel') }}</label>
+      {# TODO(ingest): fetch the per-tenant RTMP stream key from the live
+         endpoint and render it here. Placeholder shown until wired — this is
+         a UI-restructure-only pass (see redesign brief: screenshot states
+         before endpoint wiring). #}
+      <div class="nc-ro">
+        <span class="nc-ro__v" id="liveKey" data-masked="•••••••••••••••• nx_xxxx" data-real="nx_live_placeholder_key">•••••••••••••••• nx_xxxx</span>
+        <button type="button" class="nc-btn nc-btn--sm" id="liveReveal">{{ t('newClip.live.reveal') }}</button>
+        <button type="button" class="nc-btn nc-btn--sm" data-copy="nx_live_placeholder_key">{{ t('newClip.live.copy') }}</button>
+      </div>
+      <a href="/dashboard/live" class="nc-btn nc-btn--full nc-ingest__cta">
+        <span>{{ t('newClip.live.openDashboard') }}</span><i class="ti ti-arrow-right" aria-hidden="true"></i>
+      </a>
+      <p class="nc-ingest__foot">{{ t('newClip.live.note') }}</p>
+      {% else %}
+      <p class="nc-ingest__help">{{ t('newClip.live.notConfigured') }}</p>
+      <button class="nc-btn nc-btn--full nc-ingest__cta" disabled>
+        <i class="ti ti-lock" aria-hidden="true"></i><span>{{ t('newClip.live.unavailable') }}</span>
+      </button>
+      {% endif %}
+    </div>
+
+    {# ---- DRIVE ---- #}
+    <div class="nc-ingest__panel" id="nc-panel-drive" role="tabpanel" aria-labelledby="nc-tab-drive" hidden>
+      <div class="nc-ingest__head">
+        <h2 class="nc-ingest__title">{{ t('newClip.drive.title') }}</h2>
+        <span class="nc-ingest__tag">{{ t('newClip.drive.tag') }}</span>
+      </div>
+      <p class="nc-ingest__help">{{ t('newClip.drive.help') }}</p>
+      <label class="nc-ingest__flabel">{{ t('newClip.drive.watchedLabel') }}</label>
+      {# Drive folder auto-ingest is backend-only so far (repo + poller exist,
+         but there's no Google OAuth connect flow, no production poller, and no
+         management route). Show an honest "coming soon" state with a disabled
+         CTA rather than linking to a page that 404s. #}
+      <div class="nc-connected">
+        <span class="nc-connected__ic"><i class="ti ti-brand-google-drive" aria-hidden="true"></i></span>
+        <span class="nc-connected__nm">
+          <b>{{ t('newClip.drive.connectTitle') }}</b>
+          <small>{{ t('newClip.drive.connectHint') }}</small>
+        </span>
+      </div>
+      <button class="nc-btn nc-btn--full nc-ingest__cta" disabled>
+        <i class="ti ti-lock" aria-hidden="true"></i><span>{{ t('newClip.drive.unavailable') }}</span>
+      </button>
+      <p class="nc-ingest__foot">{{ t('newClip.drive.note') }}</p>
+    </div>
+
+  </div>
+
+  {# Mode selector — a tablist of 4 circular icon buttons below the card. #}
+  <p class="nc-modes-hint">{{ t('newClip.modesHint') }}</p>
+  <div class="nc-modes" role="tablist" aria-label="{{ t('nav.new_clip') }}">
+    <button class="nc-mode" id="nc-tab-url" role="tab" data-mode="url"
+            aria-selected="true" aria-controls="nc-panel-url" tabindex="0">
+      <span class="nc-mode__ic"><i class="ti ti-link" aria-hidden="true"></i></span>
+      <span class="nc-mode__lbl">{{ t('newClip.modes.url.label') }}</span>
+    </button>
+    <button class="nc-mode" id="nc-tab-upload" role="tab" data-mode="upload"
+            aria-selected="false" aria-controls="nc-panel-upload" tabindex="-1">
+      <span class="nc-mode__ic"><i class="ti ti-cloud-upload" aria-hidden="true"></i></span>
+      <span class="nc-mode__lbl">{{ t('newClip.modes.upload.label') }}</span>
+    </button>
+    <button class="nc-mode" id="nc-tab-live" role="tab" data-mode="live"
+            aria-selected="false" aria-controls="nc-panel-live" tabindex="-1">
+      <span class="nc-mode__ic"><i class="ti ti-broadcast" aria-hidden="true"></i></span>
+      <span class="nc-mode__lbl">{{ t('newClip.modes.live.label') }}</span>
+    </button>
+    <button class="nc-mode" id="nc-tab-drive" role="tab" data-mode="drive"
+            aria-selected="false" aria-controls="nc-panel-drive" tabindex="-1">
+      <span class="nc-mode__ic"><i class="ti ti-brand-google-drive" aria-hidden="true"></i></span>
+      <span class="nc-mode__lbl">{{ t('newClip.modes.drive.label') }}</span>
+    </button>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.nc-mode'));
+
+  function select(mode, focus) {
+    tabs.forEach(function (t) {
+      var on = t.dataset.mode === mode;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      t.tabIndex = on ? 0 : -1;
+      var panel = document.getElementById('nc-panel-' + t.dataset.mode);
+      if (panel) panel.hidden = !on;
+    });
+    if (focus) {
+      var active = document.querySelector('.nc-mode[data-mode="' + mode + '"]');
+      if (active) active.focus();
+    }
+  }
+
+  tabs.forEach(function (t) {
+    t.addEventListener('click', function () { select(t.dataset.mode); });
+    t.addEventListener('keydown', function (e) {
+      var i = tabs.indexOf(t);
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        e.preventDefault(); select(tabs[(i + 1) % tabs.length].dataset.mode, true);
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        e.preventDefault(); select(tabs[(i - 1 + tabs.length) % tabs.length].dataset.mode, true);
+      } else if (e.key === 'Home') {
+        e.preventDefault(); select(tabs[0].dataset.mode, true);
+      } else if (e.key === 'End') {
+        e.preventDefault(); select(tabs[tabs.length - 1].dataset.mode, true);
+      }
+    });
+  });
+
+  // ---- URL validation (mirrors chalybclip.ingest.detect_platform) ----
+  var URL_PATTERNS = [
+    /^https?:\/\/(?:www\.)?kick\.com\//i,
+    /^https?:\/\/(?:www\.)?twitch\.tv\//i,
+    /^https?:\/\/(?:www\.)?youtube\.com\//i,
+    /^https?:\/\/youtu\.be\//i
+  ];
+  var input = document.getElementById('urlInput');
+  var errorBox = document.getElementById('urlError');
+  var urlSubmit = document.getElementById('urlSubmit');
+  var urlForm = document.getElementById('urlForm');
+  function validate(url) {
+    if (!url) return "Pega el enlace de tu VOD.";
+    var trimmed = url.trim();
+    for (var i = 0; i < URL_PATTERNS.length; i++) { if (URL_PATTERNS[i].test(trimmed)) return null; }
+    return "Solo funcionan enlaces de kick.com, twitch.tv, youtube.com o youtu.be.";
+  }
+  function showError(msg) {
+    if (!errorBox) return;
+    errorBox.textContent = msg || "";
+    errorBox.style.display = msg ? "" : "none";
+  }
+  if (input) {
+    input.addEventListener('input', function () {
+      var v = input.value.trim();
+      if (v.length === 0 || !/^https?:/i.test(v)) { showError(null); return; }
+      showError(validate(v));
+    });
+  }
+  if (urlForm) {
+    urlForm.addEventListener('submit', function (e) {
+      var msg = validate(input.value);
+      if (msg) { e.preventDefault(); showError(msg); input.focus(); return; }
+      urlSubmit.disabled = true;
+      urlSubmit.innerHTML = '<i class="ti ti-loader-2 nc-spin" aria-hidden="true"></i> <span>Empezando…</span>';
+    });
+  }
+
+  // ---- Upload: dropzone (click + drag) + submit label ----
+  var drop = document.getElementById('uploadDrop');
+  var fileInput = document.getElementById('uploadFile');
+  var fileName = document.getElementById('uploadName');
+  function reflectFile() {
+    if (fileInput && fileInput.files && fileInput.files.length && fileName) {
+      fileName.hidden = false;
+      fileName.textContent = fileInput.files[0].name;
+    }
+  }
+  if (drop && fileInput) {
+    drop.addEventListener('click', function () { fileInput.click(); });
+    drop.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); }
+    });
+    fileInput.addEventListener('change', reflectFile);
+    ['dragenter', 'dragover'].forEach(function (ev) {
+      drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('is-drag'); });
+    });
+    ['dragleave', 'drop'].forEach(function (ev) {
+      drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('is-drag'); });
+    });
+    drop.addEventListener('drop', function (e) {
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+        fileInput.files = e.dataTransfer.files; reflectFile();
+      }
+    });
+  }
+  var uploadForm = document.getElementById('uploadForm');
+  var uploadSubmit = document.getElementById('uploadSubmit');
+  if (uploadForm) {
+    uploadForm.addEventListener('submit', function () {
+      if (uploadSubmit) {
+        uploadSubmit.disabled = true;
+        uploadSubmit.innerHTML = '<i class="ti ti-loader-2 nc-spin" aria-hidden="true"></i> <span>Subiendo…</span>';
+      }
+    });
+  }
+
+  // ---- Live: copy buttons + reveal ----
+  document.querySelectorAll('[data-copy]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      if (navigator.clipboard) navigator.clipboard.writeText(b.dataset.copy);
+      var prev = b.textContent;
+      b.textContent = "{{ t('newClip.live.copied') }}";
+      setTimeout(function () { b.textContent = prev; }, 1200);
+    });
+  });
+  var reveal = document.getElementById('liveReveal');
+  var keyEl = document.getElementById('liveKey');
+  if (reveal && keyEl) {
+    reveal.addEventListener('click', function () {
+      var masked = keyEl.textContent.indexOf('•') !== -1;
+      keyEl.textContent = masked ? keyEl.dataset.real : keyEl.dataset.masked;
+      reveal.textContent = masked ? "{{ t('newClip.live.hide') }}" : "{{ t('newClip.live.reveal') }}";
+    });
+  }
+})();
+</script>
+
+{% endblock %}

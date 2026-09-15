@@ -6,14 +6,14 @@ import datetime as _dt
 
 import pytest
 
-from nexoclip.db import (
+from chalybclip.db import (
     Database,
     TenantsRepo,
     WebhookSecretsRepo,
     WebhookSubscriptionsRepo,
 )
-from nexoclip.errors import NexoClipError, TenancyError
-from nexoclip.tenancy import bound_tenant
+from chalybclip.errors import ChalybClipError, TenancyError
+from chalybclip.tenancy import bound_tenant
 
 
 def _now() -> str:
@@ -53,7 +53,7 @@ async def test_rotate_writes_old_secret_to_versions_and_swaps_current(
 
 async def test_rotate_unknown_subscription_raises(migrated_db: Database) -> None:
     tenant = await TenantsRepo(migrated_db).create(name="A")
-    with bound_tenant(tenant.id), pytest.raises(NexoClipError, match="not found"):
+    with bound_tenant(tenant.id), pytest.raises(ChalybClipError, match="not found"):
         await WebhookSecretsRepo(migrated_db).rotate(
             "whk_does_not_exist", new_secret="X", ttl_s=60
         )
@@ -106,7 +106,7 @@ async def test_secrets_isolated_per_tenant(migrated_db: Database) -> None:
     assert active == []
 
     # Bob's rotate against Alice's subscription id raises.
-    with bound_tenant(bob.id), pytest.raises(NexoClipError, match="not found"):
+    with bound_tenant(bob.id), pytest.raises(ChalybClipError, match="not found"):
         await WebhookSecretsRepo(migrated_db).rotate(
             sub_id, new_secret="HIJACK", ttl_s=60
         )

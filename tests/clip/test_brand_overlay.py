@@ -14,8 +14,8 @@ from unittest.mock import patch
 
 import pytest
 
-from nexoclip.clip.service import _brand_kit_drawtext_filter
-from nexoclip.db.models import BrandKitRow
+from chalybclip.clip.service import _brand_kit_drawtext_filter
+from chalybclip.db.models import BrandKitRow
 
 
 def _make_kit(**overrides: object) -> BrandKitRow:
@@ -49,7 +49,7 @@ def test_tiktok_handle_wins_when_set() -> None:
         handle_instagram="@nope",
     )
     with patch(
-        "nexoclip.clip.service._find_system_font",
+        "chalybclip.clip.service._find_system_font",
         return_value=Path("/fonts/arial.ttf"),
     ):
         out = _brand_kit_drawtext_filter(kit, output_w=1080)
@@ -61,7 +61,7 @@ def test_tiktok_handle_wins_when_set() -> None:
 def test_falls_through_to_kick_when_no_other_handle() -> None:
     kit = _make_kit(handle_kick="aldovillanueva")
     with patch(
-        "nexoclip.clip.service._find_system_font",
+        "chalybclip.clip.service._find_system_font",
         return_value=Path("/fonts/arial.ttf"),
     ):
         out = _brand_kit_drawtext_filter(kit, output_w=1080)
@@ -72,7 +72,7 @@ def test_falls_through_to_kick_when_no_other_handle() -> None:
 def test_uses_accent_color_for_fontcolor() -> None:
     kit = _make_kit(accent_color="#00FF00", handle_tiktok="@x")
     with patch(
-        "nexoclip.clip.service._find_system_font",
+        "chalybclip.clip.service._find_system_font",
         return_value=Path("/fonts/arial.ttf"),
     ):
         out = _brand_kit_drawtext_filter(kit, output_w=1080)
@@ -84,7 +84,7 @@ def test_no_font_found_returns_none() -> None:
     """If we can't resolve any system font, the overlay is skipped silently
     rather than producing an ffmpeg error."""
     kit = _make_kit(handle_tiktok="@x")
-    with patch("nexoclip.clip.service._find_system_font", return_value=None):
+    with patch("chalybclip.clip.service._find_system_font", return_value=None):
         out = _brand_kit_drawtext_filter(kit, output_w=1080)
     assert out is None
 
@@ -95,7 +95,7 @@ def test_windows_font_path_is_colon_escaped() -> None:
     'C:/Windows/...' as setting filter option 'C' to '/Windows/...'."""
     kit = _make_kit(handle_tiktok="@x")
     with patch(
-        "nexoclip.clip.service._find_system_font",
+        "chalybclip.clip.service._find_system_font",
         return_value=Path(r"C:\Windows\Fonts\arial.ttf"),
     ):
         out = _brand_kit_drawtext_filter(kit, output_w=1080)
@@ -108,7 +108,7 @@ def test_fontsize_scales_with_output_width() -> None:
     proportional across 720p / 1080p / 4K)."""
     kit = _make_kit(handle_tiktok="@x")
     with patch(
-        "nexoclip.clip.service._find_system_font",
+        "chalybclip.clip.service._find_system_font",
         return_value=Path("/fonts/arial.ttf"),
     ):
         out_small = _brand_kit_drawtext_filter(kit, output_w=720)
@@ -129,7 +129,7 @@ def test_single_quote_in_handle_is_stripped() -> None:
     would break the filter. We strip them defensively."""
     kit = _make_kit(handle_tiktok="@o'connor")
     with patch(
-        "nexoclip.clip.service._find_system_font",
+        "chalybclip.clip.service._find_system_font",
         return_value=Path("/fonts/arial.ttf"),
     ):
         out = _brand_kit_drawtext_filter(kit, output_w=1080)
@@ -146,7 +146,7 @@ def test_kit_with_empty_string_handle_treated_as_missing() -> None:
         handle_youtube="@yt",
     )
     with patch(
-        "nexoclip.clip.service._find_system_font",
+        "chalybclip.clip.service._find_system_font",
         return_value=Path("/fonts/arial.ttf"),
     ):
         out = _brand_kit_drawtext_filter(kit, output_w=1080)

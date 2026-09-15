@@ -25,9 +25,9 @@ import pytest
 import pytest_asyncio
 import respx
 
-from nexoclip.db import Database, TenantsRepo
-from nexoclip.integrations.nexo_ai.service import sync_tenant_tier
-from nexoclip.settings import get_settings
+from chalybclip.db import Database, TenantsRepo
+from chalybclip.integrations.chalyb.service import sync_tenant_tier
+from chalybclip.settings import get_settings
 
 from .conftest import auth
 
@@ -37,7 +37,7 @@ _ZBASE = "https://zernio.com/api/v1"
 @pytest.fixture
 def zernio_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """Configure the company-wide Zernio key + bust the settings cache."""
-    monkeypatch.setenv("NEXOCLIP_ZERNIO_API_KEY", "sk_test_router")
+    monkeypatch.setenv("CHALYBCLIP_ZERNIO_API_KEY", "sk_test_router")
     get_settings.cache_clear()
     try:
         yield
@@ -75,7 +75,7 @@ async def test_dashboard_autoprovisions_profile_so_tabs_appear(
         )
         mock.post(f"{_ZBASE}/profiles").mock(
             return_value=httpx.Response(
-                201, json={"profile": {"_id": "prof_auto", "name": f"NexoClip {tid}"}}
+                201, json={"profile": {"_id": "prof_auto", "name": f"ChalyClip {tid}"}}
             )
         )
         mock.get(f"{_ZBASE}/accounts").mock(

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from nexoclip.config import VisualConfig
-from nexoclip.detect import detect_visual_candidates
-from nexoclip.errors import DetectionError
-from nexoclip.vision import VisualSignal, VisualSignalTrack
+from chalybclip.config import VisualConfig
+from chalybclip.detect import detect_visual_candidates
+from chalybclip.errors import DetectionError
+from chalybclip.vision import VisualSignal, VisualSignalTrack
 
 from ._fixtures import make_stream
 

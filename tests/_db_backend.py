@@ -1,7 +1,7 @@
 """Shared test-DB backend selection: SQLite (default) or real Postgres.
 
-Set ``NEXOCLIP_TEST_PG_DSN`` (e.g. ``postgresql://postgres@127.0.0.1:5433/
-nexoclip_test``) to run the fixture-backed suites against a real Postgres
+Set ``CHALYBCLIP_TEST_PG_DSN`` (e.g. ``postgresql://postgres@127.0.0.1:5433/
+chalybclip_test``) to run the fixture-backed suites against a real Postgres
 instead of a throwaway SQLite file. This exercises the actual production
 engine — the asyncpg facade, the ON CONFLICT idioms, the PG baseline — with
 no dialect drift.
@@ -25,9 +25,9 @@ from pathlib import Path
 import aiosqlite
 import asyncpg
 
-from nexoclip.db import Database, apply_migrations
+from chalybclip.db import Database, apply_migrations
 
-_PG_DSN = os.environ.get("NEXOCLIP_TEST_PG_DSN")
+_PG_DSN = os.environ.get("CHALYBCLIP_TEST_PG_DSN")
 
 if _PG_DSN:
     # In Postgres test mode, point the WHOLE app at the same database — not
@@ -36,7 +36,7 @@ if _PG_DSN:
     # they'd open the default SQLite file while the fixture data lives in PG.
     # Mirrors production, where DATABASE_URL is set and every path uses it.
     os.environ.setdefault("DATABASE_URL", _PG_DSN)
-    from nexoclip.settings import get_settings
+    from chalybclip.settings import get_settings
 
     get_settings.cache_clear()
 

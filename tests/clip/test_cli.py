@@ -1,4 +1,4 @@
-"""CLI smoke tests for `nexoclip cut`."""
+"""CLI smoke tests for `chalybclip cut`."""
 
 from __future__ import annotations
 
@@ -8,9 +8,9 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from nexoclip.cli import app
-from nexoclip.clip import service as clip_service
-from nexoclip.detect import CandidateBatch
+from chalybclip.cli import app
+from chalybclip.clip import service as clip_service
+from chalybclip.detect import CandidateBatch
 
 from ._fixtures import make_candidate, seed_stream
 

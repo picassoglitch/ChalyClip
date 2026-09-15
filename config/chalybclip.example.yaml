@@ -1,0 +1,100 @@
+# ChalyClip main configuration.
+# Copy to chalybclip.yaml and edit for your local setup.
+
+# Output directory for stream artifacts
+output_dir: ./out
+
+# Whisper transcription
+whisper:
+  device: cuda                      # cuda | cpu
+  model: medium                     # tiny | base | small | medium | large-v3
+  compute_type: float16             # float16 | int8 | int8_float16
+  language: es                      # ISO 639-1; null = auto-detect
+
+# Trigger detection
+detection:
+  # Voice triggers (Phase 0)
+  voice:
+    enabled: true
+    weight: 1.0
+    fuzzy_distance: 2               # Levenshtein tolerance for transcription errors
+    phrases:
+      es:
+        - "clipéalo"
+        - "clipea esto"
+        - "saca un clip"
+        - "guarda esto"
+        - "momento clip"
+        - "este momento"
+      en:
+        - "clip this"
+        - "clip that"
+        - "someone clip this"
+
+  # Chat heat (Phase 1)
+  chat_heat:
+    enabled: false                  # turn on in Phase 1
+    weight: 0.7
+    baseline_window_s: 300          # 5-min rolling baseline
+    spike_ratio: 3.0                # fires when current rate > 3x baseline
+    absolute_floor_msg_per_s: 5.0
+
+  # Audio energy — crowd roars / chants / laughter / raised voice. The
+  # standalone signal for chat-less, speech-sparse content (IRL streams,
+  # celebration / crowd footage, gameplay hype) where the transcript barely
+  # registers and the viral LLM has little to read. ON in production:
+  # without it those videos fall to ~0-2 clips.
+  audio_energy:
+    enabled: true
+    weight: 0.5
+    baseline_window_s: 300
+    spike_ratio: 2.5
+    sustain_s: 1.5
+
+  # Visual signals (Phase 1)
+  # ON by default — scene-cut + face/motion signals vote alongside the
+  # LLM viral detector, and face presence drives the dashboard's
+  # Viral-score face-boost. timeout_s is the hard cap on analyze_video
+  # runtime; on timeout the pipeline continues without visual signals
+  # so a slow CPU on a long VOD never blocks the rest of the pipeline.
+  visual:
+    enabled: true
+    weight: 0.6
+    # 10-min cap covers most VOD lengths on a typical desktop GPU+CPU.
+    # On timeout the pipeline continues without visual signals (the
+    # rest still runs), so this is a safety net not a hard requirement.
+    timeout_s: 600.0
+
+  # Viral / controversy detector — sends the transcript to an LLM and asks it
+  # to identify the moments most likely to go viral on short-form platforms.
+  # Works on any content (doesn't require the streamer to say "clip this").
+  # Costs one LLM call per stream.
+  viral:
+    enabled: true                   # production: ON — the only signal that
+                                    # works without chat (e.g. YouTube VODs);
+                                    # without it, chat-less sources yield ~0
+                                    # candidates. Costs one LLM call per stream.
+    weight: 1.0
+    quality: standard               # standard (Haiku) | premium (Opus)
+    max_moments: 20                 # hard cap on returned candidates
+    min_score: 0.4                  # keep decent moments, not just bangers
+
+  # Candidate merging
+  merge_window_s: 30                # candidates within this window collapse to one
+
+# Clip cutting
+clip:
+  pre_roll_s: 30                    # seconds before trigger
+  post_roll_s: 15                   # seconds after trigger
+  output_aspect: "9:16"
+  output_width: 1080
+  output_height: 1920
+  encoder: libx264
+  preset: fast
+  crf: 19
+  burn_captions: false              # Phase 0 leaves captions off; Phase 1 turns on
+
+# Logging
+log:
+  level: INFO
+  format: console                   # console | json

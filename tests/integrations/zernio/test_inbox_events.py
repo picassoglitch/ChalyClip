@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 
-from nexoclip.db import Database, ZernioEventsRepo, ZernioInboxRepo, apply_migrations
-from nexoclip.integrations.zernio.events import process_zernio_event
+from chalybclip.db import Database, ZernioEventsRepo, ZernioInboxRepo, apply_migrations
+from chalybclip.integrations.zernio.events import process_zernio_event
 
 _ACC = "acct_ig_1"
 

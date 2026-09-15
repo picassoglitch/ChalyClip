@@ -6,7 +6,7 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from nexoclip.cli import app
+from chalybclip.cli import app
 
 
 def test_db_init_help() -> None:
@@ -16,13 +16,13 @@ def test_db_init_help() -> None:
 
 
 def test_db_init_brings_schema_to_current_version(tmp_path: Path) -> None:
-    """`db init` runs every migration; current head is version 57
-    (057_platform_cooldowns)."""
+    """`db init` runs every migration; current head is version 58
+    (058_rebrand_brand_kit_columns)."""
     runner = CliRunner()
     db_path = tmp_path / "x.db"
     result = runner.invoke(app, ["db", "init", "--db-path", str(db_path)])
     assert result.exit_code == 0, result.output
-    assert "schema_version = 57" in result.output
+    assert "schema_version = 58" in result.output
 
 
 def test_tenants_add_and_list(tmp_path: Path) -> None:
@@ -131,7 +131,7 @@ def test_tenants_set_budget_no_args_exits_2(tmp_path: Path) -> None:
 
 
 def test_mcp_serve_help_is_documented(tmp_path: Path) -> None:
-    """`nexoclip mcp serve --help` shows usage so agents can discover the command."""
+    """`chalybclip mcp serve --help` shows usage so agents can discover the command."""
     runner = CliRunner()
     result = runner.invoke(app, ["mcp", "serve", "--help"])
     assert result.exit_code == 0
@@ -146,13 +146,13 @@ def test_mcp_serve_without_token_exits_1(tmp_path: Path) -> None:
     db_path = tmp_path / "x.db"
     runner.invoke(app, ["db", "init", "--db-path", str(db_path)])
     # Make sure the env var is empty for this invocation.
-    env = {k: v for k, v in os.environ.items() if k != "NEXOCLIP_API_TOKEN"}
-    env["NEXOCLIP_API_TOKEN"] = ""
+    env = {k: v for k, v in os.environ.items() if k != "CHALYBCLIP_API_TOKEN"}
+    env["CHALYBCLIP_API_TOKEN"] = ""
     result = runner.invoke(
         app, ["mcp", "serve", "--db-path", str(db_path)], env=env
     )
     assert result.exit_code == 1
-    assert "no API token" in (result.stderr or result.output) or "NEXOCLIP_API_TOKEN" in (
+    assert "no API token" in (result.stderr or result.output) or "CHALYBCLIP_API_TOKEN" in (
         result.stderr or result.output
     )
 

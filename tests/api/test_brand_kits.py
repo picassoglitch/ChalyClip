@@ -11,8 +11,8 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from nexoclip.db import BrandKitsRepo, Database
-from nexoclip.tenancy import bound_tenant
+from chalybclip.db import BrandKitsRepo, Database
+from chalybclip.tenancy import bound_tenant
 
 
 async def _login(client: httpx.AsyncClient, token: str) -> None:
@@ -271,11 +271,11 @@ async def test_generate_logo_persists_svg_and_ai_metadata(
     LLM-returned SVG through the sanitizer, writes it under
     `<output_dir>/brand_kits/<kit_id>/logo.svg`, and stamps the kit row
     with ai_generated=True + ai_provider='anthropic'."""
-    from nexoclip.llm import router as router_module
-    from nexoclip.settings import get_settings
+    from chalybclip.llm import router as router_module
+    from chalybclip.settings import get_settings
 
     # Pin output dir to the per-test tmp so the SVG goes somewhere safe.
-    monkeypatch.setenv("NEXOCLIP_DEFAULT_OUTPUT_DIR", str(tmp_path))
+    monkeypatch.setenv("CHALYBCLIP_DEFAULT_OUTPUT_DIR", str(tmp_path))
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     get_settings.cache_clear()
 
@@ -363,9 +363,9 @@ async def test_logo_svg_endpoint_404_when_missing(
     """SVG file-serving endpoint returns 404 when the kit exists but no
     logo was generated yet — the dashboard template guards on
     `kit.logo_url` so this is the right shape."""
-    from nexoclip.settings import get_settings
+    from chalybclip.settings import get_settings
 
-    monkeypatch.setenv("NEXOCLIP_DEFAULT_OUTPUT_DIR", str(tmp_path))
+    monkeypatch.setenv("CHALYBCLIP_DEFAULT_OUTPUT_DIR", str(tmp_path))
     get_settings.cache_clear()
     await _login(client, tenants["alice"]["token"])
     with bound_tenant(tenants["alice"]["id"]):

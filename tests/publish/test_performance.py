@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import datetime as _dt
 
-from nexoclip.publish.allocation import ClipPlatformFit, allocate
-from nexoclip.publish.growth_engine import ClipContent, plan_backlog_schedule
-from nexoclip.publish.pacing import DEFAULT_PLATFORM_RULES
-from nexoclip.score.growth import GrowthInput, fallback_card
-from nexoclip.score.performance import compute_platform_performance, platform_weights
+from chalybclip.publish.allocation import ClipPlatformFit, allocate
+from chalybclip.publish.growth_engine import ClipContent, plan_backlog_schedule
+from chalybclip.publish.pacing import DEFAULT_PLATFORM_RULES
+from chalybclip.score.growth import GrowthInput, fallback_card
+from chalybclip.score.performance import compute_platform_performance, platform_weights
 
 _NOW = _dt.datetime(2026, 6, 30, 12, 0, tzinfo=_dt.UTC)
 

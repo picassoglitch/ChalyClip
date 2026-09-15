@@ -7,9 +7,9 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from nexoclip.clip.thumbnail_vision import pick_thumbnail_vision
-from nexoclip.llm import LLMRouter, MemoryFrameStore
-from nexoclip.llm.config import ProviderConfig
+from chalybclip.clip.thumbnail_vision import pick_thumbnail_vision
+from chalybclip.llm import LLMRouter, MemoryFrameStore
+from chalybclip.llm.config import ProviderConfig
 from tests.llm._fakes import FakeProvider  # type: ignore[import]
 from tests.llm._fixtures import make_llm_config  # type: ignore[import]
 

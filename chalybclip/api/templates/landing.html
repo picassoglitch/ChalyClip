@@ -1,0 +1,1563 @@
+<!doctype html>
+<html lang="{{ locale() }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ t('landing.title_tag') }}</title>
+
+  {# ---- Crawler / search-LLM metadata ----------------------------------
+       Outcome-led, not tech-list-led. The dream first: one stream becomes
+       20+ ready-to-post clips without an editor. The technical depth lives
+       at /agents, which carries its own schema.org block.
+  #}
+  <meta name="description"
+        content="Stop paying editors. Turn a 4-hour stream into 20+ ready-to-post clips in minutes. ChalyClip finds the best moments, writes the hooks, burns captions, crops for every platform, and schedules to TikTok / Reels / Shorts with an undo window. You stream — ChalyClip handles the rest.">
+  <meta name="keywords"
+        content="stream clips, AI clipping, viral clips, clip editor alternative, VOD to short, TikTok scheduler, multi-streamer clipping, content factory, ChalyClip">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <link rel="canonical" href="https://chalybclip.chalyb.com/">
+
+  {# ---- Open Graph (Facebook, LinkedIn, Discord, Slack previews) #}
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="ChalyClip — turn one stream into 20+ ready-to-post clips">
+  <meta property="og:description"
+        content="Stop paying editors. Start publishing viral clips every day. ChalyClip finds the moments, writes the hooks, burns the captions, crops for every platform, and schedules everything automatically. You stream — ChalyClip handles the rest.">
+  <meta property="og:url" content="https://chalybclip.chalyb.com/">
+  <meta property="og:site_name" content="ChalyClip">
+  <meta property="og:locale" content="{{ locale() }}_{{ 'US' if locale() == 'en' else 'AR' }}">
+  <meta property="og:image" content="/static/og-image.png">
+
+  {# ---- Twitter / X card --------------------------------------- #}
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="ChalyClip — turn one stream into 20+ ready-to-post clips">
+  <meta name="twitter:description" content="Stop paying editors. Finish streaming, go to sleep, wake up to a publish-ready batch. Finds the moments · writes the hooks · burns captions · schedules with undo.">
+  <meta name="twitter:image" content="/static/og-image.png">
+
+  {# ---- Schema.org JSON-LD: SoftwareApplication ----------------
+       Feature list mirrors the visible outcome-led benefit cards.
+       Each entry leads with the user outcome; the engine detail
+       trails so LLM extraction still has substance to work with.
+  #}
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "ChalyClip",
+    "applicationCategory": "MultimediaApplication",
+    "applicationSubCategory": "VideoEditingApplication",
+    "operatingSystem": "Web, Linux, Windows, macOS",
+    "description": "Stop paying editors. Turn a 4-hour stream into 20+ ready-to-post clips in minutes. ChalyClip finds the best moments, creates hooks, subtitles, captions, hashtags, crops for every platform, and schedules everything automatically to TikTok, Instagram Reels and YouTube Shorts with an undo window. You stream; ChalyClip handles the rest. Under the hood: multimodal viral scoring, per-speaker diarization, local GPU Whisper transcription and an MCP server so Claude Code / Cursor / any LLM client can drive the pipeline.",
+    "url": "https://chalybclip.chalyb.com/",
+    "softwareVersion": "0.1.0",
+    "featureList": [
+      "Finds your viral moments automatically — multimodal scoring across every second of the stream, no manual reviewing",
+      "Never write another title again — multiple viral title options per clip, choose one with a click",
+      "Skip the boring parts — jump straight to the funniest, loudest, most emotional and most engaging moments",
+      "Clip moments instantly — say 'clip that' while streaming and ChalyClip remembers it automatically",
+      "Your content always looks on-brand — logos, fonts, colors and captions applied automatically per speaker",
+      "Post while you sleep — schedule clips automatically across platforms, review or undo anytime",
+      "Local GPU Whisper transcription — stream audio never leaves your machine",
+      "MCP-native control surface for Claude Code / Cursor / agent integration"
+    ],
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD",
+      "availability": "https://schema.org/InStock"
+    }
+  }
+  </script>
+
+  {# ---- Schema.org JSON-LD: Organization ----------------------- #}
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "ChalyClip",
+    "url": "https://chalybclip.chalyb.com/",
+    "logo": "/static/logo.png",
+    "sameAs": []
+  }
+  </script>
+
+  {# ---- Schema.org JSON-LD: FAQ for LLM extraction -------------
+       Mirrors the visible FAQ accordion below. Answers written for
+       direct LLM ingestion — full sentences, no UI-relative refs.
+  #}
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "How is ChalyClip different from a clip editor?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Clip editors give you a timeline and trim handles. ChalyClip is upstream of editing: AI scores every clip on viral potential, generates the hook, applies the right brand kit, and schedules publishing with an undo window. The operator's job shifts from 'find and cut clips' to 'pick the AI's top 3 and let it ship'. The editor is still there when you need it, but most mornings you won't open it."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Who is ChalyClip for?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Streamers who want clips ready by morning. Multi-host stream collectives that need per-streamer branding within one VOD. Agencies running clipping for several creators at once. Agents and MCP clients that want to drive a clipping pipeline programmatically (ChalyClip ships an MCP server)."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Do I need a GPU to run ChalyClip?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "A consumer GPU (NVIDIA RTX 4060 or better recommended) handles Whisper transcription plus pyannote diarization comfortably for 4-hour VODs. CPU-only mode works for short clips by setting CHALYBCLIP_WHISPER_DEVICE=cpu but is much slower."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Which LLM does ChalyClip use?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Anthropic Claude exclusively for the live surface. The router supports adding more providers later without code changes, but Claude is what ships. The structured-output reliability is essential for the hook generator, variant generator, and viral-moment selector."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can AI agents drive ChalyClip?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. ChalyClip ships an MCP (Model Context Protocol) server so Claude Code, Cursor, and other LLM clients can drive the pipeline conversationally. The MCP surface mirrors the REST API — list streams, kick off pipelines, fetch clips, manage brand kits, inspect LLM spend. Start it via 'chalybclip mcp serve --token <api-token>'. The technical details live at https://chalybclip.chalyb.com/agents."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How does ChalyClip handle retention and privacy?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Per-tenant retention windows are configurable (defaults: 7 days for VODs, 90 for clips, 365 for transcripts). A daily sweeper hard-deletes past-cutoff artifacts. There is no soft-delete bin. Audio and video stay on the operator's machine for transcription; only the LLM caption-generation step calls out to Anthropic."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is there a direct API for ChalyClip?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. The OpenAPI 3.1 spec is at /openapi.json, interactive Swagger UI at /docs. Issue a tenant token via 'chalybclip tokens issue --tenant <id> --scope full' and pass it as 'Authorization: Bearer <token>'. The same token gates the REST API and the MCP server."
+        }
+      }
+    ]
+  }
+  </script>
+
+  <link rel="stylesheet" href="/static/chalybclip-theme.css">
+  <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.17.0/dist/tabler-icons.min.css">
+  <style>
+    /* Page-local layout. All colors / fonts / shadows come from theme tokens
+       (--nc-*). The locked CRT scanline overlay sits in theme.css already.
+       This stylesheet only adds composition + per-section spacing. */
+
+    /* ---- shared container ---- */
+    .nc-page { padding-bottom: 80px; }
+    .nc-section { padding: 56px 20px; }
+    .nc-section--wide { max-width: 1120px; margin: 0 auto; }
+    .nc-section--narrow { max-width: 760px; margin: 0 auto; }
+    .nc-section--center { text-align: center; }
+    .nc-eyebrow {
+      display: inline-block;
+      font-family: var(--nc-font-mono);
+      font-size: 11px;
+      letter-spacing: 0.18em;
+      color: var(--nc-blue-bright);
+      text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+
+    /* ---- HERO ---- */
+    .nc-hero {
+      text-align: center;
+      padding: 80px 20px 56px;
+      background:
+        radial-gradient(ellipse 80% 60% at 50% 0%, var(--nc-blue-faint), transparent 70%),
+        var(--nc-bg-base);
+      border-bottom: var(--nc-hairline);
+    }
+    .nc-hero h1 {
+      font-size: clamp(32px, 6vw, 56px);
+      font-weight: 500;
+      color: var(--nc-text);
+      max-width: 900px;
+      margin: 0 auto 22px;
+      line-height: 1.06;
+      letter-spacing: -0.025em;
+    }
+    .nc-hero h1 .nc-hero__h1-line { display: block; }
+    .nc-hero h1 .nc-hero__h1-line--accent { color: var(--nc-blue-bright); }
+    .nc-hero p.nc-hero__sub {
+      max-width: 660px;
+      margin: 0 auto 14px;
+      color: var(--nc-text-body);
+      font-size: clamp(15px, 2vw, 17px);
+      line-height: 1.6;
+    }
+    .nc-hero__tagline {
+      margin: 22px auto 30px;
+      color: var(--nc-text);
+      font-size: clamp(16px, 2.4vw, 20px);
+      font-weight: 500;
+      line-height: 1.35;
+    }
+    .nc-hero__tagline span { display: block; }
+    .nc-hero__tagline span:last-child { color: var(--nc-blue-bright); }
+    .nc-hero__ctas { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; align-items: center; }
+    .nc-hero__cta-primary-wrap { display: inline-flex; flex-direction: column; align-items: center; gap: 6px; }
+    .nc-hero__cta-micro {
+      font-family: var(--nc-font-mono);
+      font-size: 11.5px;
+      color: var(--nc-text-muted);
+      letter-spacing: 0.02em;
+    }
+    .nc-hero__trustbar {
+      margin-top: 44px;
+      padding-top: 24px;
+      border-top: var(--nc-hairline);
+      max-width: 680px;
+      margin-left: auto;
+      margin-right: auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+    }
+    .nc-hero__trustbar-logos {
+      display: flex; gap: 10px 18px; flex-wrap: wrap; justify-content: center;
+      color: var(--nc-text-body); font-size: 13.5px; font-weight: 500;
+    }
+    .nc-hero__trustbar-logos span {
+      display: inline-flex; align-items: center; gap: 7px; opacity: 0.9;
+    }
+    .nc-hero__trustbar-logos i { color: var(--nc-blue-bright); font-size: 14px; }
+
+    /* ---- Pain block ---- */
+    .nc-pain {
+      background: var(--nc-bg-surface);
+      border-top: var(--nc-hairline);
+      border-bottom: var(--nc-hairline);
+    }
+    .nc-pain h2 {
+      font-size: clamp(24px, 3.5vw, 36px);
+      color: var(--nc-text);
+      margin: 0 0 18px;
+      letter-spacing: -0.015em;
+      max-width: 760px;
+    }
+    .nc-pain p { color: var(--nc-text-body); font-size: 15.5px; line-height: 1.7; max-width: 700px; margin: 0 0 12px; }
+    .nc-pain p.nc-pain__kicker { color: var(--nc-text); font-weight: 500; }
+    .nc-pain__list {
+      list-style: none; padding: 0; margin: 4px 0 16px;
+      display: flex; flex-direction: column; gap: 8px; max-width: 700px;
+    }
+    .nc-pain__list li { color: var(--nc-text-body); font-size: 15px; display: flex; align-items: center; gap: 11px; }
+    .nc-pain__list li::before { content: "—"; color: var(--nc-text-muted); font-family: var(--nc-font-mono); }
+    .nc-pain__dead { color: var(--nc-blue-bright); font-weight: 500; }
+
+    /* ---- Fix block (upload → clips → publish → done) ---- */
+    .nc-fix { text-align: center; background: var(--nc-bg-base); }
+    .nc-fix h2 {
+      font-size: clamp(24px, 3.5vw, 36px);
+      color: var(--nc-text);
+      margin: 0 0 28px;
+      letter-spacing: -0.015em;
+    }
+    .nc-fix__steps {
+      display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; align-items: center;
+      max-width: 760px; margin: 0 auto;
+    }
+    .nc-fix__step {
+      background: var(--nc-bg-panel);
+      border: var(--nc-hairline);
+      border-radius: var(--nc-radius);
+      padding: 14px 24px;
+      color: var(--nc-text);
+      font-size: 15px;
+      font-weight: 500;
+    }
+    .nc-fix__arrow { color: var(--nc-blue-bright); font-family: var(--nc-font-mono); font-size: 16px; }
+
+    /* ---- Value prop (one stream → endless content) ---- */
+    .nc-value {
+      text-align: center;
+      background: var(--nc-bg-surface);
+      border-top: var(--nc-hairline);
+      border-bottom: var(--nc-hairline);
+    }
+    .nc-value h2 {
+      font-size: clamp(28px, 5vw, 48px);
+      color: var(--nc-text);
+      margin: 0;
+      letter-spacing: -0.02em;
+      line-height: 1.08;
+      font-weight: 500;
+    }
+    .nc-value h2 .nc-value__accent { color: var(--nc-blue-bright); display: block; }
+    .nc-value__intro { color: var(--nc-text-body); font-size: 15px; margin: 22px 0 18px; }
+    .nc-value__chips {
+      display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+      max-width: 640px; margin: 0 auto 28px;
+    }
+    .nc-value__chip {
+      background: var(--nc-bg-panel);
+      border: 1px solid var(--nc-blue-dim);
+      border-radius: 999px;
+      padding: 8px 18px;
+      color: var(--nc-text);
+      font-size: 14px;
+    }
+    .nc-value__without {
+      display: flex; flex-direction: column; gap: 6px;
+      color: var(--nc-text-muted); font-size: 14.5px;
+    }
+
+    /* ---- Math block ---- */
+    .nc-math__head { text-align: center; margin-bottom: 28px; }
+    .nc-math__head h2 { font-size: clamp(24px, 3.5vw, 36px); color: var(--nc-text); margin: 0; letter-spacing: -0.015em; }
+    .nc-math__grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+      max-width: 760px;
+      margin: 0 auto;
+    }
+    @media (min-width: 720px) { .nc-math__grid { grid-template-columns: repeat(3, 1fr); align-items: start; } }
+    .nc-math__card {
+      background: var(--nc-bg-panel);
+      border: var(--nc-hairline);
+      border-radius: var(--nc-radius-lg);
+      padding: 22px 20px;
+      text-align: center;
+    }
+    .nc-math__card--us {
+      border-color: var(--nc-blue-dim);
+      background: linear-gradient(180deg, var(--nc-blue-faint) 0%, var(--nc-bg-panel) 100%);
+    }
+    .nc-math__label {
+      font-family: var(--nc-font-mono);
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--nc-text-muted);
+      margin-bottom: 10px;
+    }
+    .nc-math__price { font-size: 19px; color: var(--nc-text); font-weight: 500; }
+    .nc-math__card--us .nc-math__price { color: var(--nc-blue-bright); }
+    .nc-math__us-lines {
+      list-style: none; padding: 0; margin: 18px auto 0; max-width: 420px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .nc-math__us-lines li {
+      color: var(--nc-text-body); font-size: 14px;
+      display: flex; align-items: center; gap: 10px; justify-content: center;
+    }
+    .nc-math__us-lines li::before { content: "✓"; color: var(--nc-blue-bright); font-family: var(--nc-font-mono); font-weight: 700; }
+
+    /* ---- Emotional (imagine waking up) ---- */
+    .nc-imagine__heading { font-size: clamp(24px, 3.5vw, 36px); color: var(--nc-text); margin: 0 0 18px; text-align: center; letter-spacing: -0.015em; }
+    .nc-imagine__lead { text-align: center; color: var(--nc-text-body); font-size: 15.5px; line-height: 1.6; margin: 0 0 6px; }
+    .nc-imagine__lead--last { margin-bottom: 24px; }
+    .nc-imagine__list {
+      list-style: none;
+      padding: 0;
+      margin: 0 auto 22px;
+      max-width: 520px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .nc-imagine__list li {
+      background: var(--nc-bg-panel);
+      border: var(--nc-hairline);
+      border-radius: var(--nc-radius);
+      padding: 14px 18px;
+      color: var(--nc-text-body);
+      font-size: 14.5px;
+      display: flex; align-items: center; gap: 12px;
+    }
+    .nc-imagine__list li::before {
+      content: "✓";
+      color: var(--nc-blue-bright);
+      font-family: var(--nc-font-mono);
+      font-weight: 700;
+    }
+    .nc-imagine__list li:first-child { border-color: var(--nc-blue-dim); }
+    .nc-imagine__list li:first-child strong { color: var(--nc-blue-bright); font-weight: 600; }
+    .nc-imagine__tagline {
+      text-align: center;
+      color: var(--nc-blue-bright);
+      font-size: 17px;
+      max-width: 580px;
+      margin: 8px auto 0;
+      font-weight: 500;
+    }
+
+    /* ---- Results ---- */
+    .nc-results {
+      text-align: center;
+      background: var(--nc-bg-surface);
+      border-top: var(--nc-hairline);
+      border-bottom: var(--nc-hairline);
+    }
+    .nc-results h2 { font-size: clamp(22px, 3.5vw, 34px); color: var(--nc-text); margin: 0 0 18px; letter-spacing: -0.015em; }
+    .nc-results p { color: var(--nc-text-body); font-size: 15.5px; line-height: 1.6; margin: 0 auto 8px; max-width: 560px; }
+    .nc-results p.nc-results__lead { color: var(--nc-blue-bright); font-weight: 500; font-size: 16px; margin-top: 14px; }
+
+    /* ---- Features grid ---- */
+    .nc-features__head { text-align: center; margin-bottom: 32px; }
+    .nc-features__head h2 { font-size: clamp(24px, 3.5vw, 36px); color: var(--nc-text); margin: 0 0 10px; letter-spacing: -0.015em; }
+    .nc-features__head p { color: var(--nc-text-body); font-size: 15px; max-width: 540px; margin: 0 auto; }
+    .nc-features__grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 14px;
+    }
+    .nc-feature {
+      background: var(--nc-bg-panel);
+      border: var(--nc-hairline);
+      border-radius: var(--nc-radius-lg);
+      padding: 22px 20px;
+    }
+    .nc-feature__icon { color: var(--nc-blue-bright); font-size: 22px; margin-bottom: 12px; display: block; }
+    .nc-feature h3 { color: var(--nc-text); font-size: 15.5px; margin: 0 0 8px; line-height: 1.3; }
+    .nc-feature p { color: var(--nc-text-body); font-size: 13.5px; line-height: 1.6; margin: 0; }
+    .nc-feature code { font-family: var(--nc-font-mono); background: var(--nc-bg-base); padding: 1px 6px; border-radius: 4px; font-size: 12px; color: var(--nc-blue-bright); }
+
+    /* ---- Statement (giant mid-page) ---- */
+    .nc-statement {
+      text-align: center;
+      padding: 84px 20px;
+      background:
+        radial-gradient(circle at 50% 50%, var(--nc-blue-faint), transparent 70%),
+        var(--nc-bg-surface);
+      border-top: var(--nc-hairline);
+      border-bottom: var(--nc-hairline);
+    }
+    .nc-statement h2 {
+      font-size: clamp(34px, 7vw, 68px);
+      color: var(--nc-text);
+      margin: 0 auto;
+      max-width: 920px;
+      letter-spacing: -0.03em;
+      line-height: 1.05;
+      font-weight: 500;
+    }
+    .nc-statement h2 span { display: block; }
+    .nc-statement h2 span:last-child { color: var(--nc-blue-bright); }
+
+    /* ---- Final CTA ---- */
+    .nc-final { text-align: center; }
+    .nc-final h2 {
+      font-size: clamp(26px, 4vw, 42px);
+      color: var(--nc-text);
+      margin: 0 auto 16px;
+      max-width: 760px;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      font-weight: 500;
+    }
+    .nc-final p { color: var(--nc-text-body); font-size: 15.5px; line-height: 1.6; max-width: 580px; margin: 0 auto 28px; }
+    .nc-final__cta-wrap { display: inline-flex; flex-direction: column; align-items: center; gap: 6px; }
+    .nc-final__cta-micro { font-family: var(--nc-font-mono); font-size: 11.5px; color: var(--nc-text-muted); }
+
+    /* ---- FAQ accordion ---- */
+    .nc-faq { max-width: 760px; margin: 0 auto; }
+    .nc-faq h2 { font-size: clamp(24px, 3.5vw, 32px); color: var(--nc-text); margin: 0 0 24px; text-align: center; letter-spacing: -0.015em; }
+    .nc-faq details {
+      border: var(--nc-hairline);
+      border-radius: var(--nc-radius);
+      background: var(--nc-bg-panel);
+      padding: 0;
+      margin-bottom: 8px;
+    }
+    .nc-faq summary {
+      padding: 16px 20px;
+      color: var(--nc-text);
+      font-size: 14.5px;
+      font-weight: 500;
+      cursor: pointer;
+      list-style: none;
+    }
+    .nc-faq summary::-webkit-details-marker { display: none; }
+    .nc-faq summary::before {
+      content: "▸";
+      color: var(--nc-text-muted);
+      margin-right: 12px;
+      transition: transform 120ms ease;
+      display: inline-block;
+    }
+    .nc-faq details[open] summary::before { transform: rotate(90deg); color: var(--nc-blue-bright); }
+    .nc-faq__body {
+      padding: 0 20px 18px;
+      color: var(--nc-text-body);
+      font-size: 13.5px;
+      line-height: 1.65;
+    }
+    .nc-faq__body code { font-family: var(--nc-font-mono); background: var(--nc-bg-base); padding: 1px 6px; border-radius: 4px; font-size: 12.5px; }
+    .nc-faq__body a { color: var(--nc-blue-bright); text-decoration: underline; text-underline-offset: 3px; }
+
+    /* ---- Footer ---- */
+    .nc-foot {
+      margin-top: 0;
+      padding: 40px 20px 20px;
+      border-top: var(--nc-hairline);
+      color: var(--nc-text-muted);
+      font-size: 12.5px;
+      text-align: center;
+      background: var(--nc-bg-surface);
+    }
+    .nc-foot__links { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; margin-bottom: 14px; }
+    .nc-foot__links a { color: var(--nc-text-body); text-decoration: none; }
+    .nc-foot__links a:hover { color: var(--nc-blue-bright); }
+    .nc-foot__tagline { font-family: var(--nc-font-mono); font-size: 11.5px; letter-spacing: 0.04em; }
+
+    /* ---- Phone breakpoint (380px is the locked minimum) ---- */
+    @media (max-width: 480px) {
+      .nc-section { padding: 44px 16px; }
+      .nc-hero { padding: 64px 16px 44px; }
+      .nc-hero__ctas { flex-direction: column; }
+      .nc-hero__cta-primary-wrap { width: 100%; }
+      .nc-hero__cta-primary-wrap .nc-btn { width: 100%; }
+      .nc-features__grid { grid-template-columns: 1fr; }
+      .nc-fix__steps { flex-direction: column; }
+      .nc-fix__step { width: 100%; }
+      .nc-fix__arrow { transform: rotate(90deg); }
+    }
+
+    /* =================================================================
+       Reference-port additions: sticky nav, paste-link box, OpusClip-
+       style ClipFanAnimation centerpiece, 4-column footer.
+       Lime stays primary; magenta + brand colors are secondary signals
+       (LIVE tag, progress sweep, platform badges).
+       ================================================================= */
+
+    /* ---- Hero h1 line-2 gradient (lime → cyan) ---- */
+    .nc-hero h1 .nc-hero__h1-line--accent {
+      background: linear-gradient(120deg, var(--nc-lime), var(--nc-cyan));
+      -webkit-background-clip: text;
+              background-clip: text;
+      color: transparent;
+    }
+
+    /* ---- Sticky top nav ---- */
+    .nc-topnav {
+      position: sticky; top: 0; z-index: 500;
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      background: linear-gradient(180deg,
+                    rgba(6, 8, 13, 0.92),
+                    rgba(6, 8, 13, 0.55));
+      border-bottom: 1px solid var(--nc-blue-dim);
+    }
+    .nc-topnav__inner {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 0 22px;
+      display: flex; align-items: center; gap: 30px;
+      height: 64px;
+    }
+    .nc-topnav__logo {
+      display: inline-flex; align-items: center; gap: 9px;
+      color: #fff;
+      font-weight: 700; font-size: 21px; letter-spacing: 0.5px;
+      text-decoration: none;
+      flex-shrink: 0;
+    }
+    .nc-topnav__logo:hover { text-decoration: none; opacity: 0.92; }
+    .nc-topnav__logo-dot {
+      width: 11px; height: 11px; border-radius: 50%;
+      background: var(--nc-lime);
+      box-shadow: 0 0 14px var(--nc-lime);
+      animation: nc-topnav-pulse 2.4s infinite;
+    }
+    .nc-topnav__logo-accent { color: var(--nc-lime); }
+    @keyframes nc-topnav-pulse {
+      0%, 100% { opacity: 1; }
+      50%      { opacity: 0.4; }
+    }
+    .nc-topnav__links {
+      display: flex; gap: 26px;
+      font-size: 13.5px;
+      color: var(--nc-text-muted);
+      margin-left: 6px;
+    }
+    .nc-topnav__links a {
+      color: var(--nc-text-muted);
+      text-decoration: none;
+      transition: color 0.2s ease;
+    }
+    .nc-topnav__links a:hover { color: var(--nc-lime); }
+    .nc-topnav__cta {
+      margin-left: auto;
+      display: flex; align-items: center; gap: 16px;
+      flex-shrink: 0;
+    }
+    .nc-topnav__signin {
+      font-size: 13.5px;
+      color: var(--nc-text-muted);
+      text-decoration: none;
+    }
+    .nc-topnav__signin:hover { color: var(--nc-text); }
+    @media (max-width: 860px) {
+      .nc-topnav__links { display: none; }
+      .nc-topnav__inner { gap: 16px; }
+    }
+    @media (max-width: 480px) {
+      .nc-topnav__signin { display: none; }
+      .nc-topnav__inner { height: 56px; padding: 0 16px; }
+    }
+
+    /* ---- Hero paste box + alt links + demo row ---- */
+    .nc-paste {
+      max-width: 600px;
+      margin: 6px auto 14px;
+      display: flex; align-items: center; gap: 8px;
+      background: var(--nc-bg-panel);
+      border: 1px solid var(--nc-blue-dim);
+      border-radius: 14px;
+      padding: 8px 8px 8px 18px;
+      box-shadow:
+        0 18px 50px rgba(0, 0, 0, 0.5),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+    }
+    .nc-paste__icon { flex: none; opacity: 0.6; color: var(--nc-text-muted); }
+    .nc-paste__input {
+      flex: 1;
+      background: none; border: none; outline: none;
+      color: var(--nc-text);
+      font-family: var(--nc-font-mono);
+      font-size: 14px;
+      padding: 8px 4px;
+    }
+    .nc-paste__input::placeholder { color: var(--nc-text-muted); }
+    .nc-paste .nc-btn--primary { flex-shrink: 0; }
+
+    .nc-hero__alt {
+      font-size: 12.5px;
+      color: var(--nc-text-muted);
+      margin: 0 0 8px;
+    }
+    .nc-hero__alt a {
+      color: var(--nc-lime);
+      border-bottom: 1px dashed var(--nc-lime-dim);
+    }
+    .nc-hero__alt a:hover { color: var(--nc-lime-bright); text-decoration: none; }
+
+    .nc-hero__demo {
+      font-size: 12.5px;
+      color: var(--nc-text-muted);
+      display: flex; gap: 14px;
+      justify-content: center; align-items: center; flex-wrap: wrap;
+      margin: 6px 0 8px;
+    }
+    .nc-hero__demo a {
+      color: var(--nc-text-body);
+      border: 1px solid var(--nc-blue-dim);
+      border-radius: 20px;
+      padding: 4px 12px;
+      text-decoration: none;
+      transition: border-color 0.2s ease, color 0.2s ease;
+    }
+    .nc-hero__demo a:hover { border-color: var(--nc-lime); color: var(--nc-lime); }
+
+    /* ---- ClipFanAnimation: source card + 5 vertical clip cards ---- */
+    .nc-stage {
+      position: relative;
+      margin: 46px auto 8px;
+      max-width: 980px;
+    }
+    .nc-stage__source {
+      position: relative;
+      width: min(420px, 86%);
+      margin: 0 auto;
+      aspect-ratio: 16 / 9;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #0d1830, #0a1422);
+      border: 1px solid var(--nc-lime-dim);
+      overflow: hidden;
+      box-shadow:
+        0 0 0 1px rgba(200, 255, 92, 0.12),
+        0 22px 60px rgba(0, 0, 0, 0.6),
+        0 0 60px rgba(200, 255, 92, 0.12);
+      z-index: 3;
+    }
+    .nc-stage__scene {
+      position: absolute; inset: 0;
+      background:
+        radial-gradient(120px 120px at 30% 45%, rgba(200, 255, 92, 0.30), transparent 70%),
+        radial-gradient(140px 140px at 72% 60%, rgba(255, 60, 200, 0.22), transparent 70%),
+        linear-gradient(160deg, #0c1a33, #071020);
+    }
+    /* Real VOD-card thumbnail. Already a finished card (its own LIVE tag,
+       play button, filename + duration are baked in), so when it loads we
+       hide the duplicate CSS chrome below and keep only the animated
+       progress sweep. If the <img> errors out it self-removes and the
+       gradient scene + overlays come back — graceful, asset-optional. */
+    .nc-stage__src-img {
+      position: absolute; inset: 0; z-index: 1;
+      width: 100%; height: 100%;
+      object-fit: cover;
+      object-position: center;
+    }
+    .nc-stage__source:has(.nc-stage__src-img) { background: #0a0e16; }
+    .nc-stage__source:has(.nc-stage__src-img) .nc-stage__scene,
+    .nc-stage__source:has(.nc-stage__src-img) .nc-stage__ring,
+    .nc-stage__source:has(.nc-stage__src-img) .nc-stage__live,
+    .nc-stage__source:has(.nc-stage__src-img) .nc-stage__label,
+    .nc-stage__source:has(.nc-stage__src-img) .nc-stage__dur { display: none; }
+    .nc-stage__source .nc-stage__progress { z-index: 2; }
+    .nc-stage__ring {
+      position: absolute; top: 50%; left: 50%;
+      width: 88px; height: 88px;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      border: 2px solid rgba(200, 255, 92, 0.55);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .nc-stage__ring::after {
+      content: "";
+      width: 0; height: 0;
+      border-left: 18px solid var(--nc-lime);
+      border-top: 11px solid transparent;
+      border-bottom: 11px solid transparent;
+      margin-left: 5px;
+      filter: drop-shadow(0 0 6px var(--nc-lime));
+    }
+    .nc-stage__live {
+      position: absolute; top: 12px; left: 12px;
+      font-family: var(--nc-font-mono);
+      font-size: 9px; letter-spacing: 1.5px;
+      color: #fff;
+      background: var(--nc-magenta);
+      padding: 3px 8px;
+      border-radius: 4px;
+      box-shadow: 0 0 14px rgba(255, 60, 200, 0.55);
+    }
+    .nc-stage__dur {
+      position: absolute; bottom: 11px; right: 12px;
+      font-family: var(--nc-font-mono);
+      font-size: 11px;
+      color: var(--nc-lime);
+      background: rgba(0, 0, 0, 0.55);
+      padding: 3px 8px;
+      border-radius: 5px;
+      border: 1px solid var(--nc-blue-dim);
+    }
+    .nc-stage__label {
+      position: absolute; bottom: 11px; left: 12px;
+      font-family: var(--nc-font-mono);
+      font-size: 10px; letter-spacing: 1px;
+      color: #cfe9f2;
+      opacity: 0.85;
+    }
+    .nc-stage__progress {
+      position: absolute; left: 0; bottom: 0;
+      height: 3px; width: 0;
+      background: linear-gradient(90deg, var(--nc-lime), var(--nc-magenta));
+      animation: nc-stage-scan 4.2s linear infinite;
+    }
+    @keyframes nc-stage-scan {
+      0%   { width: 0; }
+      100% { width: 100%; }
+    }
+    .nc-stage__feed-line {
+      position: absolute;
+      left: 50%; top: 56%;
+      width: 1px; height: 54px;
+      transform: translateX(-50%);
+      background: linear-gradient(var(--nc-lime), transparent);
+      z-index: 1;
+      opacity: 0.5;
+    }
+    .nc-stage__clips {
+      display: flex;
+      justify-content: center; align-items: flex-end;
+      gap: 14px;
+      margin-top: 30px;
+      flex-wrap: wrap;
+      position: relative;
+      z-index: 2;
+    }
+    .nc-stage__clip {
+      position: relative;
+      width: 118px;
+      aspect-ratio: 9 / 16;
+      border-radius: 11px;
+      overflow: hidden;
+      background: linear-gradient(160deg, #0e1a30, #0a1320);
+      border: 1px solid var(--nc-blue-dim);
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.55);
+      opacity: 0;
+      transform: translateY(26px) scale(0.9);
+      animation: nc-stage-rise 0.6s cubic-bezier(0.2, 0.8, 0.25, 1) forwards;
+    }
+    @keyframes nc-stage-rise {
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .nc-stage__clip-thumb { position: absolute; inset: 0; z-index: 0; }
+    /* Real clip thumbnails (operator-supplied). Drop 9:16 images at
+       /static/demo/clip1.jpg … clip5.jpg and they cover the gradient
+       placeholder below; a missing/blocked file removes the <img>
+       (onerror) so the gradient shows — the hero never breaks on an
+       absent asset. See static/demo/README.md for sizing + licensing. */
+    .nc-stage__clip-img {
+      position: absolute; inset: 0; z-index: 1;
+      width: 100%; height: 100%;
+      object-fit: cover;
+      object-position: center 28%;
+    }
+    /* Bottom scrim so the caption + score badge stay legible over a
+       busy photo (also grounds the gradient-only placeholders). */
+    .nc-stage__clip::before {
+      content: ""; position: absolute; inset: 0; z-index: 2;
+      pointer-events: none;
+      background: linear-gradient(
+        to top,
+        rgba(5, 10, 20, 0.74) 0%,
+        rgba(5, 10, 20, 0.15) 40%,
+        transparent 64%
+      );
+    }
+    .nc-stage__plat, .nc-stage__cap, .nc-stage__score { z-index: 3; }
+    /* Per-clip thumb tints — keep the source card's signature palette
+       (lime + magenta + cyan-ish blue) so the animation reads as ONE
+       VOD spawning many siblings. */
+    .nc-stage__clip:nth-child(1) .nc-stage__clip-thumb {
+      background:
+        radial-gradient(90px 90px at 50% 35%, rgba(200, 255, 92, 0.35), transparent),
+        linear-gradient(160deg, #1a2410, #0a1320);
+    }
+    .nc-stage__clip:nth-child(2) .nc-stage__clip-thumb {
+      background:
+        radial-gradient(90px 90px at 50% 40%, rgba(255, 60, 200, 0.40), transparent),
+        linear-gradient(160deg, #221024, #0a1320);
+    }
+    .nc-stage__clip:nth-child(3) .nc-stage__clip-thumb {
+      background:
+        radial-gradient(90px 90px at 50% 38%, rgba(0, 217, 255, 0.35), transparent),
+        linear-gradient(160deg, #0b1d36, #0a1320);
+    }
+    .nc-stage__clip:nth-child(4) .nc-stage__clip-thumb {
+      background:
+        radial-gradient(90px 90px at 50% 42%, rgba(181, 143, 255, 0.40), transparent),
+        linear-gradient(160deg, #16122e, #0a1320);
+    }
+    .nc-stage__clip:nth-child(5) .nc-stage__clip-thumb {
+      background:
+        radial-gradient(90px 90px at 50% 36%, rgba(200, 255, 92, 0.32), transparent),
+        linear-gradient(160deg, #1c2410, #0a1320);
+    }
+    .nc-stage__plat {
+      position: absolute;
+      top: 8px; right: 8px;
+      font-family: var(--nc-font-mono);
+      font-size: 8.5px; font-weight: 600;
+      letter-spacing: 0.4px;
+      padding: 3px 7px;
+      border-radius: 20px;
+      color: #fff;
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+    }
+    /* Platform-brand colors — exactly per reference. */
+    .nc-stage__plat--tiktok  { background: #000; }
+    .nc-stage__plat--reels   { background: linear-gradient(45deg, #f09433, #dc2743, #bc1888); }
+    .nc-stage__plat--shorts  { background: #ff0000; }
+    .nc-stage__plat--kick    { background: #53fc18; color: #000; }
+    .nc-stage__plat--twitch  { background: #9146ff; }
+    .nc-stage__cap {
+      position: absolute;
+      left: 7px; right: 7px; bottom: 30px;
+      font-size: 8px;
+      color: #dff3fa;
+      background: rgba(0, 0, 0, 0.40);
+      padding: 3px 5px;
+      border-radius: 4px;
+      line-height: 1.3;
+      text-align: center;
+    }
+    .nc-stage__score {
+      position: absolute;
+      left: 7px; bottom: 7px;
+      font-family: var(--nc-font-mono);
+      font-size: 8.5px;
+      color: var(--nc-lime);
+      background: rgba(0, 0, 0, 0.6);
+      border: 1px solid var(--nc-blue-dim);
+      border-radius: 5px;
+      padding: 3px 7px;
+      display: flex; flex-direction: column;
+      line-height: 1.1;
+    }
+    .nc-stage__score-label {
+      font-size: 6.5px; letter-spacing: 1px;
+      color: var(--nc-text-muted);
+      text-transform: uppercase;
+    }
+    .nc-stage__score-num {
+      font-size: 13px;
+      color: var(--nc-lime);
+      text-shadow: 0 0 8px rgba(200, 255, 92, 0.55);
+      font-variant-numeric: tabular-nums;
+    }
+    .nc-stage__note {
+      text-align: center;
+      font-family: var(--nc-font-mono);
+      font-size: 11px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--nc-text-muted);
+      margin-top: 24px;
+    }
+
+    /* ---- Feature chips under the animation ---- */
+    .nc-hero__chips {
+      display: flex; gap: 10px;
+      justify-content: center; flex-wrap: wrap;
+      margin: 40px 0 6px;
+    }
+    .nc-hero__chip {
+      display: inline-flex; align-items: center; gap: 7px;
+      font-size: 12px;
+      color: var(--nc-text-muted);
+      border: 1px solid var(--nc-blue-dim);
+      background: var(--nc-blue-faint);
+      border-radius: 30px;
+      padding: 8px 14px;
+      transition: border-color 0.2s ease, color 0.2s ease;
+    }
+    .nc-hero__chip:hover { border-color: var(--nc-lime); color: var(--nc-text); }
+    .nc-hero__chip-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--nc-lime);
+      box-shadow: 0 0 8px var(--nc-lime);
+    }
+
+    /* ---- Stage responsive ---- */
+    @media (max-width: 860px) {
+      .nc-stage__clip { width: 96px; }
+    }
+    @media (max-width: 480px) {
+      .nc-stage__clips { gap: 9px; }
+      .nc-stage__clip { width: 80px; }
+      .nc-stage__source { width: 94%; }
+    }
+
+    /* ---- 4-column footer ---- */
+    .nc-foot--cols {
+      text-align: left;
+      padding: 54px 22px 24px;
+    }
+    .nc-foot__grid {
+      max-width: 1180px;
+      margin: 0 auto 40px;
+      display: grid;
+      grid-template-columns: 1.4fr 1fr 1fr 1fr;
+      gap: 30px;
+    }
+    .nc-foot__brand {
+      display: inline-flex; align-items: center; gap: 9px;
+      color: #fff;
+      font-weight: 700; font-size: 18px; letter-spacing: 0.5px;
+      text-decoration: none;
+      margin-bottom: 14px;
+    }
+    .nc-foot__brand-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: var(--nc-lime);
+      box-shadow: 0 0 12px var(--nc-lime);
+    }
+    .nc-foot__brand-accent { color: var(--nc-lime); }
+    .nc-foot__brand-blurb {
+      font-size: 12.5px;
+      color: var(--nc-text-muted);
+      max-width: 280px;
+      line-height: 1.55;
+    }
+    .nc-foot__col-head {
+      font-size: 13px; font-weight: 600;
+      color: var(--nc-text);
+      letter-spacing: 0.5px;
+      margin: 0 0 14px;
+    }
+    .nc-foot__col a {
+      display: block;
+      font-size: 13px;
+      color: var(--nc-text-muted);
+      text-decoration: none;
+      margin-bottom: 9px;
+      transition: color 0.2s ease;
+    }
+    .nc-foot__col a:hover { color: var(--nc-lime); }
+    .nc-foot__bot {
+      max-width: 1180px;
+      margin: 0 auto;
+      border-top: 1px solid var(--nc-blue-dim);
+      padding-top: 24px;
+      display: flex;
+      justify-content: space-between; align-items: center;
+      gap: 16px; flex-wrap: wrap;
+      font-size: 12px;
+      color: var(--nc-text-muted);
+    }
+    .nc-foot__made { color: var(--nc-lime); font-family: var(--nc-font-mono); }
+    @media (max-width: 860px) {
+      .nc-foot__grid { grid-template-columns: 1fr 1fr; gap: 24px; }
+    }
+    @media (max-width: 480px) {
+      .nc-foot__grid { grid-template-columns: 1fr; }
+    }
+
+    /* ---- Reduced motion: kill the animations, render final state ---- */
+    @media (prefers-reduced-motion: reduce) {
+      .nc-topnav__logo-dot,
+      .nc-stage__progress { animation: none; }
+      .nc-stage__clip {
+        opacity: 1;
+        transform: none;
+        animation: none;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  {# ===========================================================
+       STICKY TOP NAV — added with the reference port. Logo,
+       in-page anchors (Características / Solución / Precios),
+       cross-page links to /agents and /docs, sign-in + primary
+       CTA on the right. Mobile (<860px) hides the link row.
+     =========================================================== #}
+  <nav class="nc-topnav" aria-label="Primary">
+    <div class="nc-topnav__inner">
+      <a href="/" class="nc-topnav__logo">
+        <span class="nc-topnav__logo-dot" aria-hidden="true"></span>
+        <span>{{ t('landing.nav.brand_prefix') }}<span class="nc-topnav__logo-accent">{{ t('landing.nav.brand_suffix') }}</span></span>
+      </a>
+      <div class="nc-topnav__links">
+        <a href="#features">{{ t('landing.nav.link_features') }}</a>
+        <a href="#solucion">{{ t('landing.nav.link_solution') }}</a>
+        <a href="#precio">{{ t('landing.nav.link_pricing') }}</a>
+        <a href="/agents">{{ t('landing.nav.link_agents') }}</a>
+        <a href="/docs">{{ t('landing.nav.link_api') }}</a>
+      </div>
+      {# Every auth link carries next=/auth/launch/chalybclip so chalyb
+         bounces the user straight back into ChalyClip after sign-in /
+         registration (trial + provisioning happen server-side on the
+         chalyb launch route) — the visitor never sees the platform
+         dashboard. CTAs add mode=signup; the sign-in link stays signin. #}
+      <div class="nc-topnav__cta">
+        <a href="https://chalyb.com/{{ locale() }}/sign-in?next=/auth/launch/chalybclip" class="nc-topnav__signin">{{ t('landing.nav.signin') }}</a>
+        <a href="https://chalyb.com/{{ locale() }}/sign-in?mode=signup&next=/auth/launch/chalybclip" class="nc-btn nc-btn--primary">{{ t('landing.nav.cta') }}</a>
+      </div>
+    </div>
+  </nav>
+
+  {# ===========================================================
+       HERO — two-line headline, outcome first. The dream is sold
+       before any feature: stop paying editors, start publishing.
+     =========================================================== #}
+  <header class="nc-hero">
+    <span class="nc-eyebrow">{{ t('landing.hero.eyebrow') }}</span>
+    <h1>
+      <span class="nc-hero__h1-line">{{ t('landing.hero.h1_line1') }}</span>
+      <span class="nc-hero__h1-line nc-hero__h1-line--accent">{{ t('landing.hero.h1_line2') }}</span>
+    </h1>
+    <p class="nc-hero__sub">{{ t('landing.hero.sub_line1') }}</p>
+    <p class="nc-hero__sub">{{ t('landing.hero.sub_line2') }}</p>
+
+    <p class="nc-hero__tagline">
+      <span>{{ t('landing.hero.tagline_a') }}</span>
+      <span>{{ t('landing.hero.tagline_b') }}</span>
+    </p>
+
+    <div class="nc-hero__ctas">
+      <span class="nc-hero__cta-primary-wrap">
+        <a href="https://chalyb.com/{{ locale() }}/sign-in?mode=signup&next=/auth/launch/chalybclip" class="nc-btn nc-btn--primary">
+          <i class="ti ti-upload" aria-hidden="true"></i>
+          <span>{{ t('landing.hero.cta_primary') }}</span>
+        </a>
+        <span class="nc-hero__cta-micro">{{ t('landing.hero.cta_primary_micro') }}</span>
+      </span>
+      <a href="#features" class="nc-btn">
+        <i class="ti ti-player-play" aria-hidden="true"></i>
+        <span>{{ t('landing.hero.cta_secondary') }}</span>
+      </a>
+    </div>
+
+    {# ---- Paste-link box: shortcut from URL to /dashboard/login.
+         Enter key submits via the inline script at end-of-body. -- #}
+    <form class="nc-paste" action="https://chalyb.com/{{ locale() }}/sign-in" method="get" role="search" aria-label="VOD link">
+      <svg class="nc-paste__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/>
+        <path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/>
+      </svg>
+      {# GET forms drop the action's query string, so the signup funnel
+         params ride as hidden fields instead. #}
+      <input type="hidden" name="mode" value="signup">
+      <input type="hidden" name="next" value="/auth/launch/chalybclip">
+      <label class="nc-trunc" for="nc-paste-input" style="display:none">VOD link</label>
+      <input id="nc-paste-input" class="nc-paste__input" type="text" name="vod" autocomplete="off"
+             placeholder="{{ t('landing.hero.paste_placeholder') }}">
+      <button type="submit" class="nc-btn nc-btn--primary">
+        <i class="ti ti-sparkles" aria-hidden="true"></i>
+        <span>{{ t('landing.hero.paste_cta') }}</span>
+      </button>
+    </form>
+    <p class="nc-hero__alt">{{ t('landing.hero.alt_or') }} <a href="https://chalyb.com/{{ locale() }}/sign-in?mode=signup&next=/auth/launch/chalybclip">{{ t('landing.hero.alt_upload') }}</a> · {{ t('landing.hero.alt_micro') }}</p>
+    <div class="nc-hero__demo">
+      <span>{{ t('landing.hero.demo_label') }}</span>
+      <a href="#solucion">{{ t('landing.hero.demo_gaming') }}</a>
+      <a href="#solucion">{{ t('landing.hero.demo_chat') }}</a>
+      <a href="#solucion">{{ t('landing.hero.demo_podcast') }}</a>
+    </div>
+
+    {# ---- ClipFanAnimation — source VOD card on top, 5 vertical
+         clip cards rising staggered below with a platform badge
+         and a viral SCORE badge that counts up on viewport entry.
+         Scores re-trigger every time the stage enters the viewport.
+         prefers-reduced-motion: kills the count-up + rise. ------ #}
+    <div class="nc-stage" id="nc-clipfan">
+      <div class="nc-stage__source" aria-hidden="true">
+        {# Real VOD-card thumbnail (operator-supplied, 16:9). When present
+           it covers the gradient scene and the duplicate chrome below is
+           hidden via :has(); a missing/blocked file removes the <img>
+           (onerror) so the CSS scene + overlays render — the hero never
+           breaks on an absent asset. See static/demo/README.md. #}
+        <img class="nc-stage__src-img" src="/static/demo/source.jpg" alt="" aria-hidden="true" loading="lazy" decoding="async" onerror="this.remove()">
+        <div class="nc-stage__scene"></div>
+        <div class="nc-stage__ring"></div>
+        <div class="nc-stage__live">{{ t('landing.anim.live_tag') }}</div>
+        <div class="nc-stage__label">{{ t('landing.anim.source_label') }}</div>
+        <div class="nc-stage__dur">4:12:08</div>
+        <div class="nc-stage__progress"></div>
+      </div>
+      <div class="nc-stage__feed-line" aria-hidden="true"></div>
+      <ul class="nc-stage__clips" role="list" aria-label="Generated clips preview">
+        <li class="nc-stage__clip" style="animation-delay:0.20s">
+          <span class="nc-stage__clip-thumb" aria-hidden="true"></span>
+          <img class="nc-stage__clip-img" src="/static/demo/clip1.jpg" alt="" aria-hidden="true" loading="lazy" decoding="async" onerror="this.remove()">
+          <span class="nc-stage__plat nc-stage__plat--tiktok">TikTok</span>
+          <span class="nc-stage__cap">{{ t('landing.anim.cap1') }}</span>
+          <span class="nc-stage__score">
+            <span class="nc-stage__score-label">{{ t('landing.anim.score_label') }}</span>
+            <span class="nc-stage__score-num" data-score="97">97</span>
+          </span>
+        </li>
+        <li class="nc-stage__clip" style="animation-delay:0.45s">
+          <span class="nc-stage__clip-thumb" aria-hidden="true"></span>
+          <img class="nc-stage__clip-img" src="/static/demo/clip2.jpg" alt="" aria-hidden="true" loading="lazy" decoding="async" onerror="this.remove()">
+          <span class="nc-stage__plat nc-stage__plat--reels">Reels</span>
+          <span class="nc-stage__cap">{{ t('landing.anim.cap2') }}</span>
+          <span class="nc-stage__score">
+            <span class="nc-stage__score-label">{{ t('landing.anim.score_label') }}</span>
+            <span class="nc-stage__score-num" data-score="99">99</span>
+          </span>
+        </li>
+        <li class="nc-stage__clip" style="animation-delay:0.70s">
+          <span class="nc-stage__clip-thumb" aria-hidden="true"></span>
+          <img class="nc-stage__clip-img" src="/static/demo/clip3.jpg" alt="" aria-hidden="true" loading="lazy" decoding="async" onerror="this.remove()">
+          <span class="nc-stage__plat nc-stage__plat--shorts">Shorts</span>
+          <span class="nc-stage__cap">{{ t('landing.anim.cap3') }}</span>
+          <span class="nc-stage__score">
+            <span class="nc-stage__score-label">{{ t('landing.anim.score_label') }}</span>
+            <span class="nc-stage__score-num" data-score="95">95</span>
+          </span>
+        </li>
+        <li class="nc-stage__clip" style="animation-delay:0.95s">
+          <span class="nc-stage__clip-thumb" aria-hidden="true"></span>
+          <img class="nc-stage__clip-img" src="/static/demo/clip4.jpg" alt="" aria-hidden="true" loading="lazy" decoding="async" onerror="this.remove()">
+          <span class="nc-stage__plat nc-stage__plat--kick">Kick</span>
+          <span class="nc-stage__cap">{{ t('landing.anim.cap4') }}</span>
+          <span class="nc-stage__score">
+            <span class="nc-stage__score-label">{{ t('landing.anim.score_label') }}</span>
+            <span class="nc-stage__score-num" data-score="98">98</span>
+          </span>
+        </li>
+        <li class="nc-stage__clip" style="animation-delay:1.20s">
+          <span class="nc-stage__clip-thumb" aria-hidden="true"></span>
+          <img class="nc-stage__clip-img" src="/static/demo/clip5.jpg" alt="" aria-hidden="true" loading="lazy" decoding="async" onerror="this.remove()">
+          <span class="nc-stage__plat nc-stage__plat--twitch">Twitch</span>
+          <span class="nc-stage__cap">{{ t('landing.anim.cap5') }}</span>
+          <span class="nc-stage__score">
+            <span class="nc-stage__score-label">{{ t('landing.anim.score_label') }}</span>
+            <span class="nc-stage__score-num" data-score="96">96</span>
+          </span>
+        </li>
+      </ul>
+      <p class="nc-stage__note">↑ {{ t('landing.anim.note') }}</p>
+    </div>
+
+    {# ---- Feature chips — one-line capabilities scoped to the
+         hero so the eye lands here after the animation. ------- #}
+    <div class="nc-hero__chips">
+      <span class="nc-hero__chip"><i class="nc-hero__chip-dot" aria-hidden="true"></i>{{ t('landing.chips.cut') }}</span>
+      <span class="nc-hero__chip"><i class="nc-hero__chip-dot" aria-hidden="true"></i>{{ t('landing.chips.subs') }}</span>
+      <span class="nc-hero__chip"><i class="nc-hero__chip-dot" aria-hidden="true"></i>{{ t('landing.chips.reframe') }}</span>
+      <span class="nc-hero__chip"><i class="nc-hero__chip-dot" aria-hidden="true"></i>{{ t('landing.chips.hooks') }}</span>
+      <span class="nc-hero__chip"><i class="nc-hero__chip-dot" aria-hidden="true"></i>{{ t('landing.chips.hashtags') }}</span>
+      <span class="nc-hero__chip"><i class="nc-hero__chip-dot" aria-hidden="true"></i>{{ t('landing.chips.schedule') }}</span>
+    </div>
+
+    {#
+      Trust bar — platforms ChalyClip targets. TikTok / Reels / Shorts are
+      the publish targets; Twitch VODs + Kick streams are ingest sources.
+
+      TODO(operator): if publish OAuth isn't green on all three publish
+      targets at launch, soften this to "Coming soon to:" so we don't
+      overclaim auto-posting on a platform that isn't wired yet.
+    #}
+    <div class="nc-hero__trustbar">
+      <div class="nc-hero__trustbar-logos">
+        <span><i class="ti ti-check" aria-hidden="true"></i>{{ t('landing.trust.t1') }}</span>
+        <span><i class="ti ti-check" aria-hidden="true"></i>{{ t('landing.trust.t2') }}</span>
+        <span><i class="ti ti-check" aria-hidden="true"></i>{{ t('landing.trust.t3') }}</span>
+        <span><i class="ti ti-check" aria-hidden="true"></i>{{ t('landing.trust.t4') }}</span>
+        <span><i class="ti ti-check" aria-hidden="true"></i>{{ t('landing.trust.t5') }}</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="nc-page">
+
+    {# =========================================================
+         PAIN — editing is killing your growth. Output is the
+         problem, not talent. Tight, declarative.
+       ========================================================= #}
+    <section id="problema" class="nc-section nc-pain">
+      <div class="nc-section--narrow">
+        <h2>{{ t('landing.pain.heading') }}</h2>
+        <p>{{ t('landing.pain.line1') }}</p>
+        <p>{{ t('landing.pain.line2') }}</p>
+        <p class="nc-pain__kicker">{{ t('landing.pain.line3') }}</p>
+        <ul class="nc-pain__list">
+          <li>{{ t('landing.pain.item1') }}</li>
+          <li>{{ t('landing.pain.item2') }}</li>
+          <li>{{ t('landing.pain.item3') }}</li>
+          <li>{{ t('landing.pain.item4') }}</li>
+        </ul>
+        <p>{{ t('landing.pain.line4') }}</p>
+        <p class="nc-pain__dead">{{ t('landing.pain.line5') }}</p>
+      </div>
+    </section>
+
+    {# =========================================================
+         FIX — the four-word loop. Upload → clips → publish → done.
+       ========================================================= #}
+    <section id="solucion" class="nc-section nc-fix">
+      <h2>{{ t('landing.fix.heading') }}</h2>
+      <div class="nc-fix__steps">
+        <span class="nc-fix__step">{{ t('landing.fix.s1') }}</span>
+        <span class="nc-fix__arrow">→</span>
+        <span class="nc-fix__step">{{ t('landing.fix.s2') }}</span>
+        <span class="nc-fix__arrow">→</span>
+        <span class="nc-fix__step">{{ t('landing.fix.s3') }}</span>
+        <span class="nc-fix__arrow">→</span>
+        <span class="nc-fix__step">{{ t('landing.fix.s4') }}</span>
+      </div>
+    </section>
+
+    {# =========================================================
+         VALUE PROP — one stream, endless content.
+       ========================================================= #}
+    <section class="nc-section nc-value">
+      <h2>
+        {{ t('landing.value.heading_line1') }}
+        <span class="nc-value__accent">{{ t('landing.value.heading_line2') }}</span>
+      </h2>
+      <p class="nc-value__intro">{{ t('landing.value.intro') }}</p>
+      <div class="nc-value__chips">
+        <span class="nc-value__chip">{{ t('landing.value.item1') }}</span>
+        <span class="nc-value__chip">{{ t('landing.value.item2') }}</span>
+        <span class="nc-value__chip">{{ t('landing.value.item3') }}</span>
+        <span class="nc-value__chip">{{ t('landing.value.item4') }}</span>
+        <span class="nc-value__chip">{{ t('landing.value.item5') }}</span>
+        <span class="nc-value__chip">{{ t('landing.value.item6') }}</span>
+        <span class="nc-value__chip">{{ t('landing.value.item7') }}</span>
+        <span class="nc-value__chip">{{ t('landing.value.item8') }}</span>
+      </div>
+      <div class="nc-value__without">
+        <span>{{ t('landing.value.without1') }}</span>
+        <span>{{ t('landing.value.without2') }}</span>
+        <span>{{ t('landing.value.without3') }}</span>
+      </div>
+    </section>
+
+    {# =========================================================
+         MONEY — what does one editor cost?
+       ========================================================= #}
+    <section id="precio" class="nc-section nc-section--wide">
+      <div class="nc-math__head">
+        <h2>{{ t('landing.math.heading') }}</h2>
+      </div>
+      <div class="nc-math__grid">
+        <div class="nc-math__card">
+          <div class="nc-math__label">{{ t('landing.math.freelancer_label') }}</div>
+          <div class="nc-math__price">{{ t('landing.math.freelancer_price') }}</div>
+        </div>
+        <div class="nc-math__card">
+          <div class="nc-math__label">{{ t('landing.math.agency_label') }}</div>
+          <div class="nc-math__price">{{ t('landing.math.agency_price') }}</div>
+        </div>
+        <div class="nc-math__card nc-math__card--us">
+          <div class="nc-math__label">{{ t('landing.math.us_label') }}</div>
+          {# Price is operator-editable from /dashboard/settings/site
+             (stored in platform_settings, injected by app.root()). Pick
+             the current locale's value; fall back to the other locale,
+             then to the i18n placeholder when neither is set. #}
+          {% set _price_es = landing_price_es | default('') %}
+          {% set _price_en = landing_price_en | default('') %}
+          {% set _price = (_price_es if locale() == 'es' else _price_en) or _price_en or _price_es %}
+          <div class="nc-math__price">{{ _price or t('landing.math.us_price') }}</div>
+        </div>
+      </div>
+      <ul class="nc-math__us-lines">
+        <li>{{ t('landing.math.us_line1') }}</li>
+        <li>{{ t('landing.math.us_line2') }}</li>
+        <li>{{ t('landing.math.us_line3') }}</li>
+        <li>{{ t('landing.math.us_line4') }}</li>
+        <li>{{ t('landing.math.us_line5') }}</li>
+      </ul>
+    </section>
+
+    {# =========================================================
+         EMOTIONAL — imagine waking up to this.
+         First checklist item is the concrete "17 clips generated".
+       ========================================================= #}
+    <section class="nc-section nc-section--narrow">
+      <h2 class="nc-imagine__heading">{{ t('landing.imagine.heading') }}</h2>
+      <p class="nc-imagine__lead">{{ t('landing.imagine.line1') }}</p>
+      <p class="nc-imagine__lead">{{ t('landing.imagine.line2') }}</p>
+      <p class="nc-imagine__lead nc-imagine__lead--last">{{ t('landing.imagine.line3') }}</p>
+      <ul class="nc-imagine__list">
+        <li><strong>{{ t('landing.imagine.item1') }}</strong></li>
+        <li>{{ t('landing.imagine.item2') }}</li>
+        <li>{{ t('landing.imagine.item3') }}</li>
+        <li>{{ t('landing.imagine.item4') }}</li>
+        <li>{{ t('landing.imagine.item5') }}</li>
+        <li>{{ t('landing.imagine.item6') }}</li>
+        <li>{{ t('landing.imagine.item7') }}</li>
+      </ul>
+      <p class="nc-imagine__tagline">{{ t('landing.imagine.tagline') }}</p>
+    </section>
+
+    {# =========================================================
+         RESULTS — more clips = more chances to go viral.
+       ========================================================= #}
+    <section class="nc-section nc-results">
+      <div class="nc-section--narrow">
+        <h2>{{ t('landing.results.heading') }}</h2>
+        <p>{{ t('landing.results.line1') }}</p>
+        <p>{{ t('landing.results.line2') }}</p>
+        <p>{{ t('landing.results.line3') }}</p>
+        <p class="nc-results__lead">{{ t('landing.results.line4') }}</p>
+      </div>
+    </section>
+
+    {# =========================================================
+         FEATURES — six outcome-led benefit cards. The engine
+         detail stays in the body; the headline is the outcome.
+       ========================================================= #}
+    <section id="features" class="nc-section nc-section--wide">
+      <a id="how-it-works" aria-hidden="true"></a>
+      <div class="nc-features__head">
+        <h2>{{ t('landing.features.heading') }}</h2>
+        <p>{{ t('landing.features.intro') }}</p>
+      </div>
+
+      <div class="nc-features__grid">
+        <div class="nc-feature">
+          <i class="ti ti-trending-up nc-feature__icon" aria-hidden="true"></i>
+          <h3>{{ t('landing.features.viral.title') }}</h3>
+          <p>{{ t('landing.features.viral.body') }}</p>
+        </div>
+        <div class="nc-feature">
+          <i class="ti ti-sparkles nc-feature__icon" aria-hidden="true"></i>
+          <h3>{{ t('landing.features.hook.title') }}</h3>
+          <p>{{ t('landing.features.hook.body') }}</p>
+        </div>
+        <div class="nc-feature">
+          <i class="ti ti-player-skip-forward nc-feature__icon" aria-hidden="true"></i>
+          <h3>{{ t('landing.features.timeline.title') }}</h3>
+          <p>{{ t('landing.features.timeline.body') }}</p>
+        </div>
+        <div class="nc-feature">
+          <i class="ti ti-microphone-2 nc-feature__icon" aria-hidden="true"></i>
+          <h3>{{ t('landing.features.voice.title') }}</h3>
+          <p>{{ t('landing.features.voice.body_html') | safe }}</p>
+        </div>
+        <div class="nc-feature">
+          <i class="ti ti-palette nc-feature__icon" aria-hidden="true"></i>
+          <h3>{{ t('landing.features.brand.title') }}</h3>
+          <p>{{ t('landing.features.brand.body') }}</p>
+        </div>
+        <div class="nc-feature">
+          <i class="ti ti-calendar-time nc-feature__icon" aria-hidden="true"></i>
+          <h3>{{ t('landing.features.publish.title') }}</h3>
+          <p>{{ t('landing.features.publish.body') }}</p>
+        </div>
+      </div>
+    </section>
+
+    {# =========================================================
+         BIG MID-PAGE STATEMENT — three lines, giant.
+       ========================================================= #}
+    <section class="nc-statement">
+      <h2>
+        <span>{{ t('landing.statement_line1') }}</span>
+        <span>{{ t('landing.statement_line2') }}</span>
+        <span>{{ t('landing.statement_line3') }}</span>
+      </h2>
+    </section>
+
+    {# =========================================================
+         FINAL CTA — the secret, said plainly: one stream → 20
+         pieces of content. The dream, then the button.
+       ========================================================= #}
+    <section class="nc-section nc-final">
+      <h2>{{ t('landing.final.heading') }}</h2>
+      <p>{{ t('landing.final.body') }}</p>
+      <span class="nc-final__cta-wrap">
+        <a href="https://chalyb.com/{{ locale() }}/sign-in?mode=signup&next=/auth/launch/chalybclip" class="nc-btn nc-btn--primary">
+          <i class="ti ti-upload" aria-hidden="true"></i>
+          <span>{{ t('landing.final.cta') }}</span>
+        </a>
+        <span class="nc-final__cta-micro">{{ t('landing.final.cta_micro') }}</span>
+      </span>
+    </section>
+
+    {# =========================================================
+         FAQ
+       ========================================================= #}
+    <section class="nc-section nc-faq">
+      <h2>{{ t('landing.faq.heading') }}</h2>
+
+      <details>
+        <summary>{{ t('landing.faq.q1') }}</summary>
+        <div class="nc-faq__body">{{ t('landing.faq.a1') }}</div>
+      </details>
+      <details>
+        <summary>{{ t('landing.faq.q2') }}</summary>
+        <div class="nc-faq__body">{{ t('landing.faq.a2') }}</div>
+      </details>
+      <details>
+        <summary>{{ t('landing.faq.q3') }}</summary>
+        <div class="nc-faq__body">{{ t('landing.faq.a3') }}</div>
+      </details>
+      <details>
+        <summary>{{ t('landing.faq.q4') }}</summary>
+        <div class="nc-faq__body">{{ t('landing.faq.a4') }}</div>
+      </details>
+      <details>
+        <summary>{{ t('landing.faq.q5') }}</summary>
+        <div class="nc-faq__body">{{ t('landing.faq.a5_html') | safe }}</div>
+      </details>
+      <details>
+        <summary>{{ t('landing.faq.q6') }}</summary>
+        <div class="nc-faq__body">{{ t('landing.faq.a6') }}</div>
+      </details>
+      <details>
+        <summary>{{ t('landing.faq.q7') }}</summary>
+        <div class="nc-faq__body">{{ t('landing.faq.a7_html') | safe }}</div>
+      </details>
+    </section>
+
+  </main>
+
+  {# =========================================================
+       FOOTER — agent-readability entry points stay here.
+       The /agents link is the "second door" for technical buyers.
+     ========================================================= #}
+  <footer class="nc-foot nc-foot--cols">
+    <div class="nc-foot__grid">
+      <div class="nc-foot__col nc-foot__col--brand">
+        <a href="/" class="nc-foot__brand">
+          <span class="nc-foot__brand-dot" aria-hidden="true"></span>
+          <span>{{ t('landing.nav.brand_prefix') }}<span class="nc-foot__brand-accent">{{ t('landing.nav.brand_suffix') }}</span></span>
+        </a>
+        <p class="nc-foot__brand-blurb">{{ t('landing.foot.brand_blurb') }}</p>
+      </div>
+      <div class="nc-foot__col">
+        <h5 class="nc-foot__col-head">{{ t('landing.foot.col_product') }}</h5>
+        <a href="#features">{{ t('landing.foot.link_features') }}</a>
+        <a href="#precio">{{ t('landing.foot.link_pricing') }}</a>
+        <a href="https://chalyb.com/{{ locale() }}/sign-in?next=/auth/launch/chalybclip">{{ t('landing.foot.link_signin') }}</a>
+        <a href="https://chalyb.com/{{ locale() }}/sign-in?mode=signup&next=/auth/launch/chalybclip">{{ t('landing.foot.link_get_started') }}</a>
+      </div>
+      <div class="nc-foot__col">
+        <h5 class="nc-foot__col-head">{{ t('landing.foot.col_developers') }}</h5>
+        <a href="/agents">{{ t('landing.foot.link_agents') }}</a>
+        <a href="/docs">{{ t('landing.foot.link_docs') }}</a>
+        <a href="/openapi.json">{{ t('landing.foot.link_openapi') }}</a>
+        <a href="/llms.txt">{{ t('landing.foot.link_llms') }}</a>
+      </div>
+      <div class="nc-foot__col">
+        <h5 class="nc-foot__col-head">{{ t('landing.foot.col_platforms') }}</h5>
+        <a href="https://chalyb.com/{{ locale() }}/sign-in?mode=signup&next=/auth/launch/chalybclip">{{ t('landing.foot.platform_tiktok') }}</a>
+        <a href="https://chalyb.com/{{ locale() }}/sign-in?mode=signup&next=/auth/launch/chalybclip">{{ t('landing.foot.platform_reels') }}</a>
+        <a href="https://chalyb.com/{{ locale() }}/sign-in?mode=signup&next=/auth/launch/chalybclip">{{ t('landing.foot.platform_shorts') }}</a>
+        <a href="https://chalyb.com/{{ locale() }}/sign-in?mode=signup&next=/auth/launch/chalybclip">{{ t('landing.foot.platform_kick') }}</a>
+      </div>
+    </div>
+    <div class="nc-foot__bot">
+      <span>{{ t('landing.foot.copyright') }}</span>
+      <span class="nc-foot__made">{{ t('landing.foot.made') }}</span>
+    </div>
+  </footer>
+
+  {# ===========================================================
+       ClipFanAnimation count-up + paste-box keyboard shortcut.
+       - Score numbers re-count to their data-score value every
+         time the stage scrolls back into view (>= 40% visible).
+       - Respects prefers-reduced-motion: leaves final values.
+       - Enter inside the paste input fires the form's submit
+         (which routes to /dashboard/login).
+     =========================================================== #}
+  <script>
+    (function () {
+      var reduce = window.matchMedia &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      function countUp(el) {
+        var target = parseInt(el.getAttribute('data-score'), 10) || 0;
+        if (reduce) { el.textContent = target; return; }
+        var n = 0;
+        el.textContent = '0';
+        function tick() {
+          var step = Math.max(1, Math.round((target - n) / 6));
+          n += step;
+          if (n >= target) { el.textContent = String(target); return; }
+          el.textContent = String(n);
+          window.requestAnimationFrame(tick);
+        }
+        window.setTimeout(tick, 200 + Math.random() * 900);
+      }
+
+      function runStage() {
+        var nums = document.querySelectorAll('#nc-clipfan .nc-stage__score-num');
+        for (var i = 0; i < nums.length; i++) countUp(nums[i]);
+      }
+
+      var stage = document.getElementById('nc-clipfan');
+      if (stage && 'IntersectionObserver' in window) {
+        var io = new IntersectionObserver(function (entries) {
+          for (var i = 0; i < entries.length; i++) {
+            if (entries[i].isIntersecting) runStage();
+          }
+        }, { threshold: 0.4 });
+        io.observe(stage);
+      } else if (stage) {
+        runStage();
+      }
+    })();
+  </script>
+
+</body>
+</html>

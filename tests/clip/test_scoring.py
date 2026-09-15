@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from nexoclip.clip import ClipBreakdown, compute_ai_scores
+from chalybclip.clip import ClipBreakdown, compute_ai_scores
 
 
 def _bd(

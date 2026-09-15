@@ -8,13 +8,13 @@ import json
 
 import httpx
 
-from nexoclip.db import (
+from chalybclip.db import (
     Database,
     StreamsRepo,
 )
-from nexoclip.db.models import StreamRow
-from nexoclip.integrations.nexo_ai.service import sync_tenant_tier
-from nexoclip.tenancy import bound_tenant
+from chalybclip.db.models import StreamRow
+from chalybclip.integrations.chalyb.service import sync_tenant_tier
+from chalybclip.tenancy import bound_tenant
 
 from .conftest import auth
 
@@ -53,7 +53,7 @@ async def _emit_step_event(
     error: str | None = None,
 ) -> None:
     """Insert a pipeline.step.* event directly via raw SQL (mirrors what the
-    sync hook in `nexoclip.pipeline._record_step_event` does)."""
+    sync hook in `chalybclip.pipeline._record_step_event` does)."""
     payload: dict[str, object] = {"step": step, "stream_id": stream_id}
     if duration_s is not None:
         payload["duration_s"] = duration_s
@@ -226,7 +226,7 @@ async def test_progress_long_step_stays_running_while_run_in_flight(
     (analyze_video on a 5h VOD legitimately runs for hours), so wall clock
     alone must not flip a live run to 'se quedó a medias' + a Córrelo button
     that would stack a duplicate run on top of it."""
-    from nexoclip.jobs.active import pipeline_active
+    from chalybclip.jobs.active import pipeline_active
 
     tenant_id = tenants["alice"]["id"]
     await _seed_stream(db, tenant_id=tenant_id, stream_id="str_live")
@@ -307,8 +307,8 @@ async def test_rerun_kicks_off_pipeline_for_existing_stream(
     import httpx as _httpx
     import pytest as _pytest
 
-    from nexoclip.api import PipelineKickoff, create_app
-    from nexoclip.ingest.models import Stream
+    from chalybclip.api import PipelineKickoff, create_app
+    from chalybclip.ingest.models import Stream
 
     _ = _pytest  # silence unused-import warning
 
@@ -342,7 +342,7 @@ async def test_rerun_kicks_off_pipeline_for_existing_stream(
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        "nexoclip.settings.get_settings",
+        "chalybclip.settings.get_settings",
         lambda: type("S", (), {"default_output_dir": str(tmp_path / "out")})(),
     )
 
@@ -352,8 +352,8 @@ async def test_rerun_kicks_off_pipeline_for_existing_stream(
         captured.append(kickoff)
 
     # Add a persona — the rerun form requires one.
-    from nexoclip.db import PersonasRepo
-    from nexoclip.tenancy import bound_tenant as _bound
+    from chalybclip.db import PersonasRepo
+    from chalybclip.tenancy import bound_tenant as _bound
 
     with _bound(tenant_id):
         await PersonasRepo(db).create(
@@ -395,7 +395,7 @@ async def test_rerun_reingests_failed_url_stream_without_artifacts(
     VOD URL instead of 409'ing, and its row is reset to 'pending' so a
     successful re-download reconciles back to 'ingested'. (The shared client's
     pipeline runner is a no-op, so nothing actually downloads.)"""
-    from nexoclip.db import PersonasRepo
+    from chalybclip.db import PersonasRepo
 
     tid = tenants["alice"]["id"]
     await sync_tenant_tier(db, tenant_id=tid, tier="all_access")
@@ -441,18 +441,18 @@ async def test_default_pipeline_runner_passes_db_path(
     the progress endpoint had no events to surface (the panel stayed on
     'all pending' forever even while the real pipeline was running).
     """
-    from nexoclip.api import PipelineKickoff
-    from nexoclip.api._pipeline import default_pipeline_runner
-    from nexoclip.ingest.models import Stream
+    from chalybclip.api import PipelineKickoff
+    from chalybclip.api._pipeline import default_pipeline_runner
+    from chalybclip.ingest.models import Stream
 
     captured: dict[str, object] = {}
 
     async def fake_process_vod(**kwargs: object) -> None:
         captured.update(kwargs)
 
-    monkeypatch.setattr("nexoclip.pipeline.process_vod", fake_process_vod)
+    monkeypatch.setattr("chalybclip.pipeline.process_vod", fake_process_vod)
     monkeypatch.setattr(
-        "nexoclip.settings.get_settings",
+        "chalybclip.settings.get_settings",
         lambda: type(
             "S",
             (),

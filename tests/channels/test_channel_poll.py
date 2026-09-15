@@ -11,11 +11,11 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 
-from nexoclip.channels import ChannelVOD, poll_channel_watches
-from nexoclip.channels.service import _is_due, _poll_one_watch
-from nexoclip.db import ChannelWatchesRepo, Database, TenantsRepo, apply_migrations
-from nexoclip.db.models import ChannelWatchRow
-from nexoclip.tenancy import bound_tenant
+from chalybclip.channels import ChannelVOD, poll_channel_watches
+from chalybclip.channels.service import _is_due, _poll_one_watch
+from chalybclip.db import ChannelWatchesRepo, Database, TenantsRepo, apply_migrations
+from chalybclip.db.models import ChannelWatchRow
+from chalybclip.tenancy import bound_tenant
 
 
 @pytest_asyncio.fixture
@@ -187,7 +187,7 @@ async def test_failed_video_is_parked_after_retry_ceiling(
     """A permanently-unavailable video (yt-dlp 'This video is not available')
     is retried a few times then PARKED into the seen-set, so it stops failing
     on every poll. Mirrors the real k0fGua3TA8s loop."""
-    from nexoclip.channels.service import _MAX_INGEST_ATTEMPTS
+    from chalybclip.channels.service import _MAX_INGEST_ATTEMPTS
 
     with bound_tenant(watch_tenant):
         repo = ChannelWatchesRepo(db)

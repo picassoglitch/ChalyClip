@@ -8,8 +8,8 @@ same `.overlap_speaker(...)` / `.speaker_label_at(...)` API.
 
 from __future__ import annotations
 
-from nexoclip.diarize import diarization_from_transcript
-from nexoclip.transcribe.models import Segment, Transcript, Word
+from chalybclip.diarize import diarization_from_transcript
+from chalybclip.transcribe.models import Segment, Transcript, Word
 
 
 def _transcript(

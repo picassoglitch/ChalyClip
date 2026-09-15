@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from nexoclip.vision.haar import haar_face_detector
+from chalybclip.vision.haar import haar_face_detector
 
 
 def test_returns_working_detector_on_healthy_cv2() -> None:
@@ -35,7 +35,7 @@ def test_framing_degrades_without_cascade_api(
     detection returns empty and framing falls back to its no-face verdict."""
     import cv2
 
-    from nexoclip.detect.framing import _detect_subjects
+    from chalybclip.detect.framing import _detect_subjects
 
     monkeypatch.delattr(cv2, "CascadeClassifier")
     assert _detect_subjects(

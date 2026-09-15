@@ -11,8 +11,8 @@ from typing import Any
 
 import pytest
 
-from nexoclip.ingest import service as ingest_service
-from nexoclip.settings import Settings, get_settings
+from chalybclip.ingest import service as ingest_service
+from chalybclip.settings import Settings, get_settings
 
 
 class _FakeYDL:
@@ -62,7 +62,7 @@ def _patch_settings(
     get_settings.cache_clear()
     monkeypatch.setattr(
         ingest_service,
-        # Import inside _download_vod is `from nexoclip.settings import get_settings`,
+        # Import inside _download_vod is `from chalybclip.settings import get_settings`,
         # so we override the global accessor.
         "_download_vod",  # noqa: B017 — placeholder; real patch below
         ingest_service._download_vod,
@@ -72,7 +72,7 @@ def _patch_settings(
     def _get() -> Settings:
         return Settings(**overrides)
 
-    import nexoclip.settings as _settings_mod
+    import chalybclip.settings as _settings_mod
     monkeypatch.setattr(_settings_mod, "get_settings", _get)
 
 

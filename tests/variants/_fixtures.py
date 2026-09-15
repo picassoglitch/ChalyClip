@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from nexoclip.clip import Clip
-from nexoclip.detect import Candidate
-from nexoclip.llm import LLMRouter
-from nexoclip.llm.config import ProviderConfig
-from nexoclip.variants import Persona
+from chalybclip.clip import Clip
+from chalybclip.detect import Candidate
+from chalybclip.llm import LLMRouter
+from chalybclip.llm.config import ProviderConfig
+from chalybclip.variants import Persona
 
 # pylint: disable=relative-beyond-top-level
 from tests.llm._fakes import FakeProvider  # type: ignore[import]

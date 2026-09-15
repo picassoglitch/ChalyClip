@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import httpx
 
-from nexoclip.db import ApiTokensRepo, Database
-from nexoclip.tenancy import bound_tenant, hash_token, mint_token
+from chalybclip.db import ApiTokensRepo, Database
+from chalybclip.tenancy import bound_tenant, hash_token, mint_token
 
 from .conftest import auth
 

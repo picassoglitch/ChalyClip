@@ -1,0 +1,385 @@
+{% extends "base.html" %}
+{% block title %}Diag · Chalyb · ChalyClip{% endblock %}
+{% block content %}
+
+{# Diagnostic page for the Chalyb integration. Rendered when the user clicks
+   the empty balance chip and the live ping fails, OR when they hit
+   /dashboard/_diag/chalyb directly. Every state bit that the balance
+   pipeline depends on shows here so we can self-diagnose without
+   grepping Railway logs. #}
+
+<div class="nc-page-header">
+  <div>
+    <h2>Diagnóstico · integración Chalyb</h2>
+    <small>Cada paso de cómo se cuentan tus tokens, en orden. El primero que veas en rojo es el que tienes que arreglar.</small>
+  </div>
+</div>
+
+{# If any internal step raised, surface the raw error so we don't hide
+   bugs behind a green panel. Should be empty in healthy production. #}
+{% if diag_error %}
+<div class="nc-panel" style="border-color: var(--nc-danger); background: rgba(229,72,77,0.06); margin-bottom: 14px;">
+  <div class="nc-panel__header" style="border-color: rgba(229,72,77,0.25);">
+    <i class="ti ti-bug" aria-hidden="true" style="color: var(--nc-danger);"></i>
+    <span class="nc-panel__title" style="color: var(--nc-danger);">Excepción interna durante el diagnóstico</span>
+  </div>
+  <div class="nc-panel__body">
+    <pre style="font-size: 11px; color: var(--nc-text); white-space: pre-wrap; margin: 0;">{{ diag_error }}</pre>
+  </div>
+</div>
+{% endif %}
+
+{# ── Verdict panel: the one-line diagnosis + recommended action ──────── #}
+{% set _color_var = 'var(--nc-success)' if interpret.severity == 'ok' else ('var(--nc-warn)' if interpret.severity == 'warn' else 'var(--nc-danger)') %}
+{% set _bg_rgba = 'rgba(46,204,113,0.06)' if interpret.severity == 'ok' else ('rgba(245,177,61,0.06)' if interpret.severity == 'warn' else 'rgba(229,72,77,0.06)') %}
+<div class="nc-panel" style="border-color: {{ _color_var }}; background: {{ _bg_rgba }}; margin-bottom: 18px;">
+  <div class="nc-panel__header" style="border-color: {{ _color_var }};">
+    {% if interpret.severity == 'ok' %}
+      <i class="ti ti-circle-check" aria-hidden="true" style="color: {{ _color_var }};"></i>
+    {% elif interpret.severity == 'warn' %}
+      <i class="ti ti-alert-triangle" aria-hidden="true" style="color: {{ _color_var }};"></i>
+    {% else %}
+      <i class="ti ti-alert-octagon" aria-hidden="true" style="color: {{ _color_var }};"></i>
+    {% endif %}
+    <span class="nc-panel__title" style="color: {{ _color_var }};">{{ interpret.headline }}</span>
+  </div>
+  <div class="nc-panel__body">
+    <p style="font-size: 13.5px; color: var(--nc-text); line-height: 1.55; margin: 0;">
+      {{ interpret.action }}
+    </p>
+    {# Deep-link to the rich HTTP panel for the live_ok=False case.
+       Anchor target lives further down the page (#ping-detail). Only show
+       the jump-link when there's actually a ping outcome to inspect. #}
+    {% if interpret.severity != 'ok' and ping and ping.outcome != 'ok' %}
+    <p style="margin: 12px 0 0 0;">
+      <a href="#ping-detail" class="nc-btn nc-btn--sm" style="text-decoration: none;">
+        <i class="ti ti-arrow-down" aria-hidden="true"></i>
+        <span>Ver el detalle de la conexión</span>
+      </a>
+    </p>
+    {% endif %}
+  </div>
+</div>
+
+{# ── Configuration row: env vars on this Railway service ────────────── #}
+<div class="nc-panel" style="margin-bottom: 14px;">
+  <div class="nc-panel__header">
+    <i class="ti ti-key" aria-hidden="true"></i>
+    <span class="nc-panel__title">Env vars en Railway</span>
+  </div>
+  <div class="nc-panel__body">
+    <table style="width: 100%; border-collapse: collapse; font-size: 12.5px;">
+      <tbody>
+        <tr style="border-bottom: 1px solid var(--nc-line-soft);">
+          <td style="padding: 8px 0; color: var(--nc-text-muted); font-family: var(--nc-mono), monospace;">CHALYB_BASE_URL</td>
+          <td style="padding: 8px 0; text-align: right;">
+            {% if base_url %}
+              <code style="color: var(--nc-success);">{{ base_url }}</code>
+            {% else %}
+              <span style="color: var(--nc-danger);">✗ falta configurar</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr style="border-bottom: 1px solid var(--nc-line-soft);">
+          <td style="padding: 8px 0; color: var(--nc-text-muted); font-family: var(--nc-mono), monospace;">CHALYB_ADMIN_TOKEN</td>
+          <td style="padding: 8px 0; text-align: right;">
+            {% if has_admin_token %}
+              <span style="color: var(--nc-success);">✓ lista</span>
+            {% else %}
+              <span style="color: var(--nc-danger);">✗ falta configurar</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; color: var(--nc-text-muted); font-family: var(--nc-mono), monospace;">CHALYB_SSO_SECRET</td>
+          <td style="padding: 8px 0; text-align: right;">
+            {% if has_sso_secret %}
+              <span style="color: var(--nc-success);">✓ lista</span>
+            {% else %}
+              <span style="color: var(--nc-warn);">⚠ falta configurar (solo afecta al inicio de sesión)</span>
+            {% endif %}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{# ── Tenant row: this is YOUR tenant in ChalyClip ─────────────────────── #}
+<div class="nc-panel" style="margin-bottom: 14px;">
+  <div class="nc-panel__header">
+    <i class="ti ti-user" aria-hidden="true"></i>
+    <span class="nc-panel__title">Tu tenant en ChalyClip</span>
+  </div>
+  <div class="nc-panel__body">
+    <table style="width: 100%; border-collapse: collapse; font-size: 12.5px;">
+      <tbody>
+        <tr style="border-bottom: 1px solid var(--nc-line-soft);">
+          <td style="padding: 8px 0; color: var(--nc-text-muted);">Tenant ID (ChalyClip)</td>
+          <td style="padding: 8px 0; text-align: right;"><code style="font-size: 11.5px;">{{ tenant_id }}</code></td>
+        </tr>
+        <tr style="border-bottom: 1px solid var(--nc-line-soft);">
+          <td style="padding: 8px 0; color: var(--nc-text-muted);">external_user_id (Chalyb)</td>
+          <td style="padding: 8px 0; text-align: right;">
+            {% if external_user_id %}
+              <code style="font-size: 11.5px; color: var(--nc-success);">{{ external_user_id }}</code>
+            {% else %}
+              <span style="color: var(--nc-danger);">✗ vacío · tu cuenta no está conectada</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr style="border-bottom: 1px solid var(--nc-line-soft);">
+          <td style="padding: 8px 0; color: var(--nc-text-muted);">Tier</td>
+          <td style="padding: 8px 0; text-align: right;">
+            <code>{{ tenant_tier or '—' }}</code>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; color: var(--nc-text-muted);">Status</td>
+          <td style="padding: 8px 0; text-align: right;">
+            <code>{{ tenant_status or '—' }}</code>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{# ── Live ping result — rich HTTP outcome ───────────────────────────── #}
+{% if ping %}
+  {%- set _po = ping.outcome -%}
+  {%- set _ok = (_po == 'ok') -%}
+  {%- set _skip = (_po.startswith('skip_')) -%}
+  {%- set _ping_color = 'var(--nc-success)' if _ok else ('var(--nc-text-muted)' if _skip else 'var(--nc-danger)') -%}
+<div id="ping-detail" class="nc-panel" style="margin-bottom: 14px; border-color: {{ _ping_color }}; scroll-margin-top: 80px;">
+  <div class="nc-panel__header" style="border-color: {{ _ping_color }};">
+    <i class="ti ti-{% if _ok %}check{% elif _skip %}forbid{% else %}alert-circle{% endif %}" aria-hidden="true" style="color: {{ _ping_color }};"></i>
+    <span class="nc-panel__title" style="color: {{ _ping_color }};">
+      Prueba de conexión con Chalyb ·
+      {%- if _ok %} OK
+      {%- elif _po == 'http_error' %} HTTP {{ ping.status_code }}
+      {%- elif _po == 'timeout' %} se tardó demasiado
+      {%- elif _po == 'network' %} sin conexión
+      {%- elif _po == 'parse_error' %} respuesta ilegible
+      {%- elif _po == 'skip_no_url' %} sin probar (falta BASE_URL)
+      {%- elif _po == 'skip_no_token' %} sin probar (falta ADMIN_TOKEN)
+      {%- elif _po == 'skip_no_external_id' %} sin probar (falta external_user_id)
+      {%- else %} {{ _po }}
+      {%- endif %}
+    </span>
+  </div>
+  <div class="nc-panel__body">
+    {% if ping.url %}
+    <div style="font-family: var(--nc-mono), monospace; font-size: 11px; color: var(--nc-text-muted); margin-bottom: 10px; word-break: break-all;">
+      GET {{ ping.url }}
+    </div>
+    {% endif %}
+    <table style="width: 100%; border-collapse: collapse; font-size: 12.5px;">
+      <tbody>
+        {% if ping.status_code is not none %}
+        <tr style="border-bottom: 1px solid var(--nc-line-soft);">
+          <td style="padding: 8px 0; color: var(--nc-text-muted);">HTTP status</td>
+          <td style="padding: 8px 0; text-align: right;">
+            <code style="color: {{ _ping_color }};">{{ ping.status_code }}</code>
+          </td>
+        </tr>
+        {% endif %}
+        {% if ping.elapsed_ms is not none %}
+        <tr style="border-bottom: 1px solid var(--nc-line-soft);">
+          <td style="padding: 8px 0; color: var(--nc-text-muted);">Cuánto tardó</td>
+          <td style="padding: 8px 0; text-align: right;">
+            <code>{{ ping.elapsed_ms }} ms</code>
+          </td>
+        </tr>
+        {% endif %}
+        {% if ping.exception_type %}
+        <tr style="border-bottom: 1px solid var(--nc-line-soft);">
+          <td style="padding: 8px 0; color: var(--nc-text-muted);">Excepción</td>
+          <td style="padding: 8px 0; text-align: right;">
+            <code style="color: var(--nc-danger);">{{ ping.exception_type }}</code>
+          </td>
+        </tr>
+        {% endif %}
+        {% if ping.exception_message %}
+        <tr style="border-bottom: 1px solid var(--nc-line-soft);">
+          <td style="padding: 8px 0; color: var(--nc-text-muted); vertical-align: top;">Mensaje</td>
+          <td style="padding: 8px 0; text-align: right; max-width: 60ch;">
+            <code style="font-size: 11px; color: var(--nc-danger); white-space: pre-wrap; word-break: break-word;">{{ ping.exception_message }}</code>
+          </td>
+        </tr>
+        {% endif %}
+        {% if ping.balance_remaining is not none %}
+        <tr style="border-bottom: 1px solid var(--nc-line-soft);">
+          <td style="padding: 8px 0; color: var(--nc-text-muted);">Saldo que reporta Chalyb</td>
+          <td style="padding: 8px 0; text-align: right;">
+            <code>{{ '{:,}'.format(ping.balance_remaining) }} tokens</code>
+            {% if ping.balance_unlimited %}<span style="color: var(--nc-success); margin-left: 8px;">unlimited</span>{% endif %}
+          </td>
+        </tr>
+        {% endif %}
+      </tbody>
+    </table>
+
+    {# Body excerpt — when Chalyb returns 4xx/5xx the response usually
+       carries a JSON error or HTML error page. Render it so the operator
+       can see exactly what the server said. Capped at 500 chars upstream. #}
+    {% if ping.body_excerpt %}
+    <div style="margin-top: 14px;">
+      <div style="font-family: var(--nc-mono), monospace; font-size: 10px; letterspacing: 0.1em; text-transform: uppercase; color: var(--nc-text-muted); margin-bottom: 4px;">
+        Respuesta del servidor (primeros 500 caracteres)
+      </div>
+      <pre style="margin: 0; padding: 10px 12px; background: var(--nc-bg-1); border: 1px solid var(--nc-line); border-radius: 6px; font-size: 11px; color: var(--nc-text); white-space: pre-wrap; word-break: break-word; max-height: 200px; overflow-y: auto;">{{ ping.body_excerpt }}</pre>
+    </div>
+    {% endif %}
+
+    {# Hint notes — pre-computed in Python for each HTTP status code. #}
+    {% if ping.notes %}
+    <div style="margin-top: 14px; padding: 10px 12px; background: rgba(245,177,61,0.06); border: 1px solid rgba(245,177,61,0.25); border-radius: 6px; font-size: 12.5px; line-height: 1.5; color: var(--nc-text);">
+      {% for note in ping.notes %}
+        <div{% if not loop.first %} style="margin-top: 6px;"{% endif %}>▸ {{ note }}</div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{# ── Cache state ────────────────────────────────────────────────────── #}
+{# Token T1 — the OUTBOUND usage-report status. This is what drives the
+   red "sync ⚠" chip: it's the /usage POST result, NOT the balance GET
+   the live ping tests above. When red, the `report_error` here is the
+   exact reason. #}
+<div class="nc-panel" style="margin-bottom: 14px;">
+  <div class="nc-panel__header">
+    <i class="ti ti-upload" aria-hidden="true"></i>
+    <span class="nc-panel__title">Aviso de uso que enviamos (POST /usage)</span>
+    <small>— esto es lo que prende el aviso rojo de tokens</small>
+  </div>
+  <div class="nc-panel__body">
+    <table style="width: 100%; border-collapse: collapse; font-size: 12.5px;">
+      <tbody>
+        <tr style="border-bottom: 1px solid var(--nc-line-soft);">
+          <td style="padding: 8px 0; color: var(--nc-text-muted);">Último aviso</td>
+          <td style="padding: 8px 0; text-align: right;">
+            {% if report_ok == 1 %}
+              <span style="color: var(--nc-success);">✓ OK</span>
+            {% elif report_ok == 0 %}
+              <span style="color: var(--nc-danger);">✗ FALLÓ</span>
+            {% else %}
+              <span style="color: var(--nc-text-muted);">— todavía no se intenta</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% if report_ok == 0 and report_error %}
+        <tr style="border-bottom: 1px solid var(--nc-line-soft);">
+          <td style="padding: 8px 0; color: var(--nc-text-muted);">Razón exacta</td>
+          <td style="padding: 8px 0; text-align: right;">
+            <code style="color: var(--nc-danger);">{{ report_error }}</code>
+          </td>
+        </tr>
+        {% endif %}
+        <tr>
+          <td style="padding: 8px 0; color: var(--nc-text-muted);">Cuándo fue</td>
+          <td style="padding: 8px 0; text-align: right;">
+            {% if report_at %}<code>{{ report_at }}</code>
+            {% else %}<span style="color: var(--nc-text-muted);">—</span>{% endif %}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    {% if report_ok == 0 %}
+    <small style="display: block; margin-top: 10px; color: var(--nc-text-muted); line-height: 1.5;">
+      ▸ HTTP 401/403 → el <code>CHALYB_ADMIN_TOKEN</code> de ChalyClip no coincide con el
+      <code>CHALYBCLIP_ADMIN_TOKEN</code> de Chalyb. HTTP 400/422 → Chalyb rechazó el payload
+      nuevo (campos <code>cost_usd_micros</code> / <code>provider</code> o el kind
+      <code>transcription.seconds</code>): hay que aceptarlos en el endpoint /usage.
+    </small>
+    {% endif %}
+  </div>
+</div>
+
+<div class="nc-panel" style="margin-bottom: 14px;">
+  <div class="nc-panel__header">
+    <i class="ti ti-database" aria-hidden="true"></i>
+    <span class="nc-panel__title">Saldo guardado en ChalyClip</span>
+  </div>
+  <div class="nc-panel__body">
+    <table style="width: 100%; border-collapse: collapse; font-size: 12.5px;">
+      <tbody>
+        <tr style="border-bottom: 1px solid var(--nc-line-soft);">
+          <td style="padding: 8px 0; color: var(--nc-text-muted);">Resultado de la prueba anterior</td>
+          <td style="padding: 8px 0; text-align: right;">
+            {% if live_ok %}
+              <span style="color: var(--nc-success);">✓ saldo actualizado</span>
+            {% else %}
+              <span style="color: var(--nc-danger);">✗ falló — mira el detalle de arriba</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr style="border-bottom: 1px solid var(--nc-line-soft);">
+          <td style="padding: 8px 0; color: var(--nc-text-muted);">Tokens que te quedan (guardado)</td>
+          <td style="padding: 8px 0; text-align: right;">
+            {% if cached_remaining is not none %}
+              <code>{{ '{:,}'.format(cached_remaining) }} tokens</code>
+            {% else %}
+              <span style="color: var(--nc-text-muted);">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr style="border-bottom: 1px solid var(--nc-line-soft);">
+          <td style="padding: 8px 0; color: var(--nc-text-muted);">unlimited (admin)</td>
+          <td style="padding: 8px 0; text-align: right;">
+            {% if cached_unlimited %}
+              <span style="color: var(--nc-success);">true (∞)</span>
+            {% elif cached_unlimited is not none %}
+              <span>false</span>
+            {% else %}
+              <span style="color: var(--nc-text-muted);">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; color: var(--nc-text-muted);">Última vez que se actualizó</td>
+          <td style="padding: 8px 0; text-align: right;">
+            {% if cached_at %}
+              <code style="font-size: 11.5px;">{{ cached_at }}</code>
+            {% else %}
+              <span style="color: var(--nc-text-muted);">todavía nunca</span>
+            {% endif %}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <div style="margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap;">
+      <a href="/dashboard/_balance/refresh" class="nc-btn nc-btn--sm">
+        <i class="ti ti-refresh" aria-hidden="true"></i>
+        <span>Volver a checar tu saldo</span>
+      </a>
+      <a href="/dashboard/streams" class="nc-btn nc-btn--sm nc-btn--ghost">
+        <i class="ti ti-arrow-left" aria-hidden="true"></i>
+        <span>Regresar a tu panel</span>
+      </a>
+    </div>
+  </div>
+</div>
+
+{# ── How the chain works (reference for whoever lands here) ──────────── #}
+<details class="nc-details" style="margin-top: 22px;">
+  <summary>Cómo funciona todo esto (referencia)</summary>
+  <ol style="line-height: 1.7; font-size: 13px; color: var(--nc-text-muted); margin-top: 12px; padding-left: 22px;">
+    <li>ChalyClip hace una llamada LLM (variants, hooks, etc.).</li>
+    <li><code>chalybclip/llm/router.py</code> termina la llamada y dispara <code>schedule_report()</code> fire-and-forget.</li>
+    <li>El reporter en <code>chalybclip/integrations/chalyb/reporter.py</code> hace
+        <code>POST {CHALYB_BASE_URL}/api/engines/chalybclip/usage</code> con bearer auth.</li>
+    <li>Chalyb inserta en <code>usage_events</code> de Supabase y devuelve el balance actualizado.</li>
+    <li>ChalyClip persiste ese balance en <code>tenants.cached_balance_*</code>.</li>
+    <li>El middleware <code>BearerAuthMiddleware</code> lee la cache en cada request y la pone en <code>request.state.token_balance</code>.</li>
+    <li><code>base.html</code> renderiza el chip arriba a la derecha.</li>
+  </ol>
+  <p style="font-size: 12.5px; color: var(--nc-text-muted); line-height: 1.55; margin-top: 10px;">
+    Si algo se rompe en cualquiera de estos pasos, el contador de arriba se queda en "— tokens · refresh"
+    y con un click te trae aquí.
+  </p>
+</details>
+
+{% endblock %}

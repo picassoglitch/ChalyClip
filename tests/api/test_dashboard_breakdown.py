@@ -6,18 +6,18 @@ import datetime as _dt
 
 import httpx
 
-from nexoclip.db import (
+from chalybclip.db import (
     CandidatesRepo,
     ClipsRepo,
     Database,
     StreamsRepo,
 )
-from nexoclip.db.models import (
+from chalybclip.db.models import (
     CandidateRow,
     ClipRow,
     StreamRow,
 )
-from nexoclip.tenancy import bound_tenant
+from chalybclip.tenancy import bound_tenant
 
 
 def _now() -> str:

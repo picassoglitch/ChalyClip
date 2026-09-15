@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from nexoclip.config import DetectionConfig, VoiceDetectorConfig
-from nexoclip.detect import detect_voice_triggers
-from nexoclip.errors import DetectionError
+from chalybclip.config import DetectionConfig, VoiceDetectorConfig
+from chalybclip.detect import detect_voice_triggers
+from chalybclip.errors import DetectionError
 
 from ._fixtures import es_only_config, make_stream, make_transcript
 
@@ -266,7 +266,7 @@ def test_forward_phrase_carries_forward_kind() -> None:
 # ---- per-speaker trigger attribution + cooldown (slice B.3) ----
 
 
-from nexoclip.diarize.models import (  # noqa: E402
+from chalybclip.diarize.models import (  # noqa: E402
     Diarization,
     DiarizationSegment,
 )
@@ -378,7 +378,7 @@ def test_no_diarization_applies_global_cooldown() -> None:
 # ---- per-kit custom_trigger_phrases (slice C.2) ----
 
 
-from nexoclip.db.models import CustomTriggerPhrases  # noqa: E402
+from chalybclip.db.models import CustomTriggerPhrases  # noqa: E402
 
 
 def test_kit_phrase_fires_only_for_assigned_speaker() -> None:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from nexoclip.llm import FrameCache
+from chalybclip.llm import FrameCache
 
 
 def test_get_returns_none_on_miss() -> None:

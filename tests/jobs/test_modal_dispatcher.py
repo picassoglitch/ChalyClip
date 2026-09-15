@@ -22,8 +22,8 @@ from typing import Any, cast
 import httpx
 import pytest
 
-from nexoclip.jobs import ModalJobDispatcher, PipelineKickoff
-from nexoclip.jobs.active import active_stream_ids
+from chalybclip.jobs import ModalJobDispatcher, PipelineKickoff
+from chalybclip.jobs.active import active_stream_ids
 
 _REAL_ASYNC_CLIENT = httpx.AsyncClient  # capture BEFORE any monkeypatch
 
@@ -33,7 +33,7 @@ def _clean_active_registry() -> Iterator[None]:
     """Clear the process-global registry before AND after each test —
     the dedup test registers a stream it never releases, which would
     otherwise leak into later-collected test files."""
-    from nexoclip.jobs import active
+    from chalybclip.jobs import active
 
     active._active.clear()
     yield
@@ -43,7 +43,7 @@ def _clean_active_registry() -> Iterator[None]:
 @pytest.fixture(autouse=True)
 def _no_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
     """Poll loop ticks instantly (patch is on the global asyncio module,
-    which covers the shared loop in nexoclip.integrations.modal_http)."""
+    which covers the shared loop in chalybclip.integrations.modal_http)."""
     async def _noop(_s: float) -> None:
         return None
     monkeypatch.setattr(asyncio, "sleep", _noop)
@@ -94,7 +94,7 @@ def _dispatcher(**kw: Any) -> ModalJobDispatcher:
 
 
 def _patch_client(monkeypatch: pytest.MonkeyPatch, handler: Any) -> None:
-    import nexoclip.jobs.modal as jobs_modal
+    import chalybclip.jobs.modal as jobs_modal
 
     monkeypatch.setattr(
         jobs_modal.httpx, "AsyncClient",
@@ -161,7 +161,7 @@ async def test_dispatch_dedupes_stream_already_in_flight(
     d = _dispatcher()
     _patch_client(monkeypatch, handler)
 
-    from nexoclip.jobs.active import register
+    from chalybclip.jobs.active import register
 
     register("str_TEST")  # e.g. a run already executing remotely
     await d.dispatch_pipeline(_make_kickoff())

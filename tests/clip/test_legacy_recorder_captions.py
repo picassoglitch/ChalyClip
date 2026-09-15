@@ -17,9 +17,9 @@ from pathlib import Path
 
 import pytest
 
-from nexoclip.clip import preview_recorder
-from nexoclip.clip.captions_ass import escape_ass_path_for_filter
-from nexoclip.clip.preview_recorder import _encode_image_sequence
+from chalybclip.clip import preview_recorder
+from chalybclip.clip.captions_ass import escape_ass_path_for_filter
+from chalybclip.clip.preview_recorder import _encode_image_sequence
 
 
 class _Proc:

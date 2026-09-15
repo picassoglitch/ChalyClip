@@ -12,7 +12,7 @@ from unittest.mock import MagicMock
 
 import numpy as np
 
-from nexoclip.vision.face_emotion import _face_frame_from_frame
+from chalybclip.vision.face_emotion import _face_frame_from_frame
 
 
 def _frame() -> np.ndarray:

@@ -6,17 +6,17 @@ from pathlib import Path
 
 import pytest
 
-from nexoclip.config import NexoClipConfig, load_config
-from nexoclip.errors import NexoClipError
+from chalybclip.config import ChalybClipConfig, load_config
+from chalybclip.errors import ChalybClipError
 
 
 def test_load_config_returns_defaults_when_no_file(tmp_path: Path) -> None:
     config = load_config(None)
-    assert isinstance(config, NexoClipConfig)
+    assert isinstance(config, ChalybClipConfig)
 
 
 def test_load_config_reads_yaml(tmp_path: Path) -> None:
-    yaml_path = tmp_path / "nexoclip.yaml"
+    yaml_path = tmp_path / "chalybclip.yaml"
     yaml_path.write_text(
         """
 detection:
@@ -39,12 +39,12 @@ detection:
 
 
 def test_load_config_explicit_path_missing_raises(tmp_path: Path) -> None:
-    with pytest.raises(NexoClipError, match="config file not found"):
+    with pytest.raises(ChalybClipError, match="config file not found"):
         load_config(tmp_path / "does_not_exist.yaml")
 
 
 def test_load_config_tolerates_extra_sections(tmp_path: Path) -> None:
-    yaml_path = tmp_path / "nexoclip.yaml"
+    yaml_path = tmp_path / "chalybclip.yaml"
     yaml_path.write_text(
         """
 detection:
@@ -65,5 +65,5 @@ variants:
 def test_load_config_invalid_yaml_raises(tmp_path: Path) -> None:
     bad = tmp_path / "bad.yaml"
     bad.write_text("detection: : :\n  invalid", encoding="utf-8")
-    with pytest.raises(NexoClipError, match="failed to parse"):
+    with pytest.raises(ChalybClipError, match="failed to parse"):
         load_config(bad)

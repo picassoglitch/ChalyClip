@@ -14,13 +14,13 @@ from pathlib import Path
 
 import pytest
 
-from nexoclip.branding import (
+from chalybclip.branding import (
     merged_trigger_phrases_for_speaker,
     outro_enabled_for_clip,
     resolve_brand_kit_for_candidate,
     resolve_brand_kit_for_speaker,
 )
-from nexoclip.db import (
+from chalybclip.db import (
     BrandKitsRepo,
     Database,
     SpeakersRepo,
@@ -29,9 +29,9 @@ from nexoclip.db import (
     VodSpeakersRepo,
     apply_migrations,
 )
-from nexoclip.db.models import CustomTriggerPhrases, StreamRow
-from nexoclip.errors import NexoClipError
-from nexoclip.tenancy import bound_tenant
+from chalybclip.db.models import CustomTriggerPhrases, StreamRow
+from chalybclip.errors import ChalybClipError
+from chalybclip.tenancy import bound_tenant
 
 
 def _now() -> str:
@@ -96,7 +96,7 @@ async def test_outro_free_tier_always_on(migrated_db: Database) -> None:
     with bound_tenant(tenant_id):
         await BrandKitsRepo(migrated_db).create(
             name="K", primary_color="#fff", accent_color="#000",
-            is_default=True, show_nexoclip_outro=False,
+            is_default=True, show_chalybclip_outro=False,
         )
     assert await outro_enabled_for_clip(
         migrated_db, tenant_id=tenant_id, stream_id="str_x"
@@ -109,7 +109,7 @@ async def test_outro_paid_tier_respects_toggle_off(migrated_db: Database) -> Non
     with bound_tenant(tenant_id):
         await BrandKitsRepo(migrated_db).create(
             name="K", primary_color="#fff", accent_color="#000",
-            is_default=True, show_nexoclip_outro=False,
+            is_default=True, show_chalybclip_outro=False,
         )
     assert await outro_enabled_for_clip(
         migrated_db, tenant_id=tenant_id, stream_id="str_x"
@@ -224,7 +224,7 @@ async def test_delete_removes_kit(migrated_db: Database) -> None:
 
 async def test_set_default_unknown_kit_raises(migrated_db: Database) -> None:
     tenant_id = await _seed_tenant(migrated_db)
-    with bound_tenant(tenant_id), pytest.raises(NexoClipError):
+    with bound_tenant(tenant_id), pytest.raises(ChalybClipError):
         await BrandKitsRepo(migrated_db).set_default("brk_nonexistent")
 
 

@@ -6,8 +6,8 @@ import datetime as _dt
 
 import pytest
 
-from nexoclip.db import Database, PlatformCooldownsRepo, apply_migrations
-from nexoclip.integrations.zernio.errors import (
+from chalybclip.db import Database, PlatformCooldownsRepo, apply_migrations
+from chalybclip.integrations.zernio.errors import (
     cooldowns_from_failed_post,
     failure_anchor,
     parse_cooldown,
@@ -140,7 +140,7 @@ async def test_cooled_down_platforms_self_heals_stale_rows(
     supports it — not sit parking the platform until its bogus `until`
     passes. Evidence without a parseable timestamp keeps its row (bounded
     by that row's own until); anchored evidence rewrites its row."""
-    from nexoclip.api.routers import zernio as zr
+    from chalybclip.api.routers import zernio as zr
 
     db = await _seeded_db(tmp_path)
     repo = PlatformCooldownsRepo(db)
@@ -182,7 +182,7 @@ async def test_cooled_down_platforms_keeps_rows_when_fetch_fails(
 ) -> None:
     """No evidence ≠ evidence of nothing: a Zernio outage must not wipe
     real cooldowns (fail-open would feed a throttling platform)."""
-    from nexoclip.api.routers import zernio as zr
+    from chalybclip.api.routers import zernio as zr
 
     db = await _seeded_db(tmp_path)
     repo = PlatformCooldownsRepo(db)

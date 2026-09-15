@@ -1,8 +1,8 @@
-"""Boot the NexoClip dashboard locally with auto-drains on.
+"""Boot the ChalyClip dashboard locally with auto-drains on.
 
 Convenience launcher so you can `python run.py` from the project root
-instead of typing the uvicorn factory invocation. Reads `NEXOCLIP_DB_PATH`
-+ `NEXOCLIP_HOST` + `NEXOCLIP_PORT` from the environment with sensible
+instead of typing the uvicorn factory invocation. Reads `CHALYBCLIP_DB_PATH`
++ `CHALYBCLIP_HOST` + `CHALYBCLIP_PORT` from the environment with sensible
 defaults.
 
 Usage (after activating the venv):
@@ -34,8 +34,8 @@ import uvicorn
 # SIGABRT / SIGBUS / SIGFPE / SIGILL so we get at least a partial stack.
 faulthandler.enable()
 
-from nexoclip.api import create_app
-from nexoclip.db import Database, apply_migrations
+from chalybclip.api import create_app
+from chalybclip.db import Database, apply_migrations
 
 
 def _load_dotenv() -> None:
@@ -84,56 +84,56 @@ def _looks_like_cookie_content(value: str) -> bool:
 
 
 def _materialize_cookies_file() -> None:
-    """Write inline yt-dlp cookies (NEXOCLIP_COOKIES_TXT) to a file and point
-    NEXOCLIP_COOKIES_FILE at it.
+    """Write inline yt-dlp cookies (CHALYBCLIP_COOKIES_TXT) to a file and point
+    CHALYBCLIP_COOKIES_FILE at it.
 
-    On a datacenter IP (Railway/Fly/etc.) YouTube blocks anonymous yt-dlp with
+    On a datacenter IP (Cloud Run/Railway/Fly/etc.) YouTube blocks anonymous yt-dlp with
     "Sign in to confirm you're not a bot. Use --cookies-from-browser or
     --cookies." `cookies_from_browser` is useless on a headless host (no
     browser profile), and dropping a cookies.txt *file* onto a PaaS is awkward.
     So we let the operator paste their exported Netscape cookies.txt straight
     into a secret env var:
 
-        NEXOCLIP_COOKIES_TXT       — the cookies.txt content
-        NEXOCLIP_COOKIES_TXT_B64=1 — optional: the value is base64 (avoids
+        CHALYBCLIP_COOKIES_TXT       — the cookies.txt content
+        CHALYBCLIP_COOKIES_TXT_B64=1 — optional: the value is base64 (avoids
                                      newline/quoting mangling in the env var)
 
-    At boot we materialize it to a real file and set NEXOCLIP_COOKIES_FILE,
+    At boot we materialize it to a real file and set CHALYBCLIP_COOKIES_FILE,
     which `Settings.cookies_file` reads — so every ingest path (channel poll,
     URL job, manual upload) picks it up via `ingest_vod`'s settings fallback,
     no per-call wiring needed.
 
     Forgiving by design: people routinely paste the cookies.txt *body* into
-    NEXOCLIP_COOKIES_FILE (the "file" var) by mistake — yt-dlp then tries to
+    CHALYBCLIP_COOKIES_FILE (the "file" var) by mistake — yt-dlp then tries to
     open a filename that is the entire cookie text and dies with a confusing
     FileNotFoundError (and leaks the cookies into the error log). So we accept
     the content in EITHER var and normalize it to a real file; only a genuine
-    path in NEXOCLIP_COOKIES_FILE (no newlines/tabs) is left untouched.
+    path in CHALYBCLIP_COOKIES_FILE (no newlines/tabs) is left untouched.
     """
-    raw = os.environ.get("NEXOCLIP_COOKIES_TXT")
-    existing_file = os.environ.get("NEXOCLIP_COOKIES_FILE")
+    raw = os.environ.get("CHALYBCLIP_COOKIES_TXT")
+    existing_file = os.environ.get("CHALYBCLIP_COOKIES_FILE")
 
     if raw:
         content = raw
-        b64 = os.environ.get("NEXOCLIP_COOKIES_TXT_B64", "").strip().lower()
+        b64 = os.environ.get("CHALYBCLIP_COOKIES_TXT_B64", "").strip().lower()
         if b64 in ("1", "true", "yes"):
             import base64
 
             try:
                 content = base64.b64decode(raw).decode("utf-8")
             except (ValueError, UnicodeDecodeError) as e:
-                print(f"[cookies] NEXOCLIP_COOKIES_TXT_B64 set but decode failed: {e}")
+                print(f"[cookies] CHALYBCLIP_COOKIES_TXT_B64 set but decode failed: {e}")
                 return
     elif existing_file and _looks_like_cookie_content(existing_file):
-        # The cookies.txt body was pasted into NEXOCLIP_COOKIES_FILE — treat
+        # The cookies.txt body was pasted into CHALYBCLIP_COOKIES_FILE — treat
         # it as content, not a path, and rewrite the var to a real file below.
         print(
-            "[cookies] NEXOCLIP_COOKIES_FILE looks like cookie CONTENT, not a "
+            "[cookies] CHALYBCLIP_COOKIES_FILE looks like cookie CONTENT, not a "
             "path — normalizing it to a real file."
         )
         content = existing_file
     else:
-        # NEXOCLIP_COOKIES_FILE is a genuine path (or nothing is set) — leave
+        # CHALYBCLIP_COOKIES_FILE is a genuine path (or nothing is set) — leave
         # it for Settings.cookies_file to read as-is.
         return
 
@@ -149,7 +149,7 @@ def _materialize_cookies_file() -> None:
     import contextlib
     import tempfile
 
-    cookies_path = Path(tempfile.gettempdir()) / "nexoclip-youtube-cookies.txt"
+    cookies_path = Path(tempfile.gettempdir()) / "chalybclip-youtube-cookies.txt"
     try:
         cookies_path.write_text(content, encoding="utf-8")
     except OSError as e:
@@ -158,7 +158,7 @@ def _materialize_cookies_file() -> None:
     # cookies are credentials — don't leave them world-readable.
     with contextlib.suppress(OSError):
         os.chmod(cookies_path, 0o600)
-    os.environ["NEXOCLIP_COOKIES_FILE"] = str(cookies_path.resolve())
+    os.environ["CHALYBCLIP_COOKIES_FILE"] = str(cookies_path.resolve())
     print(
         f"[cookies] yt-dlp cookies materialized to {cookies_path} "
         f"({len(content)} bytes) — YouTube ingest will authenticate with them."
@@ -199,7 +199,7 @@ def _ensure_ffmpeg_on_path() -> None:
 
 
 def _verify_or_fallback_to_cpu() -> None:
-    """If `NEXOCLIP_WHISPER_DEVICE=cuda` (the default) but cuBLAS isn't actually
+    """If `CHALYBCLIP_WHISPER_DEVICE=cuda` (the default) but cuBLAS isn't actually
     loadable, override to CPU for this process.
 
     Without this, the dashboard happily accepts uploads, runs analyze_video,
@@ -211,7 +211,7 @@ def _verify_or_fallback_to_cpu() -> None:
     """
     if os.name != "nt":
         return
-    device = os.environ.get("NEXOCLIP_WHISPER_DEVICE", "cuda").strip().lower()
+    device = os.environ.get("CHALYBCLIP_WHISPER_DEVICE", "cuda").strip().lower()
     if device != "cuda":
         return  # User already opted into cpu — nothing to verify.
     import ctypes
@@ -242,15 +242,15 @@ def _verify_or_fallback_to_cpu() -> None:
             "Toolkit from NVIDIA if you want GPU speed; for now, CPU + base "
             "+ int8 will work.\n"
         )
-    os.environ["NEXOCLIP_WHISPER_DEVICE"] = "cpu"
-    os.environ["NEXOCLIP_WHISPER_COMPUTE_TYPE"] = "int8"
+    os.environ["CHALYBCLIP_WHISPER_DEVICE"] = "cpu"
+    os.environ["CHALYBCLIP_WHISPER_COMPUTE_TYPE"] = "int8"
     # Only downgrade the model size if the user hasn't picked one explicitly.
     # `medium` on CPU is bearable but slow; `base` is the better default.
-    if not os.environ.get("NEXOCLIP_WHISPER_MODEL"):
-        os.environ["NEXOCLIP_WHISPER_MODEL"] = "base"
+    if not os.environ.get("CHALYBCLIP_WHISPER_MODEL"):
+        os.environ["CHALYBCLIP_WHISPER_MODEL"] = "base"
     # Bust the settings cache so the override takes effect.
     try:
-        from nexoclip.settings import get_settings
+        from chalybclip.settings import get_settings
 
         get_settings.cache_clear()
     except Exception:
@@ -337,7 +337,7 @@ def _ensure_cuda_libs_on_path() -> None:
         # didn't, or installed into a different interpreter.
         print(
             f"No nvidia/* CUDA pip packages found under {site_packages}. "
-            f"If you intended GPU transcription, set NEXOCLIP_WHISPER_DEVICE=cpu "
+            f"If you intended GPU transcription, set CHALYBCLIP_WHISPER_DEVICE=cpu "
             f"in .env (CPU works without CUDA libs) or install the full "
             f"CUDA Toolkit from NVIDIA's website."
         )
@@ -367,7 +367,7 @@ def _print_whisper_config() -> None:
     settings file isn't where pydantic-settings is looking.
     """
     try:
-        from nexoclip.settings import get_settings
+        from chalybclip.settings import get_settings
 
         s = get_settings()
         print(
@@ -386,7 +386,7 @@ def _resolve_python_check() -> None:
     """
     if sys.version_info >= (3, 13):
         print(
-            f"ERROR: NexoClip requires Python 3.11 or 3.12, got {sys.version_info.major}."
+            f"ERROR: ChalyClip requires Python 3.11 or 3.12, got {sys.version_info.major}."
             f"{sys.version_info.minor}.\n"
             f"Activate the venv first:\n"
             f"  PowerShell:  .venv\\Scripts\\Activate.ps1\n"
@@ -531,8 +531,8 @@ def _free_stale_port(host: str, port: int) -> None:
 def _check_db_persistence(db_path: Path) -> None:
     """Loud warning when the DB file lives on container-ephemeral storage.
 
-    Slice O.42 — Railway / Fly.io / Heroku container filesystems are wiped
-    on every redeploy. NEXOCLIP_DB_PATH defaults to /data/nexoclip.db in
+    Slice O.42 — Cloud Run / Railway / Fly.io container filesystems are wiped
+    on every redeploy. CHALYBCLIP_DB_PATH defaults to /data/chalybclip.db in
     the Dockerfile, which is meaningless unless a persistent Volume is
     actually mounted at /data on the dashboard side. Operators forget
     that step and then lose all their tenants on the next deploy.
@@ -555,12 +555,12 @@ def _check_db_persistence(db_path: Path) -> None:
                 "\n"
                 + "=" * 70
                 + "\n"
-                + "  WARNING: NEXOCLIP_DB_PATH points at " + str(db_path) + "\n"
+                + "  WARNING: CHALYBCLIP_DB_PATH points at " + str(db_path) + "\n"
                 + "  but " + str(db_dir) + " is NOT a persistent mount.\n"
                 + "  \n"
                 + "  Every redeploy will wipe this DB. Attach a persistent\n"
-                + "  Volume on Railway (Settings -> Volumes -> mount /data)\n"
-                + "  before going live, or set NEXOCLIP_DB_PATH to a path\n"
+                + "  Volume (Cloud Run volume / Railway volume -> mount /data)\n"
+                + "  before going live, or set CHALYBCLIP_DB_PATH to a path\n"
                 + "  on a volume you control.\n"
                 + "=" * 70
                 + "\n"
@@ -572,14 +572,14 @@ def _check_db_persistence(db_path: Path) -> None:
 
 async def _boot() -> None:
     _silence_connection_reset(asyncio.get_running_loop())
-    # Postgres takes precedence when DATABASE_URL is set (Railway-injected);
+    # Postgres takes precedence when DATABASE_URL is set (injected by Cloud Run from Secret Manager);
     # otherwise fall back to the local SQLite file. The SQLite-only
     # ephemeral-storage warning is meaningless for a managed Postgres, so
     # skip it on the DSN path.
     database_url = os.environ.get("DATABASE_URL")
-    db_path = Path(os.environ.get("NEXOCLIP_DB_PATH", "./nexoclip.db"))
-    host = os.environ.get("NEXOCLIP_HOST", "127.0.0.1")
-    port = int(os.environ.get("NEXOCLIP_PORT", "8000"))
+    db_path = Path(os.environ.get("CHALYBCLIP_DB_PATH", "./chalybclip.db"))
+    host = os.environ.get("CHALYBCLIP_HOST", "127.0.0.1")
+    port = int(os.environ.get("CHALYBCLIP_PORT", "8000"))
 
     _free_stale_port(host, port)
     if database_url:
@@ -590,7 +590,7 @@ async def _boot() -> None:
     await apply_migrations(db)
     app = create_app(db=db, enable_background_drains=True)
 
-    print(f"\nNexoClip dashboard: http://{host}:{port}/dashboard/login\n")
+    print(f"\nChalyClip dashboard: http://{host}:{port}/dashboard/login\n")
     config = uvicorn.Config(app, host=host, port=port, log_level="info")
     await uvicorn.Server(config).serve()
 
@@ -609,7 +609,7 @@ def main() -> None:
     except KeyboardInterrupt:
         # Ctrl+C is the documented way to stop the dev server; exit
         # cleanly so the user doesn't see a scary-looking traceback.
-        print("\nNexoClip dashboard stopped.")
+        print("\nChalyClip dashboard stopped.")
         sys.exit(0)
 
 

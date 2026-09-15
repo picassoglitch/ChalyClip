@@ -5,9 +5,9 @@ from __future__ import annotations
 
 import pytest
 
-from nexoclip.clip import encoders
-from nexoclip.clip.encoders import ffmpeg_thread_args, pick_video_encoder_args
-from nexoclip.config import ClipConfig
+from chalybclip.clip import encoders
+from chalybclip.clip.encoders import ffmpeg_thread_args, pick_video_encoder_args
+from chalybclip.config import ClipConfig
 
 
 def test_thread_args_default_is_two() -> None:

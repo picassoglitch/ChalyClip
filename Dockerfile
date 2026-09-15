@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 #
-# NexoClip production image — slim Debian + Python 3.11 + ffmpeg.
+# ChalyClip production image — slim Debian + Python 3.11 + ffmpeg.
 # CPU-only by design. Transcription + diarization run on AssemblyAI
 # (Migration Tasks A1-A3) so there's no torch / faster-whisper /
 # pyannote / CUDA in this image. The `diarize` and `local-whisper`
@@ -34,7 +34,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # (confirmed in prod: `[debug] JS runtimes: none` → `LOGIN_REQUIRED`). deno
 # is the runtime yt-dlp enables by DEFAULT, so just having it on PATH fixes
 # the extraction with no application-code change. Pinned via the `latest`
-# release asset for linux x86_64 (Railway's arch).
+# release asset for linux x86_64 (Cloud Run's arch).
 RUN curl -fsSL \
         https://github.com/denoland/deno/releases/latest/download/deno-x86_64-unknown-linux-gnu.zip \
         -o /tmp/deno.zip \
@@ -46,12 +46,12 @@ RUN curl -fsSL \
 WORKDIR /app
 
 # Install Python deps. We COPY the package source rather than just
-# pyproject.toml because `pip install .` needs the `nexoclip/` package to
+# pyproject.toml because `pip install .` needs the `chalybclip/` package to
 # exist to compute metadata. Trade-off: changing any .py invalidates this
 # layer. Acceptable for v1 deploys; optimize the cache split later if
 # image-build time becomes a problem.
 COPY pyproject.toml README.md ./
-COPY nexoclip ./nexoclip
+COPY chalybclip ./chalybclip
 COPY run.py ./run.py
 # Slice O.28 — ship the config/ dir so the LLM router actually finds
 # its routing rules. Without this, load_llm_config() in the running
@@ -79,7 +79,7 @@ RUN pip install --no-cache-dir playwright>=1.50 && \
     playwright install --with-deps chromium
 
 # Ship the ops scripts (e.g. the SQLite→Postgres data cutover) so they can be
-# run from a Railway shell. Placed after the dependency layers so editing a
+# run from a Cloud Run job or a local shell. Placed after the dependency layers so editing a
 # script doesn't invalidate the pip/playwright cache.
 COPY scripts ./scripts
 
@@ -90,40 +90,51 @@ COPY scripts ./scripts
 # Without a persistent volume mounted at /data, every redeploy loses
 # everything.
 #
-# Railway-specific note: we DON'T declare `VOLUME ["/data"]` here because
-# Railway rejects anonymous Docker volumes — they have their own volume
-# system that's configured per-service on the dashboard (Settings →
-# Volumes → New Volume → mount path `/data`). Fly.io takes the same
-# approach. If you ever switch to a platform that respects the `VOLUME`
-# declaration (raw Docker, ECS, K8s), add it back.
+# Cloud Run note: we DON'T declare `VOLUME ["/data"]` here. Cloud Run's
+# filesystem is an in-memory tmpfs that counts against the service's memory
+# and is wiped on every new instance, so production keeps durable state in
+# Postgres (DATABASE_URL) + the object-storage bucket and points
+# CHALYBCLIP_DEFAULT_OUTPUT_DIR at scratch space (/tmp/out). Mount a
+# Cloud Run volume (GCS FUSE) at /data only if you need the SQLite path.
+# If you ever switch to a platform that respects the `VOLUME` declaration
+# (raw Docker, ECS, K8s), add it back.
 
-# Sensible production defaults. Override any via Railway env-var dashboard.
-#   NEXOCLIP_HOST=0.0.0.0                — bind to all interfaces (container)
-#   NEXOCLIP_TRANSCRIBE_PROVIDER=assemblyai  — Migration Task A3 default;
+# Sensible production defaults. Override any via the Cloud Run service env
+# (Terraform-managed in the hub repo).
+#   CHALYBCLIP_HOST=0.0.0.0                — bind to all interfaces (container)
+#   CHALYBCLIP_TRANSCRIBE_PROVIDER=assemblyai  — Migration Task A3 default;
 #                                           pipeline.transcribe runs against
 #                                           AssemblyAI's batch API. The
 #                                           operator must set
-#                                           NEXOCLIP_ASSEMBLYAI_API_KEY on
-#                                           the Railway dashboard before the
+#                                           CHALYBCLIP_ASSEMBLYAI_API_KEY on
+#                                           the Cloud Run service before the
 #                                           first job runs.
-#   NEXOCLIP_DIARIZATION_SOURCE          — leaves default ("pyannote" in
+#   CHALYBCLIP_DIARIZATION_SOURCE          — leaves default ("pyannote" in
 #                                           config) but pipeline auto-falls
 #                                           through to skipped on the slim
 #                                           image. Set to "transcribe" to use
 #                                           AssemblyAI utterance speakers
 #                                           directly.
 #   PYTHONUNBUFFERED=1                   — see logs in real-time
-ENV NEXOCLIP_DB_PATH=/data/nexoclip.db \
-    NEXOCLIP_DEFAULT_OUTPUT_DIR=/data/out \
-    NEXOCLIP_HOST=0.0.0.0 \
-    NEXOCLIP_TRANSCRIBE_PROVIDER=assemblyai \
+ENV CHALYBCLIP_DB_PATH=/data/chalybclip.db \
+    CHALYBCLIP_DEFAULT_OUTPUT_DIR=/data/out \
+    CHALYBCLIP_HOST=0.0.0.0 \
+    CHALYBCLIP_TRANSCRIBE_PROVIDER=assemblyai \
     PYTHONUNBUFFERED=1
 
-# Documentation only — Railway dynamically assigns $PORT and our CMD
-# wires it through to NEXOCLIP_PORT which run.py reads.
+# Documentation only — Cloud Run dynamically assigns $PORT and our CMD
+# wires it through to CHALYBCLIP_PORT which run.py reads.
 EXPOSE 8000
 
-# Railway sets $PORT; run.py reads NEXOCLIP_PORT. Translate at boot.
+# Cloud Run sets $PORT; run.py reads CHALYBCLIP_PORT. Translate at boot.
 # Use ${PORT:-8000} so the same image works locally (just `docker run -p
 # 8000:8000`) without setting PORT explicitly.
-CMD ["sh", "-c", "NEXOCLIP_PORT=${PORT:-8000} python run.py"]
+#
+# One image, two roles (hub Terraform sets CHALYBCLIP_ROLE on each service):
+#   api     (default) the dashboard + REST API via run.py.
+#   worker  the pipeline worker — `chalybclip worker` serves the kickoff/poll
+#           HTTP contract the API's ModalJobDispatcher speaks. It must bind
+#           $PORT too: Cloud Run health-checks it. Needs DATABASE_URL,
+#           CHALYBCLIP_MODAL_TOKEN (or CHALYBCLIP_WORKER_TOKEN) and
+#           CHALYBCLIP_OBJECT_STORAGE_BUCKET in its env.
+CMD ["sh", "-c", "case \"${CHALYBCLIP_ROLE:-api}\" in worker) exec chalybclip worker --host 0.0.0.0 --port \"${PORT:-8000}\" ;; api) CHALYBCLIP_PORT=${PORT:-8000} exec python run.py ;; *) echo \"unknown CHALYBCLIP_ROLE='${CHALYBCLIP_ROLE}' (expected 'api' or 'worker')\" >&2; exit 64 ;; esac"]

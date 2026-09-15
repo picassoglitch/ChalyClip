@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from nexoclip.pipeline import _series_hook, _series_parts
+from chalybclip.pipeline import _series_hook, _series_parts
 
 
 def _clip(clip_id: str, start: float, end: float, reason: str) -> SimpleNamespace:

@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
-from nexoclip.clip.waveform import (
+from chalybclip.clip.waveform import (
     DEFAULT_N_BUCKETS,
     _bucket_peaks,
     cache_path_for_clip,
@@ -85,7 +85,7 @@ def test_compute_waveform_raises_on_ffmpeg_failure(tmp_path: Path) -> None:
         )
 
     with (
-        patch("nexoclip.clip.waveform.subprocess.run", fake_run),
+        patch("chalybclip.clip.waveform.subprocess.run", fake_run),
         pytest.raises(RuntimeError, match="ffmpeg failed"),
     ):
         compute_waveform(fake)
@@ -102,7 +102,7 @@ def test_compute_waveform_raises_on_empty_audio(tmp_path: Path) -> None:
         )
 
     with (
-        patch("nexoclip.clip.waveform.subprocess.run", fake_run),
+        patch("chalybclip.clip.waveform.subprocess.run", fake_run),
         pytest.raises(RuntimeError, match="empty audio track"),
     ):
         compute_waveform(fake)
@@ -119,7 +119,7 @@ def test_compute_waveform_returns_n_buckets_floats(tmp_path: Path) -> None:
             args=cmd, returncode=0, stdout=pcm, stderr=b""
         )
 
-    with patch("nexoclip.clip.waveform.subprocess.run", fake_run):
+    with patch("chalybclip.clip.waveform.subprocess.run", fake_run):
         peaks = compute_waveform(fake, n_buckets=10)
     assert len(peaks) == 10
     assert all(0.0 <= p <= 1.0 for p in peaks)
@@ -140,7 +140,7 @@ def test_load_or_compute_uses_cache_when_present(tmp_path: Path) -> None:
     def boom(*a, **k):
         raise AssertionError("ffmpeg should not have been called")
 
-    with patch("nexoclip.clip.waveform.subprocess.run", boom):
+    with patch("chalybclip.clip.waveform.subprocess.run", boom):
         peaks = load_or_compute(clip)
     assert peaks == [0.1, 0.2, 0.3]
 
@@ -159,7 +159,7 @@ def test_load_or_compute_recomputes_when_cache_corrupt(tmp_path: Path) -> None:
             args=cmd, returncode=0, stdout=pcm, stderr=b""
         )
 
-    with patch("nexoclip.clip.waveform.subprocess.run", fake_run):
+    with patch("chalybclip.clip.waveform.subprocess.run", fake_run):
         peaks = load_or_compute(clip, n_buckets=5)
     assert len(peaks) == 5
     # And the cache got rewritten in valid form.

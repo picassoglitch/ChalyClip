@@ -8,15 +8,15 @@ from pathlib import Path
 import httpx
 import pytest
 
-from nexoclip.api import create_app
-from nexoclip.db import (
+from chalybclip.api import create_app
+from chalybclip.db import (
     CandidatesRepo,
     ClipsRepo,
     Database,
     StreamsRepo,
 )
-from nexoclip.db.models import CandidateRow, ClipRow, StreamRow
-from nexoclip.tenancy import bound_tenant
+from chalybclip.db.models import CandidateRow, ClipRow, StreamRow
+from chalybclip.tenancy import bound_tenant
 
 from .conftest import auth
 
@@ -190,8 +190,8 @@ async def test_post_streams_kicks_off_pipeline(
     tmp_path: Path,
 ) -> None:
     """`POST /streams` calls ingest, persists, schedules pipeline, returns 202."""
-    from nexoclip.api import PipelineKickoff
-    from nexoclip.ingest.models import Stream
+    from chalybclip.api import PipelineKickoff
+    from chalybclip.ingest.models import Stream
 
     fake_video = tmp_path / "vid.mp4"
     fake_video.write_bytes(b"\x00fakevideo")
@@ -216,7 +216,7 @@ async def test_post_streams_kicks_off_pipeline(
     async def fake_runner(kickoff: PipelineKickoff) -> None:
         captured.append(kickoff)
 
-    monkeypatch.setattr("nexoclip.ingest.ingest_vod", fake_ingest)
+    monkeypatch.setattr("chalybclip.ingest.ingest_vod", fake_ingest)
 
     app = create_app(db=db, pipeline_runner=fake_runner)
     transport = httpx.ASGITransport(app=app)

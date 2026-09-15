@@ -11,12 +11,12 @@ from pathlib import Path
 
 import pytest
 
-import nexoclip.integrations.storage as storage_mod
-from nexoclip.db import CandidatesRepo, ClipsRepo, Database, StreamsRepo, TenantsRepo
-from nexoclip.db.models import CandidateRow, ClipRow, StreamRow
-from nexoclip.integrations.storage import clip_key_family
-from nexoclip.retention import sweep_retention
-from nexoclip.tenancy import bound_tenant
+import chalybclip.integrations.storage as storage_mod
+from chalybclip.db import CandidatesRepo, ClipsRepo, Database, StreamsRepo, TenantsRepo
+from chalybclip.db.models import CandidateRow, ClipRow, StreamRow
+from chalybclip.integrations.storage import clip_key_family
+from chalybclip.retention import sweep_retention
+from chalybclip.tenancy import bound_tenant
 
 from .conftest import days_ago_iso
 

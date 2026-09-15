@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% block title %}Log tracker — ChalyClip{% endblock %}
+{% block content %}
+
+{# Admin log tracker. Same surface tier as /_health/queue and
+   /_health/diarize. No translations on purpose: operator-only.
+   Data source is the in-process ring buffer (chalybclip/logbuffer.py) —
+   WARNING+ from structlog AND stdlib (uvicorn, libraries). A restart
+   clears it; Railway keeps the durable stderr copy. #}
+
+<div class="nc-page-header">
+  <div>
+    <h2>Log tracker</h2>
+    <small>WARNING+ records from this process, newest first. Buffer holds the last 1000; collecting since <span class="nc-mono" data-localtime="{{ buffer_started_at }}">{{ buffer_started_at[:19] }}</span>. For full history use the Railway logs.</small>
+  </div>
+  <div class="nc-page-summary">
+    {% if bucket == 'ok' %}
+      <span class="nc-chip nc-chip--success">
+        <span class="nc-status-dot nc-status-dot--success"></span>
+        <span>quiet</span>
+      </span>
+    {% elif bucket == 'warn' %}
+      <span class="nc-chip nc-chip--warn">
+        <span class="nc-status-dot nc-status-dot--warn"></span>
+        <span>warnings</span>
+      </span>
+    {% else %}
+      <span class="nc-chip nc-chip--danger">
+        <span class="nc-status-dot nc-status-dot--danger"></span>
+        <span>errors in the last hour</span>
+      </span>
+    {% endif %}
+  </div>
+</div>
+
+<div class="nc-panel">
+  <div class="nc-panel__header">
+    <i class="ti ti-activity-heartbeat" aria-hidden="true"></i>
+    <span class="nc-panel__title">At a glance</span>
+  </div>
+  <div class="nc-panel__body">
+    <table class="nc-table">
+      <tbody>
+        <tr>
+          <td>Errors — last hour</td>
+          <td><span class="nc-mono"{% if counts.errors_1h %} style="color: var(--nc-danger);"{% endif %}>{{ counts.errors_1h }}</span></td>
+        </tr>
+        <tr>
+          <td>Errors — last 24 h</td>
+          <td><span class="nc-mono"{% if counts.errors_24h %} style="color: var(--nc-danger);"{% endif %}>{{ counts.errors_24h }}</span></td>
+        </tr>
+        <tr>
+          <td>Warnings — last hour</td>
+          <td><span class="nc-mono">{{ counts.warnings_1h }}</span></td>
+        </tr>
+        <tr>
+          <td>Warnings — last 24 h</td>
+          <td><span class="nc-mono">{{ counts.warnings_24h }}</span></td>
+        </tr>
+        <tr>
+          <td>Buffered total</td>
+          <td><span class="nc-mono">{{ counts.total }}</span> / 1000</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="nc-panel" style="margin-top: 14px;">
+  <div class="nc-panel__header">
+    <i class="ti ti-filter" aria-hidden="true"></i>
+    <span class="nc-panel__title">Filter</span>
+  </div>
+  <div class="nc-panel__body">
+    <form method="get" action="/dashboard/_health/logs" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+      <select name="level" class="nc-input" style="width: auto;">
+        <option value="all" {% if level == 'all' %}selected{% endif %}>All levels</option>
+        <option value="error" {% if level == 'error' %}selected{% endif %}>Errors only</option>
+        <option value="warning" {% if level == 'warning' %}selected{% endif %}>Warnings only</option>
+      </select>
+      <input type="text" name="q" class="nc-input" style="width: 280px;"
+             placeholder="Search event, logger, fields…" value="{{ q }}">
+      <button type="submit" class="nc-btn nc-btn--secondary">Apply</button>
+      {% if level != 'all' or q %}
+      <a href="/dashboard/_health/logs" class="nc-btn nc-btn--ghost">Clear</a>
+      {% endif %}
+      <label style="display: inline-flex; gap: 6px; align-items: center; margin-left: auto; color: var(--nc-text-muted); font-size: 12px;">
+        <input type="checkbox" id="nc-logs-autorefresh" checked>
+        auto-refresh 30s
+      </label>
+    </form>
+  </div>
+</div>
+
+<div class="nc-panel" style="margin-top: 14px;">
+  <div class="nc-panel__header">
+    <i class="ti ti-alert-triangle" aria-hidden="true"></i>
+    <span class="nc-panel__title">Records ({{ shown }}{% if matched > shown %} of {{ matched }} matched{% endif %})</span>
+  </div>
+  <div class="nc-panel__body" style="padding: 0;">
+    {% if entries %}
+    <table class="nc-table">
+      <thead>
+        <tr>
+          <th style="width: 150px;">When</th>
+          <th style="width: 80px;">Level</th>
+          <th>Event</th>
+          <th style="width: 180px;">Logger</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in entries %}
+        <tr>
+          <td><span class="nc-mono nc-mono--muted" data-localtime="{{ e.ts }}">{{ e.ts[:19] }}</span></td>
+          <td>
+            {% if e.level in ('error', 'critical') %}
+            <span class="nc-chip nc-chip--danger">{{ e.level }}</span>
+            {% else %}
+            <span class="nc-chip nc-chip--warn">{{ e.level }}</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="nc-mono" style="font-size: 12px;">{{ e.event }}</span>
+            {% if e.fields %}
+            <details style="margin-top: 4px;">
+              <summary style="cursor: pointer; color: var(--nc-text-muted); font-size: 11px;">{{ e.fields|length }} field{{ 's' if e.fields|length != 1 else '' }}</summary>
+              <table class="nc-table" style="margin-top: 4px;">
+                <tbody>
+                  {% for k, v in e.fields.items() %}
+                  <tr>
+                    <td style="width: 160px;"><span class="nc-mono nc-mono--muted" style="font-size: 11px;">{{ k }}</span></td>
+                    <td><span class="nc-mono" style="font-size: 11px; word-break: break-all;">{{ v }}</span></td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </details>
+            {% endif %}
+          </td>
+          <td><span class="nc-mono nc-mono--muted" style="font-size: 11px;">{{ e.logger }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div style="padding: 24px; text-align: center; color: var(--nc-text-muted);">
+      {% if q or level != 'all' %}
+      No records match the current filter.
+      {% else %}
+      Nothing captured yet — no warnings or errors since the process started.
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+  // Auto-refresh keeps the tracker live while the operator watches a
+  // publish sweep or render. Preserves the active filter (GET params
+  // are in the URL). The checkbox opts out for reading a long entry.
+  (function () {
+    var box = document.getElementById("nc-logs-autorefresh");
+    setTimeout(function () {
+      if (box && box.checked) window.location.reload();
+    }, 30000);
+  })();
+</script>
+
+{% endblock %}

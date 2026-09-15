@@ -8,7 +8,7 @@ that predate the guard: cancel on Zernio + hard-delete the local record.
     python scripts/cancel_orphan_scheduled.py --tenant ten_... [--live]
 
 Dry run by default. Requires worker.env loaded (DATABASE_URL +
-NEXOCLIP_ZERNIO_API_KEY) — see scripts/run_reprocess_degenerate.ps1 for
+CHALYBCLIP_ZERNIO_API_KEY) — see scripts/run_reprocess_degenerate.ps1 for
 the loading pattern.
 """
 
@@ -20,9 +20,9 @@ import datetime as dt
 import os
 import sys
 
-from nexoclip.db import ClipsRepo, Database, ZernioPublishesRepo
-from nexoclip.integrations.zernio.client import ZernioClient, ZernioError
-from nexoclip.tenancy import bound_tenant
+from chalybclip.db import ClipsRepo, Database, ZernioPublishesRepo
+from chalybclip.integrations.zernio.client import ZernioClient, ZernioError
+from chalybclip.tenancy import bound_tenant
 
 
 async def main() -> None:
@@ -34,8 +34,8 @@ async def main() -> None:
     db = Database(os.environ["DATABASE_URL"])
     await db.connect()
     client = ZernioClient(
-        api_key=os.environ["NEXOCLIP_ZERNIO_API_KEY"],
-        base_url=os.environ.get("NEXOCLIP_ZERNIO_BASE_URL")
+        api_key=os.environ["CHALYBCLIP_ZERNIO_API_KEY"],
+        base_url=os.environ.get("CHALYBCLIP_ZERNIO_BASE_URL")
         or "https://zernio.com/api/v1",
     )
     now_iso = dt.datetime.now(dt.UTC).isoformat()

@@ -1,4 +1,4 @@
-"""Tests for `nexoclip/llm/config.py` (LLM YAML loader)."""
+"""Tests for `chalybclip/llm/config.py` (LLM YAML loader)."""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from nexoclip.errors import NexoClipError
-from nexoclip.llm import LLMConfig, load_llm_config
+from chalybclip.errors import ChalybClipError
+from chalybclip.llm import LLMConfig, load_llm_config
 
 
 def test_load_llm_config_returns_defaults_when_no_file(
@@ -87,12 +87,12 @@ def test_pricing_for_unknown_returns_zero() -> None:
 
 
 def test_load_llm_config_missing_explicit_path_raises(tmp_path: Path) -> None:
-    with pytest.raises(NexoClipError, match="llm config not found"):
+    with pytest.raises(ChalybClipError, match="llm config not found"):
         load_llm_config(tmp_path / "missing.yaml")
 
 
 def test_load_llm_config_invalid_yaml_raises(tmp_path: Path) -> None:
     bad = tmp_path / "bad.yaml"
     bad.write_text("providers: : :\n  bad", encoding="utf-8")
-    with pytest.raises(NexoClipError, match="failed to parse"):
+    with pytest.raises(ChalybClipError, match="failed to parse"):
         load_llm_config(bad)

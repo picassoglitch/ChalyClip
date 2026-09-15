@@ -10,8 +10,8 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 
-from nexoclip.clip import clip_breakdown
-from nexoclip.db import (
+from chalybclip.clip import clip_breakdown
+from chalybclip.db import (
     CandidatesRepo,
     ClipsRepo,
     Database,
@@ -21,15 +21,15 @@ from nexoclip.db import (
     VisualSignalsRepo,
     apply_migrations,
 )
-from nexoclip.db.models import (
+from chalybclip.db.models import (
     CandidateRow,
     ClipRow,
     StreamRow,
     TranscriptRow,
 )
-from nexoclip.errors import ClipError
-from nexoclip.tenancy import bound_tenant
-from nexoclip.vision import VisualSignal, VisualSignalTrack
+from chalybclip.errors import ClipError
+from chalybclip.tenancy import bound_tenant
+from chalybclip.vision import VisualSignal, VisualSignalTrack
 
 
 def _now() -> str:

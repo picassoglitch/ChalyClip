@@ -1,0 +1,2089 @@
+/* ChalyClip dashboard theme — cyberpunk navy + electric blue.
+ *
+ * Single source of truth for every page. Defines:
+ *   1. Design tokens on :root
+ *   2. Global resets (kill the white-bleed bugs)
+ *   3. Component classes (.nc-*) every page reuses
+ *
+ * No page-level color or layout values. If a page needs a one-off
+ * tweak, add a class here first.
+ */
+
+/* ---------- 1. Design tokens ---------- */
+
+:root {
+    /* Slice K.1 — palette realigned with chalyb.com.
+     * Deep black backgrounds + electric-lime primary accent +
+     * starfield body. Cyan/magenta cyberpunk tokens from J.1/J.3
+     * stay as-is in the file so any clip-editor-specific CSS that
+     * still references them keeps working; the cross-site default
+     * accent flips to lime here so streams / inbox / personas /
+     * brand-kits / LLM-calls feel like the same product as
+     * chalyb.com. */
+
+    /* Backgrounds — deeper than before to match the landing page */
+    --nc-bg-base:      #06080d;
+    --nc-bg-surface:   #0a0d14;
+    --nc-bg-panel:     #0e131c;
+    --nc-bg-raised:    #141b27;
+
+    /* Primary accent — electric lime ("CHALYB" CTA color) */
+    --nc-lime:         #c8ff5c;
+    --nc-lime-bright:  #d8ff7a;
+    --nc-lime-dim:     rgba(200, 255, 92, 0.30);
+    --nc-lime-faint:   rgba(200, 255, 92, 0.10);
+    /* Back-compat aliases — every component that referenced the old
+     * `--nc-blue*` tokens now picks up the lime palette automatically.
+     * Pages that explicitly want blue can still set a local override. */
+    --nc-blue:         var(--nc-lime);
+    --nc-blue-bright:  var(--nc-lime-bright);
+    --nc-blue-dim:     var(--nc-lime-dim);
+    --nc-blue-faint:   var(--nc-lime-faint);
+
+    /* Text */
+    --nc-text:         #e8edf4;
+    --nc-text-body:    #c4cdda;
+    --nc-text-muted:   #6b7689;
+
+    /* Semantic */
+    --nc-success:      #5dcaa5;
+    --nc-success-bg:   rgba(93, 202, 165, 0.10);
+    --nc-warn:         #ef9f27;
+    --nc-warn-bg:      rgba(186, 117, 23, 0.08);
+    --nc-warn-dim:     rgba(186, 117, 23, 0.35);
+    --nc-danger:       #e24b4a;
+    --nc-danger-bg:    rgba(226, 75, 74, 0.08);
+    --nc-danger-dim:   rgba(226, 75, 74, 0.35);
+
+    /* AI accent — purple/cyan glow reserved for AI-driven surfaces
+     * (score chips, generated suggestions, the variations panel).
+     * Keeps electric blue as the SINGLE primary accent for ordinary
+     * UI affordances, so AI surfaces visually announce themselves
+     * without competing with primary buttons. */
+    --nc-ai:           #b58fff;
+    --nc-ai-bright:    #d6b4ff;
+    --nc-ai-bg:        rgba(181, 143, 255, 0.10);
+    --nc-ai-dim:       rgba(181, 143, 255, 0.30);
+
+    /* Slice J.3 — Cyberpunk accent tokens (chalyb visual alignment).
+     * Cyan + magenta layered glows applied to:
+     *   - panel headers
+     *   - primary buttons
+     *   - page header section
+     *   - active/selected cards
+     *   - tables (header glow)
+     * Tokens kept here so the whole site picks them up without
+     * touching individual page templates. */
+    --nc-cyan:         #00d9ff;
+    --nc-cyan-soft:    rgba(0, 217, 255, 0.18);
+    --nc-cyan-dim:     rgba(0, 217, 255, 0.35);
+    --nc-magenta:      #ff3cc8;
+    --nc-magenta-soft: rgba(255, 60, 200, 0.15);
+    --nc-magenta-dim:  rgba(255, 60, 200, 0.30);
+    --nc-cyber-edge:   1px solid var(--nc-cyan-dim);
+    --nc-cyber-glow:   0 0 24px -8px rgba(0, 217, 255, 0.45);
+    --nc-cyber-grad:   linear-gradient(135deg,
+                         rgba(0, 217, 255, 0.10),
+                         rgba(255, 60, 200, 0.06));
+
+    /* Borders / radius */
+    --nc-hairline:     0.5px solid var(--nc-blue-dim);
+    --nc-radius:       8px;
+    --nc-radius-lg:    12px;
+
+    /* Fonts */
+    --nc-font:         system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --nc-font-mono:    "JetBrains Mono", "SF Mono", Consolas, "Liberation Mono", monospace;
+
+    /* Sizing scale */
+    --nc-pad-page:     20px;
+    --nc-gap:          16px;
+}
+
+
+/* ---------- 2. Global resets ---------- */
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    background: var(--nc-bg-base);
+    color: var(--nc-text-body);
+    font-family: var(--nc-font);
+    font-size: 14px;
+    line-height: 1.5;
+    margin: 0;
+    padding: 0;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Slice K.1 — starfield + radial-gradient body backdrop matching
+ * chalyb.com. Pure CSS, no images. Layers:
+ *   1. Radial vignette pulling slight lime toward the top
+ *   2. Two layers of pin-prick "stars" via repeating radial-gradients
+ *      at different scales for parallax-ish depth
+ * Fixed attachment so the backdrop stays still while content scrolls. */
+body {
+    background-color: var(--nc-bg-base);
+    background-image:
+      radial-gradient(ellipse at top, rgba(200, 255, 92, 0.04), transparent 60%),
+      radial-gradient(circle at 12% 28%, rgba(255, 255, 255, 0.55) 0.6px, transparent 1.4px),
+      radial-gradient(circle at 68% 14%, rgba(255, 255, 255, 0.40) 0.8px, transparent 1.6px),
+      radial-gradient(circle at 38% 78%, rgba(255, 255, 255, 0.35) 0.6px, transparent 1.4px),
+      radial-gradient(circle at 86% 64%, rgba(255, 255, 255, 0.45) 0.7px, transparent 1.5px),
+      radial-gradient(circle at 22% 88%, rgba(200, 255, 92, 0.30) 0.8px, transparent 1.6px);
+    background-size:
+      100% 100%,
+      120px 110px,
+      180px 200px,
+      240px 180px,
+      160px 220px,
+      300px 260px;
+    background-attachment: fixed;
+    background-repeat: repeat;
+}
+
+/* Dark scrollbars — kills the bright OS scrollbar bleed. */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--nc-blue-dim) var(--nc-bg-surface);
+}
+*::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+*::-webkit-scrollbar-track {
+    background: var(--nc-bg-surface);
+}
+*::-webkit-scrollbar-thumb {
+    background: var(--nc-blue-dim);
+    border-radius: 4px;
+}
+*::-webkit-scrollbar-thumb:hover {
+    background: var(--nc-blue);
+}
+
+h1, h2, h3, h4, h5, h6 {
+    color: var(--nc-text);
+    font-weight: 500;
+    line-height: 1.25;
+    margin: 0 0 0.5em 0;
+}
+
+h1 { font-size: 22px; }
+h2 { font-size: 18px; }
+h3 { font-size: 16px; }
+h4, h5, h6 { font-size: 14px; }
+
+p { margin: 0 0 0.75em 0; }
+
+a {
+    color: var(--nc-blue-bright);
+    text-decoration: none;
+}
+a:hover {
+    color: var(--nc-blue);
+    text-decoration: underline;
+}
+
+code {
+    font-family: var(--nc-font-mono);
+    font-size: 0.92em;
+    color: var(--nc-blue-bright);
+    background: var(--nc-blue-faint);
+    padding: 1px 5px;
+    border-radius: 3px;
+}
+
+small { font-size: 12px; color: var(--nc-text-muted); }
+strong { color: var(--nc-text); font-weight: 500; }
+em { color: var(--nc-text-body); font-style: normal; }
+
+hr {
+    border: 0;
+    border-top: var(--nc-hairline);
+    margin: 1rem 0;
+}
+
+::selection {
+    background: var(--nc-blue);
+    color: var(--nc-bg-base);
+}
+
+
+/* ---------- 3. Layout primitives ---------- */
+
+.nc-page {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: var(--nc-pad-page);
+}
+
+.nc-page-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    margin: 0 0 1.25rem 0;
+    flex-wrap: wrap;
+    /* Slice J.3 — page-level title strip gets a cyan underline glow
+     * so every page (streams / inbox / personas / brand kits) carries
+     * the same cyberpunk signature the editor has. */
+    position: relative;
+    padding-bottom: 12px;
+}
+.nc-page-header::after {
+    /* Slice K.1 — lime accent under-line replaces J.3's cyan→magenta
+     * gradient. Matches chalyb's title-rule treatment. */
+    content: "";
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 1px;
+    background: linear-gradient(90deg,
+      transparent 0%,
+      var(--nc-lime-dim) 20%,
+      var(--nc-lime) 50%,
+      var(--nc-lime-dim) 80%,
+      transparent 100%);
+    box-shadow: 0 0 6px rgba(200, 255, 92, 0.30);
+}
+.nc-page-header h2 {
+    margin: 0;
+    color: #fff;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+.nc-page-header .nc-page-summary {
+    color: var(--nc-text-muted);
+    font-size: 12px;
+}
+
+.nc-stack { display: flex; flex-direction: column; gap: var(--nc-gap); }
+.nc-row   { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+.nc-row--right { justify-content: flex-end; }
+.nc-spacer { flex: 1; }
+
+
+/* ---------- 4. Top nav (.nc-nav) ---------- */
+
+.nc-nav {
+    background: var(--nc-bg-surface);
+    border-bottom: var(--nc-hairline);
+    padding: 0 var(--nc-pad-page);
+    position: sticky;
+    top: 0;
+    z-index: 50;
+}
+
+.nc-nav__inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    height: 50px;
+}
+
+.nc-nav__logo {
+    /* Slice K.1 — wordmark matches chalyb's split "CHALYB" white + "AI"
+     * lime treatment. Letter-spaced, lighter weight than I had. */
+    color: #fff;
+    font-weight: 700;
+    font-size: 17px;
+    letter-spacing: 0.06em;
+    text-decoration: none;
+    flex-shrink: 0;
+}
+.nc-nav__logo:hover { text-decoration: none; opacity: 0.92; }
+.nc-nav__logo-prefix { color: #fff; }
+.nc-nav__logo-accent { color: var(--nc-lime); }
+
+.nc-nav__links {
+    display: flex;
+    gap: 1.25rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    flex: 1;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+.nc-nav__links::-webkit-scrollbar { display: none; }
+
+.nc-nav__link {
+    color: var(--nc-text-muted);
+    font-size: 13px;
+    text-decoration: none;
+    padding: 0 2px;
+    line-height: 50px;
+    border-bottom: 2px solid transparent;
+    transition: color 120ms ease, border-color 120ms ease;
+    white-space: nowrap;
+}
+.nc-nav__link:hover {
+    color: var(--nc-text-body);
+    text-decoration: none;
+}
+.nc-nav__link.is-active {
+    color: var(--nc-lime);
+    border-bottom-color: var(--nc-lime);
+    /* Slice K.1 — lime glow on the active nav link (was cyan in J.3).
+     * Matches chalyb's accent everywhere. */
+    text-shadow: 0 0 8px rgba(200, 255, 92, 0.40);
+    box-shadow: 0 1px 0 rgba(200, 255, 92, 0.50);
+}
+
+.nc-nav__right {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-shrink: 0;
+}
+
+
+/* ---------- 5. Chips (.nc-chip) ---------- */
+
+.nc-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border: var(--nc-hairline);
+    border-radius: 999px;
+    background: var(--nc-blue-faint);
+    color: var(--nc-blue-bright);
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.5;
+    text-decoration: none;
+    font-variant-numeric: tabular-nums;
+}
+.nc-chip code,
+.nc-chip .nc-mono {
+    background: transparent;
+    color: inherit;
+    padding: 0;
+    font-size: 11px;
+}
+.nc-chip--success {
+    color: var(--nc-success);
+    background: var(--nc-success-bg);
+    border-color: rgba(93, 202, 165, 0.35);
+}
+.nc-chip--warn {
+    color: var(--nc-warn);
+    background: var(--nc-warn-bg);
+    border-color: var(--nc-warn-dim);
+}
+.nc-chip--danger {
+    color: var(--nc-danger);
+    background: var(--nc-danger-bg);
+    border-color: var(--nc-danger-dim);
+}
+.nc-chip--muted {
+    color: var(--nc-text-muted);
+    background: var(--nc-bg-raised);
+    border-color: rgba(107, 118, 137, 0.30);
+}
+.nc-chip--code {
+    font-family: var(--nc-font-mono);
+}
+
+
+/* ---------- 6. Status dot (.nc-status-dot) ---------- */
+
+.nc-status-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--nc-text-muted);
+    flex-shrink: 0;
+}
+.nc-status-dot--success { background: var(--nc-success); box-shadow: 0 0 6px var(--nc-success); }
+.nc-status-dot--warn    { background: var(--nc-warn);    box-shadow: 0 0 6px var(--nc-warn); }
+.nc-status-dot--danger  { background: var(--nc-danger);  box-shadow: 0 0 6px var(--nc-danger); }
+
+.nc-status-dot--pulse {
+    animation: nc-pulse 1.4s ease-in-out infinite;
+}
+@keyframes nc-pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.35; }
+}
+
+
+/* ---------- 7. Panels (.nc-panel) ---------- */
+
+.nc-panel {
+    background: var(--nc-bg-panel);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: var(--nc-radius-lg);
+    overflow: hidden;
+    margin-bottom: var(--nc-gap);
+    /* Slice J.3 — every panel picks up a subtle cyan-tinted edge
+     * that brightens on hover. Replaces the cold hairline that read
+     * like a SaaS settings page. */
+    transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+.nc-panel:hover {
+    border-color: rgba(0, 217, 255, 0.18);
+}
+
+.nc-panel__header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 12px 16px;
+    color: var(--nc-text);
+    font-weight: 500;
+    font-size: 13px;
+    flex-wrap: wrap;
+    /* Slice K.1 — softer lime-tinted header. Replaces J.3's
+     * cyan→magenta cyberpunk gradient with the brand's lime accent. */
+    background: linear-gradient(180deg, rgba(200, 255, 92, 0.04), transparent);
+    border-bottom: 1px solid rgba(200, 255, 92, 0.16);
+    box-shadow: inset 0 -1px 0 rgba(200, 255, 92, 0.08);
+}
+.nc-panel__header .nc-panel__title {
+    flex: 1;
+    min-width: 0;
+}
+.nc-panel__header small {
+    color: var(--nc-text-muted);
+    font-size: 12px;
+    font-weight: 400;
+}
+
+.nc-panel__body {
+    padding: 16px;
+}
+
+.nc-panel--padless .nc-panel__body { padding: 0; }
+.nc-panel--collapsed .nc-panel__body { display: none; }
+.nc-panel__chevron {
+    color: var(--nc-text-muted);
+    cursor: pointer;
+    margin-left: auto;
+    background: transparent;
+    border: 0;
+    padding: 0 0.25rem;
+    font-size: 14px;
+    line-height: 1;
+}
+.nc-panel__chevron:hover { color: var(--nc-blue-bright); }
+
+
+/* ---------- 8. Cards (.nc-card) — raised item cards ---------- */
+
+.nc-card {
+    background: var(--nc-bg-raised);
+    border: var(--nc-hairline);
+    border-radius: var(--nc-radius);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.nc-card--hoverable {
+    cursor: pointer;
+    transition: border-color 120ms ease, transform 120ms ease;
+}
+.nc-card--hoverable:hover {
+    border-color: var(--nc-blue);
+    transform: translateY(-1px);
+}
+
+
+/* ---------- 9. Buttons (.nc-btn) ---------- */
+
+.nc-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border: var(--nc-hairline);
+    border-radius: var(--nc-radius);
+    background: transparent;
+    color: var(--nc-text);
+    font-family: var(--nc-font);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.4;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 100ms ease, border-color 100ms ease, transform 60ms ease, color 100ms ease;
+    white-space: nowrap;
+}
+.nc-btn:hover {
+    background: var(--nc-bg-raised);
+    border-color: var(--nc-blue);
+    color: var(--nc-blue-bright);
+    text-decoration: none;
+}
+.nc-btn:active { transform: scale(0.98); }
+.nc-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--nc-blue-faint);
+    border-color: var(--nc-blue);
+}
+.nc-btn[disabled],
+.nc-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.nc-btn--primary {
+    /* Slice K.1 — pill-rounded lime CTA matching chalyb.com's
+     * "Iniciar proyecto →" button. Solid lime fill, dark text,
+     * fully rounded corners, subtle glow on hover. Replaces the
+     * J.3 cyan gradient that didn't match the brand. */
+    background: var(--nc-lime);
+    border-color: var(--nc-lime);
+    color: #06080d;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    border-radius: 999px;
+    padding: 9px 18px;
+    box-shadow: 0 0 0 1px var(--nc-lime-dim);
+}
+.nc-btn--primary:hover {
+    background: var(--nc-lime-bright);
+    border-color: var(--nc-lime-bright);
+    color: #06080d;
+    box-shadow:
+      0 0 0 1px var(--nc-lime-bright),
+      0 0 20px -4px rgba(200, 255, 92, 0.55);
+    transform: translateY(-1px);
+}
+
+.nc-btn--ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--nc-blue-bright);
+    padding: 7px 8px;
+}
+.nc-btn--ghost:hover {
+    background: var(--nc-blue-faint);
+    border-color: transparent;
+    color: var(--nc-blue-bright);
+}
+
+.nc-btn--danger {
+    color: var(--nc-danger);
+    border-color: var(--nc-danger-dim);
+}
+.nc-btn--danger:hover {
+    background: var(--nc-danger-bg);
+    border-color: var(--nc-danger);
+    color: var(--nc-danger);
+}
+
+.nc-btn--sm   { padding: 4px 10px; font-size: 12px; }
+.nc-btn--full { width: 100%; }
+
+
+/* ---------- 10. Forms (.nc-input / .nc-select / .nc-textarea / .nc-label) ---------- */
+
+.nc-label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 12px;
+    font-size: 12px;
+    color: var(--nc-text-muted);
+}
+.nc-label small {
+    color: var(--nc-text-muted);
+    margin-top: 2px;
+}
+
+.nc-input,
+.nc-select,
+.nc-textarea {
+    width: 100%;
+    padding: 8px 10px;
+    background: var(--nc-bg-raised);
+    border: var(--nc-hairline);
+    border-radius: var(--nc-radius);
+    color: var(--nc-text);
+    font-family: var(--nc-font);
+    font-size: 13px;
+    line-height: 1.4;
+    transition: border-color 100ms ease, box-shadow 100ms ease;
+}
+.nc-input:focus,
+.nc-select:focus,
+.nc-textarea:focus {
+    outline: none;
+    border-color: var(--nc-blue);
+    box-shadow: 0 0 0 3px var(--nc-blue-faint);
+}
+.nc-input::placeholder,
+.nc-textarea::placeholder {
+    color: var(--nc-text-muted);
+}
+.nc-textarea {
+    resize: vertical;
+    min-height: 70px;
+    font-family: var(--nc-font);
+}
+.nc-input--mono { font-family: var(--nc-font-mono); }
+
+/* Select indicator */
+.nc-select {
+    appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, var(--nc-text-muted) 50%),
+                      linear-gradient(135deg, var(--nc-text-muted) 50%, transparent 50%);
+    background-position: calc(100% - 16px) center, calc(100% - 11px) center;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+    padding-right: 30px;
+}
+
+.nc-input[type="file"] {
+    padding: 6px 10px;
+    cursor: pointer;
+}
+.nc-input[type="file"]::file-selector-button {
+    background: var(--nc-bg-surface);
+    color: var(--nc-blue-bright);
+    border: var(--nc-hairline);
+    border-radius: 4px;
+    padding: 4px 10px;
+    margin-right: 10px;
+    cursor: pointer;
+    font-family: var(--nc-font);
+    font-size: 12px;
+}
+.nc-input[type="file"]::file-selector-button:hover {
+    border-color: var(--nc-blue);
+}
+
+.nc-input[type="color"] {
+    padding: 2px;
+    height: 32px;
+    cursor: pointer;
+}
+
+.nc-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--nc-text-body);
+    font-size: 13px;
+    cursor: pointer;
+    margin-bottom: 8px;
+}
+.nc-checkbox input[type="checkbox"] {
+    accent-color: var(--nc-blue);
+    width: 14px;
+    height: 14px;
+    margin: 0;
+}
+
+.nc-form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 0 14px;
+}
+
+
+/* ---------- 11. Tables (.nc-table) ---------- */
+
+.nc-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+.nc-table thead th {
+    color: var(--nc-lime);
+    font-weight: 700;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.10em;
+    text-align: left;
+    padding: 10px 12px;
+    /* Slice K.1 — lime accent underline matches chalyb's section
+     * dividers. Drops the J.3 cyan that didn't match the brand. */
+    border-bottom: 1px solid rgba(200, 255, 92, 0.22);
+    background: linear-gradient(180deg, rgba(200, 255, 92, 0.04), transparent);
+    box-shadow: inset 0 -1px 0 rgba(200, 255, 92, 0.14);
+}
+.nc-table tbody td {
+    padding: 10px 12px;
+    border-bottom: var(--nc-hairline);
+    color: var(--nc-text-body);
+    vertical-align: middle;
+}
+.nc-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+.nc-table tbody tr {
+    transition: background 100ms ease;
+}
+.nc-table tbody tr:hover {
+    background: var(--nc-blue-faint);
+}
+.nc-table .nc-mono,
+.nc-table code {
+    font-family: var(--nc-font-mono);
+    font-size: 12px;
+    background: transparent;
+    color: var(--nc-blue-bright);
+    padding: 0;
+}
+.nc-table td.nc-cell-actions {
+    width: 1%;
+    white-space: nowrap;
+    text-align: right;
+}
+.nc-table td.nc-num,
+.nc-table th.nc-num {
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+
+/* ---------- 12. Alerts (.nc-alert) ---------- */
+
+.nc-alert {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--nc-warn-bg);
+    border: 1px solid var(--nc-warn-dim);
+    border-radius: var(--nc-radius);
+    color: var(--nc-text);
+    font-size: 13px;
+    margin-bottom: var(--nc-gap);
+}
+.nc-alert__icon {
+    color: var(--nc-warn);
+    flex-shrink: 0;
+    font-size: 18px;
+    line-height: 1;
+}
+.nc-alert__body { flex: 1; min-width: 0; }
+.nc-alert__title { color: var(--nc-text); font-weight: 500; }
+.nc-alert__detail { color: var(--nc-text-muted); font-size: 12px; margin-top: 2px; }
+.nc-alert__actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+.nc-alert--danger {
+    background: var(--nc-danger-bg);
+    border-color: var(--nc-danger-dim);
+}
+.nc-alert--danger .nc-alert__icon { color: var(--nc-danger); }
+
+.nc-alert--info {
+    background: var(--nc-blue-faint);
+    border-color: var(--nc-blue-dim);
+}
+.nc-alert--info .nc-alert__icon { color: var(--nc-blue-bright); }
+
+
+/* ---------- 13. Empty state (.nc-empty) ---------- */
+
+.nc-empty {
+    text-align: center;
+    padding: 48px 16px;
+    color: var(--nc-text-muted);
+}
+.nc-empty__icon {
+    font-size: 36px;
+    color: var(--nc-blue-dim);
+    margin-bottom: 12px;
+    line-height: 1;
+}
+.nc-empty__title {
+    color: var(--nc-text);
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 4px;
+}
+.nc-empty__body {
+    font-size: 12px;
+    color: var(--nc-text-muted);
+    max-width: 360px;
+    margin: 0 auto 16px auto;
+}
+
+
+/* ---------- 14. Metric cards (LLM spend) ---------- */
+
+.nc-metric-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: var(--nc-gap);
+    margin-bottom: var(--nc-gap);
+}
+.nc-metric {
+    background: var(--nc-bg-panel);
+    border: var(--nc-hairline);
+    border-radius: var(--nc-radius-lg);
+    padding: 16px;
+}
+.nc-metric__label {
+    color: var(--nc-text-muted);
+    font-size: 12px;
+    margin-bottom: 6px;
+}
+.nc-metric__value {
+    color: var(--nc-text);
+    font-size: 24px;
+    font-weight: 500;
+    font-family: var(--nc-font-mono);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+}
+.nc-metric__sub {
+    color: var(--nc-text-muted);
+    font-size: 12px;
+    margin-top: 6px;
+}
+
+
+/* ---------- 15. Mono helper ---------- */
+
+.nc-mono {
+    font-family: var(--nc-font-mono);
+    font-variant-numeric: tabular-nums;
+    color: var(--nc-blue-bright);
+    background: transparent;
+}
+.nc-mono--muted { color: var(--nc-text-muted); }
+.nc-mono--text  { color: var(--nc-text-body); }
+
+
+/* ---------- 16. Truncation utility (long UUID filenames) ---------- */
+
+.nc-trunc {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: bottom;
+}
+
+/* Middle-ellipsis trick for filenames: <span class="nc-trunc-mid"
+   data-prefix="long-name-with-uuid" data-suffix=".mp4">long-name…ext.mp4</span>
+   The CSS keeps the visual narrow; full text shows on title hover. */
+
+
+/* ---------- 17. Inbox-specific micro-layouts ---------- */
+
+/* Inbox grid uses `auto-fill` (not `auto-fit`) so a single clip
+ * doesn't stretch to fill the whole row — cards stay at their
+ * natural width and the user sees thumbnail-scale previews instead
+ * of half-screen stills. */
+.nc-inbox-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 180px));
+    gap: 12px;
+    padding: 12px 16px;
+    justify-content: start;
+}
+.nc-clip-card {
+    background: var(--nc-bg-raised);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: var(--nc-radius);
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+    max-width: 180px;
+}
+.nc-clip-card:hover {
+    /* Slice K.1 — lime edge + lift on hover. Matches chalyb's
+     * landing-page card-hover lift; drops the J.3 cyan/magenta. */
+    border-color: rgba(200, 255, 92, 0.45);
+    box-shadow:
+      0 0 0 1px rgba(200, 255, 92, 0.25) inset,
+      0 0 18px -6px rgba(200, 255, 92, 0.45);
+    transform: translateY(-2px);
+}
+.nc-clip-card__thumb {
+    background: var(--nc-bg-base);
+    border: var(--nc-hairline);
+    border-radius: 6px;
+    aspect-ratio: 9 / 16;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--nc-blue-dim);
+    font-size: 24px;
+    overflow: hidden;
+    /* Hard cap on the visual height so portrait clips don't dominate
+     * the page. The card width tops out at 180px (nc-clip-card max),
+     * so 9:16 height = ~320px max — still very readable. */
+    max-height: 280px;
+    position: relative;   /* anchor for the REJECTED stamp */
+}
+
+/* Slice F.7-H — rejected state on the stream-page clip card.
+ * The thumbnail desaturates so a rejected clip reads at a glance,
+ * and a diagonal REJECTED stamp sits across it. Matches the visual
+ * language of physical "VOID" / "DECLINED" stamps so the operator
+ * doesn't have to read the small status chip below. */
+.nc-clip-card--rejected .nc-clip-card__thumb img {
+    filter: grayscale(0.85) brightness(0.55);
+}
+.nc-clip-card__stamp {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-14deg);
+    padding: 6px 14px;
+    font-family: var(--nc-font-mono);
+    font-weight: 900;
+    font-size: 18px;
+    letter-spacing: 0.16em;
+    color: #ff3b30;
+    border: 3px solid #ff3b30;
+    background: rgba(20, 0, 0, 0.55);
+    text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+    box-shadow: 0 0 0 1px rgba(255, 59, 48, 0.4);
+    pointer-events: none;
+    user-select: none;
+    z-index: 2;
+}
+.nc-clip-card__thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.nc-clip-card__time {
+    color: var(--nc-blue-bright);
+    font-family: var(--nc-font-mono);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+}
+.nc-clip-card__meta {
+    color: var(--nc-text-muted);
+    font-size: 10px;
+    font-family: var(--nc-font-mono);
+    line-height: 1.4;
+}
+.nc-clip-card__actions {
+    display: flex;
+    gap: 6px;
+    margin-top: auto;
+}
+.nc-clip-card__actions .nc-btn { flex: 1; padding: 4px 8px; font-size: 11px; }
+
+
+/* ---------- 18. Pipeline steps (stream detail) ---------- */
+
+.nc-steps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.nc-steps li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 0;
+    border-bottom: var(--nc-hairline);
+    color: var(--nc-text-body);
+}
+.nc-steps li:last-child { border-bottom: 0; }
+.nc-steps__icon {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--nc-text-muted);
+    font-family: var(--nc-font-mono);
+}
+.nc-steps__icon--done    { color: var(--nc-success); }
+.nc-steps__icon--running { color: var(--nc-blue-bright); }
+.nc-steps__icon--failed  { color: var(--nc-danger); }
+.nc-steps__icon--warn    { color: var(--nc-warn); }
+.nc-steps__time {
+    margin-left: auto;
+    color: var(--nc-text-muted);
+    font-family: var(--nc-font-mono);
+    font-size: 11px;
+}
+
+
+/* ---------- 19. Misc utilities ---------- */
+
+.nc-hidden { display: none !important; }
+.nc-mt-0   { margin-top: 0 !important; }
+.nc-mt-2   { margin-top: 16px; }
+.nc-mb-0   { margin-bottom: 0 !important; }
+
+/* Flex-grid helpers used by the upload form layout. */
+.nc-grid-2  { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+.nc-grid-3  { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+
+
+/* ---------- 20. Native progress bar (upload + ETA) ---------- */
+
+progress {
+    appearance: none;
+    width: 100%;
+    height: 8px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--nc-bg-raised);
+    overflow: hidden;
+}
+progress::-webkit-progress-bar {
+    background: var(--nc-bg-raised);
+    border-radius: 999px;
+}
+progress::-webkit-progress-value {
+    background: var(--nc-blue);
+    border-radius: 999px;
+    transition: width 200ms ease;
+}
+progress::-moz-progress-bar {
+    background: var(--nc-blue);
+    border-radius: 999px;
+}
+
+
+/* ---------- 21. Details / summary (collapsibles) ---------- */
+
+details.nc-details {
+    border: var(--nc-hairline);
+    border-radius: var(--nc-radius);
+    background: var(--nc-bg-panel);
+    padding: 0;
+    margin-bottom: var(--nc-gap);
+}
+details.nc-details > summary {
+    padding: 12px 16px;
+    color: var(--nc-text);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+details.nc-details > summary::-webkit-details-marker { display: none; }
+details.nc-details > summary::before {
+    content: "▸";
+    color: var(--nc-text-muted);
+    transition: transform 120ms ease;
+    font-size: 10px;
+}
+details.nc-details[open] > summary::before {
+    transform: rotate(90deg);
+}
+details.nc-details > div,
+details.nc-details > article {
+    padding: 0 16px 16px;
+}
+
+
+/* ---------- 22. Trigger-phrase explainer (brand-kit edit) ---------- */
+
+.nc-trigger-help {
+    margin-bottom: 16px;
+}
+.nc-trigger-help__intro {
+    color: var(--nc-text-body);
+    font-size: 13px;
+    margin-bottom: 12px;
+}
+.nc-trigger-help__cards {
+    margin-bottom: 12px;
+}
+.nc-trigger-card {
+    background: var(--nc-bg-raised);
+    border: var(--nc-hairline);
+    border-radius: var(--nc-radius);
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.nc-trigger-card__head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--nc-text);
+    font-size: 13px;
+}
+.nc-trigger-card__head i {
+    color: var(--nc-blue-bright);
+}
+.nc-trigger-card__example {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    color: var(--nc-text-body);
+    font-size: 12px;
+}
+.nc-trigger-card__example .nc-mono {
+    background: var(--nc-bg-base);
+    padding: 3px 8px;
+    border-radius: 4px;
+    color: var(--nc-blue-bright);
+    border: var(--nc-hairline);
+}
+.nc-trigger-card__example .nc-mono em {
+    color: var(--nc-warn);
+    font-style: normal;
+    font-weight: 500;
+}
+.nc-trigger-card__arrow {
+    color: var(--nc-text-muted);
+    font-size: 14px;
+}
+/* Tape strip — visualizes the clip window relative to the phrase
+ * timestamp. The marker dot is the spoken phrase; the colored bar is
+ * the extracted clip window. */
+.nc-trigger-card__tape {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    height: 18px;
+    background: var(--nc-bg-base);
+    border-radius: 3px;
+    border: var(--nc-hairline);
+    overflow: hidden;
+    position: relative;
+}
+.nc-trigger-card__tape-marker {
+    width: 4px;
+    align-self: stretch;
+    background: var(--nc-warn);
+    box-shadow: 0 0 6px var(--nc-warn);
+    color: transparent;
+    font-size: 0;
+}
+.nc-trigger-card__tape-clip {
+    flex: 1;
+    align-self: stretch;
+    background: var(--nc-blue-faint);
+    border: 0 solid var(--nc-blue);
+    color: var(--nc-blue-bright);
+    font-size: 10px;
+    font-family: var(--nc-font-mono);
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+}
+.nc-trigger-card__tape-clip--right {
+    border-left-width: 1px;
+    justify-content: flex-start;
+}
+.nc-trigger-card__tape-clip--left {
+    border-right-width: 1px;
+    justify-content: flex-end;
+}
+.nc-trigger-card small {
+    color: var(--nc-text-muted);
+    font-size: 11px;
+}
+.nc-trigger-help__note {
+    background: var(--nc-blue-faint);
+    border: 1px solid var(--nc-blue-dim);
+    border-radius: var(--nc-radius);
+    padding: 10px 12px;
+    color: var(--nc-text-body);
+    font-size: 12px;
+    line-height: 1.55;
+    display: flex;
+    gap: 8px;
+}
+.nc-trigger-help__note > i {
+    color: var(--nc-blue-bright);
+    flex-shrink: 0;
+    font-size: 16px;
+    line-height: 1.3;
+}
+
+
+/* ---------- 24. AI score strip (clip-editor "AI insights" row) ---------- */
+
+.nc-ai-strip {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    padding: 12px 16px;
+    background:
+        linear-gradient(135deg, var(--nc-ai-bg), transparent 60%),
+        var(--nc-bg-panel);
+    border: 1px solid var(--nc-ai-dim);
+    border-radius: var(--nc-radius-lg);
+    margin-bottom: var(--nc-gap);
+}
+.nc-ai-strip__header {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--nc-ai-bright);
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 2px;
+}
+.nc-ai-strip__header i {
+    font-size: 14px;
+}
+.nc-ai-score {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    cursor: help;
+}
+.nc-ai-score__label {
+    color: var(--nc-text-muted);
+    font-size: 11px;
+    line-height: 1.2;
+}
+.nc-ai-score__value {
+    color: var(--nc-text);
+    font-family: var(--nc-font-mono);
+    font-size: 22px;
+    font-weight: 500;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+}
+.nc-ai-score__value--lg100 {
+    /* The /100 suffix is intentionally smaller and muted — viewers
+     * read the big number first. */
+    color: var(--nc-text-muted);
+    font-size: 13px;
+}
+.nc-ai-score__bar {
+    width: 100%;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--nc-bg-raised);
+    overflow: hidden;
+    margin-top: 4px;
+}
+.nc-ai-score__bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--nc-ai), var(--nc-blue-bright));
+    transition: width 200ms ease;
+}
+.nc-ai-score__pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    align-self: flex-start;
+    margin-top: 2px;
+}
+.nc-ai-score__pill--high,
+.nc-ai-score__pill--good,
+.nc-ai-score__pill--low {
+    color: var(--nc-success);
+    background: var(--nc-success-bg);
+    border: 1px solid rgba(93, 202, 165, 0.30);
+}
+.nc-ai-score__pill--medium,
+.nc-ai-score__pill--ok,
+.nc-ai-score__pill--med {
+    color: var(--nc-warn);
+    background: var(--nc-warn-bg);
+    border: 1px solid var(--nc-warn-dim);
+}
+.nc-ai-score__pill--developing,
+.nc-ai-score__pill--check,
+.nc-ai-score__pill--high-risk {
+    color: var(--nc-danger);
+    background: var(--nc-danger-bg);
+    border: 1px solid var(--nc-danger-dim);
+}
+
+/* --- expandable variant (slice F.7-F) ---
+ * `<details>` wrapper: passive chip until clicked, then unfurls
+ * the evidence rows that show WHY the score is what it is. Span
+ * full strip width when open so the rows have room to breathe. */
+.nc-ai-score--detail {
+    position: relative;
+}
+.nc-ai-score--detail > summary {
+    list-style: none;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.nc-ai-score--detail > summary::-webkit-details-marker { display: none; }
+.nc-ai-score--detail > summary::after {
+    content: "▾";
+    position: absolute;
+    top: 0;
+    right: 0;
+    color: var(--nc-text-muted);
+    font-size: 10px;
+    transition: transform 120ms ease;
+    pointer-events: none;
+}
+.nc-ai-score--detail[open] > summary::after {
+    transform: rotate(180deg);
+}
+.nc-ai-score--detail[open] {
+    grid-column: 1 / -1;
+    background: var(--nc-ai-bg);
+    border: 1px solid var(--nc-ai-dim);
+    border-radius: var(--nc-radius);
+    padding: 12px;
+    margin: -4px 0;
+}
+.nc-ai-score__evidence {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--nc-ai-dim);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.nc-ai-evidence__row {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    font-size: 12px;
+}
+.nc-ai-evidence__label {
+    color: var(--nc-text-muted);
+    flex: 0 0 140px;
+}
+.nc-ai-evidence__row .nc-mono {
+    color: var(--nc-text);
+}
+.nc-ai-evidence__row .nc-mono--muted {
+    color: var(--nc-text-muted);
+    font-size: 11px;
+}
+.nc-ai-evidence__why {
+    color: var(--nc-text-body);
+    font-size: 12px;
+    margin-top: 4px;
+    line-height: 1.45;
+    font-style: italic;
+}
+
+
+/* ---------- 25. Right-panel hierarchy (editor-section H3 + group label) ---------- */
+
+/* Bigger, calmer section titles inside .nc-panel__header so the
+ * editor's four sections read as ranked steps instead of a wall of
+ * equal-weight chrome. */
+.nc-panel__header--editor {
+    padding: 14px 16px;
+    gap: 10px;
+}
+.nc-panel__header--editor .nc-panel__title {
+    font-size: 15px;
+    font-weight: 500;
+    letter-spacing: 0.005em;
+}
+.nc-panel__header--editor .nc-panel__step {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--nc-blue-faint);
+    color: var(--nc-blue-bright);
+    font-family: var(--nc-font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    flex-shrink: 0;
+}
+.nc-panel__header--editor small {
+    font-size: 12px;
+    color: var(--nc-text-muted);
+    flex-basis: 100%;
+    margin-top: 2px;
+}
+
+/* Stronger label hierarchy inside editor controls. */
+.nc-editor-controls .nc-label {
+    font-size: 13px;
+    color: var(--nc-text);
+    font-weight: 500;
+}
+.nc-editor-controls .nc-label small {
+    font-weight: 400;
+    color: var(--nc-text-muted);
+}
+
+
+/* ---------- 26. Live-caption glow (preview overlay polish) ---------- */
+
+@keyframes nc-caption-glow {
+    0%, 100% {
+        text-shadow:
+            0 0 8px var(--pv-highlight, #FFD700),
+            0 2px 6px rgba(0, 0, 0, 0.6);
+    }
+    50% {
+        text-shadow:
+            0 0 18px var(--pv-highlight, #FFD700),
+            0 0 32px var(--pv-highlight, #FFD700),
+            0 2px 6px rgba(0, 0, 0, 0.6);
+    }
+}
+.nc-pv-caption__word.is-active {
+    animation: nc-caption-glow 1.2s ease-in-out infinite;
+}
+
+
+/* ---------- 27. Social-context overlays (preview engagement chrome) ---------- */
+
+/* Top-left "LIVE" badge with viewer count — gives the preview the
+ * platform-context vibe creators recognize. Toggleable from the
+ * Branding section's "Show platform context" checkbox. */
+.nc-pv-live {
+    position: absolute;
+    top: 14px;
+    left: 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(6px);
+    color: #fff;
+    font-family: -apple-system, sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 4px;
+    letter-spacing: 0.04em;
+    z-index: 3;
+}
+.nc-pv-live__dot {
+    width: 7px;
+    height: 7px;
+    background: #ff3b30;
+    border-radius: 50%;
+    box-shadow: 0 0 6px #ff3b30;
+    animation: nc-caption-glow 1.5s ease-in-out infinite;
+}
+.nc-pv-live__count {
+    color: #fff;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Bottom-left fake live-chat strip — three faded chat lines that
+ * cycle so the preview shows what platform chat overlay looks like.
+ * Pure visual; no real chat data wired in.
+ * Slice K.7 — lifted from `bottom: 56px` to `bottom: 140px` so the
+ * chat strip stays clear of the bottom KICK banner (which lives at
+ * `bottom: 8%` and can be up to 64px tall on the repost-page variant).
+ * Operator reported the chat block was painting over the URL line. */
+.nc-pv-chat {
+    position: absolute;
+    left: 14px;
+    bottom: 140px;
+    width: 60%;
+    max-width: 220px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    pointer-events: none;
+    z-index: 3;
+}
+/* When the banner is also enabled (the common case) we further hide
+ * the chat strip — both lived in the same bottom band and even with
+ * the lift above they competed visually. Operators get one signal at
+ * a time: chat overlay only fires when there's NO bottom banner. */
+.nc-preview__layer:has(.nc-pv-banner:not(.is-hidden)) .nc-pv-chat {
+    display: none;
+}
+.nc-pv-chat__row {
+    display: flex;
+    gap: 6px;
+    align-items: baseline;
+    color: #fff;
+    font-family: -apple-system, sans-serif;
+    font-size: 11px;
+    line-height: 1.3;
+    background: rgba(0, 0, 0, 0.45);
+    padding: 3px 8px;
+    border-radius: 4px;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+    animation: nc-pv-chat-fade 9s ease-in-out infinite;
+}
+.nc-pv-chat__row:nth-child(2) { animation-delay: -3s; }
+.nc-pv-chat__row:nth-child(3) { animation-delay: -6s; }
+.nc-pv-chat__name {
+    color: var(--nc-blue-bright);
+    font-weight: 600;
+}
+.nc-pv-chat__msg { opacity: 0.95; }
+@keyframes nc-pv-chat-fade {
+    0%, 90%, 100% { opacity: 0.85; transform: translateX(0); }
+    95%           { opacity: 0; transform: translateX(-6px); }
+}
+
+/* Engagement pulse — subtle ring that radiates from the heart icon
+ * in the rail, every 4s. Hints "this clip is being reacted to". */
+@keyframes nc-pv-pulse {
+    0%   { transform: scale(1);   opacity: 0.7; }
+    100% { transform: scale(2.4); opacity: 0; }
+}
+.nc-pv-rail__icon::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 2px solid var(--nc-danger);
+    opacity: 0;
+}
+.nc-pv-rail__item:first-child .nc-pv-rail__icon {
+    position: relative;
+}
+.nc-pv-rail__item:first-child .nc-pv-rail__icon::after {
+    animation: nc-pv-pulse 3.5s ease-out infinite;
+}
+
+
+/* ---------- 28. Editor section spacing tightening ---------- */
+
+.nc-editor-controls .nc-panel + .nc-panel {
+    margin-top: 8px;
+}
+
+
+/* ---------- 28a. AI button + hook generator (slice F.7-B) ----------
+ * .nc-btn--ai is the primary affordance for any AI-driven action —
+ * uses the purple --nc-ai accent so it announces itself as
+ * "this fires an LLM call" without competing with the regular blue
+ * --nc-btn--primary. */
+
+.nc-btn--ai {
+    background: var(--nc-ai-bg);
+    border-color: var(--nc-ai-dim);
+    color: var(--nc-ai-bright);
+}
+.nc-btn--ai:hover {
+    background: var(--nc-ai);
+    border-color: var(--nc-ai);
+    color: var(--nc-bg-base);
+}
+.nc-btn--ai:focus-visible {
+    box-shadow: 0 0 0 3px var(--nc-ai-bg);
+}
+.nc-btn--ai i {
+    color: inherit;
+}
+.nc-btn--ai.is-loading {
+    cursor: wait;
+}
+.nc-btn--ai.is-loading i {
+    animation: nc-spin 0.8s linear infinite;
+}
+@keyframes nc-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
+.nc-hook-gen {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: var(--nc-hairline);
+}
+.nc-hook-gen__row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+}
+.nc-hook-gen__row .nc-btn--ai {
+    flex-shrink: 0;
+    height: 34px;
+    margin-bottom: 0;
+}
+.nc-hook-gen__results {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 10px;
+    min-height: 0;
+}
+.nc-hook-gen__hint {
+    color: var(--nc-text-muted);
+    font-size: 11px;
+    text-align: center;
+    padding: 12px 8px;
+}
+.nc-hook-gen__error {
+    color: var(--nc-danger);
+    font-size: 12px;
+    padding: 10px 12px;
+    background: var(--nc-danger-bg);
+    border: 1px solid var(--nc-danger-dim);
+    border-radius: var(--nc-radius);
+}
+.nc-hook-chip {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--nc-bg-raised);
+    border: var(--nc-hairline);
+    border-radius: var(--nc-radius);
+    color: var(--nc-text);
+    font-family: var(--nc-font);
+    font-size: 13px;
+    line-height: 1.4;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 100ms ease, transform 60ms ease;
+    width: 100%;
+}
+.nc-hook-chip:hover {
+    border-color: var(--nc-ai);
+    background: var(--nc-ai-bg);
+}
+.nc-hook-chip:active {
+    transform: scale(0.99);
+}
+.nc-hook-chip__icon {
+    color: var(--nc-ai-bright);
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+.nc-hook-chip__text { flex: 1; }
+
+
+/* ---------- 28b. Waveform + scrubber (under preview) ----------------
+ * Two stacked layers: an SVG waveform showing audio energy buckets,
+ * and a scrubber bar with a draggable playhead. Click anywhere in
+ * the waveform OR the scrubber to seek the video. */
+
+.nc-scrubber {
+    margin-top: 10px;
+    user-select: none;
+}
+.nc-waveform {
+    width: 100%;
+    height: 36px;
+    display: block;
+    cursor: pointer;
+    background: var(--nc-bg-base);
+    border: var(--nc-hairline);
+    border-radius: 4px;
+    overflow: visible;
+}
+.nc-waveform__bar {
+    fill: var(--nc-blue-dim);
+    transition: fill 80ms linear;
+}
+.nc-waveform__bar.is-played {
+    fill: var(--nc-blue-bright);
+}
+.nc-waveform__playhead {
+    stroke: var(--nc-blue-bright);
+    stroke-width: 1.5;
+    pointer-events: none;
+    filter: drop-shadow(0 0 4px var(--nc-blue-bright));
+}
+.nc-waveform__empty {
+    fill: var(--nc-text-muted);
+    font-family: var(--nc-font-mono);
+    font-size: 10px;
+}
+
+.nc-scrubber__bar {
+    margin-top: 4px;
+    position: relative;
+    height: 10px;
+    background: var(--nc-bg-raised);
+    border-radius: 999px;
+    cursor: pointer;
+    overflow: hidden;
+}
+.nc-scrubber__progress {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 0;
+    background: linear-gradient(90deg, var(--nc-blue), var(--nc-blue-bright));
+    border-radius: 999px;
+    transition: width 80ms linear;
+}
+.nc-scrubber__handle {
+    position: absolute;
+    top: 50%;
+    width: 14px;
+    height: 14px;
+    background: var(--nc-text);
+    border: 2px solid var(--nc-blue-bright);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 8px var(--nc-blue);
+    transition: left 80ms linear;
+    pointer-events: none;
+}
+.nc-scrubber__times {
+    margin-top: 4px;
+    display: flex;
+    justify-content: space-between;
+    color: var(--nc-text-muted);
+    font-family: var(--nc-font-mono);
+    font-size: 10px;
+}
+
+
+/* ---------- 28d. Platform safe-zone overlay (slice F.7-F) -----------
+ * TikTok/Reels/Shorts cover specific bands of the frame with their
+ * own UI (profile + likes/comments/share rail + caption + audio + CTA).
+ * A clip composed without respecting those bands gets PARTIALLY
+ * covered the moment it's published — captions cut off, branding
+ * eaten, viewer thinks "amateur edit". This overlay shows the
+ * danger zones so the operator can position their overlays safely.
+ * Toggleable from the Branding section. */
+
+.nc-pv-safezones {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 4;
+}
+.nc-pv-safezones__zone {
+    position: absolute;
+    border: 1.5px dashed rgba(255, 59, 48, 0.55);
+    background: rgba(255, 59, 48, 0.06);
+    font-family: var(--nc-font-mono);
+    font-size: 9px;
+    color: rgba(255, 255, 255, 0.85);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 4px 6px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+}
+/* TikTok / Reels right rail (likes, comments, share, bookmarks, sound) */
+.nc-pv-safezones__zone--right-rail {
+    top: 38%;
+    right: 0;
+    width: 14%;
+    height: 50%;
+    border-top-left-radius: 8px;
+    border-bottom-left-radius: 8px;
+    align-items: center;
+    justify-content: center;
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    letter-spacing: 0.08em;
+}
+/* Profile / avatar (TikTok upper-right, Reels upper-left varies) */
+.nc-pv-safezones__zone--profile {
+    top: 0;
+    right: 0;
+    width: 16%;
+    height: 12%;
+    border-top: 0;
+    border-right: 0;
+    border-bottom-left-radius: 8px;
+}
+/* Bottom UI band — caption row + audio + CTA + ad markup */
+.nc-pv-safezones__zone--bottom {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 17%;
+    border-bottom: 0;
+    border-left: 0;
+    border-right: 0;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    justify-content: center;
+    align-items: flex-end;
+    padding-bottom: 8px;
+}
+
+
+/* ---------- 28c. Intelligence timeline (slice F.7-C) -------------
+ * Marker rail under the scrubber. Each marker is a colored dot
+ * positioned at its ts/duration ratio. Hover shows the tooltip;
+ * click seeks the video to that ts. Below the rail, a labeled
+ * legend strip lists each marker as text — operator-readable
+ * without hovering. */
+
+.nc-timeline {
+    margin-top: 8px;
+    user-select: none;
+}
+.nc-timeline__rail {
+    position: relative;
+    height: 18px;
+    border-radius: 4px;
+    background: var(--nc-bg-base);
+    border: var(--nc-hairline);
+    overflow: visible;
+}
+.nc-timeline__marker {
+    position: absolute;
+    top: 50%;
+    width: 12px;
+    height: 12px;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    border: 1.5px solid var(--nc-bg-base);
+    cursor: pointer;
+    z-index: 2;
+    box-shadow: 0 0 6px currentColor;
+    transition: transform 100ms ease;
+}
+.nc-timeline__marker:hover {
+    transform: translate(-50%, -50%) scale(1.35);
+    z-index: 3;
+}
+.nc-timeline__marker--audio_peak    { background: var(--nc-blue-bright); color: var(--nc-blue-bright); }
+.nc-timeline__marker--reaction      { background: var(--nc-warn);        color: var(--nc-warn); }
+.nc-timeline__marker--scene_cut     { background: var(--nc-ai-bright);   color: var(--nc-ai-bright); }
+.nc-timeline__marker--chat_heat     { background: var(--nc-success);     color: var(--nc-success); }
+.nc-timeline__marker--face_emotion  { background: var(--nc-danger);      color: var(--nc-danger); }
+
+.nc-timeline__legend {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 11px;
+    color: var(--nc-text-body);
+}
+.nc-timeline__legend-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 6px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: background 80ms ease;
+}
+.nc-timeline__legend-row:hover {
+    background: var(--nc-blue-faint);
+}
+.nc-timeline__legend-ts {
+    font-family: var(--nc-font-mono);
+    color: var(--nc-blue-bright);
+    flex-shrink: 0;
+    width: 38px;
+}
+.nc-timeline__legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.nc-timeline__legend-label {
+    flex: 1;
+    color: var(--nc-text);
+}
+.nc-timeline__empty {
+    color: var(--nc-text-muted);
+    font-size: 11px;
+    text-align: center;
+    padding: 8px;
+}
+
+
+/* ---------- 29. Login screen specific ---------- */
+
+.nc-login-shell {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background:
+        radial-gradient(ellipse at top, var(--nc-blue-faint), transparent 60%),
+        var(--nc-bg-base);
+}
+.nc-login-card {
+    background: var(--nc-bg-panel);
+    border: var(--nc-hairline);
+    border-radius: var(--nc-radius-lg);
+    padding: 32px;
+    width: 100%;
+    max-width: 380px;
+}
+.nc-login-card h1 {
+    color: var(--nc-blue);
+    margin: 0 0 4px 0;
+    font-size: 22px;
+    letter-spacing: 0.02em;
+}
+
+
+/* ---------- 28. Kicker tag (Slice K.1) ----------
+ * The little uppercase lime label chalyb puts above hero titles:
+ *   "— EQUIPO DE TECNOLOGÍA — SEDE EN CIUDAD DE MÉXICO"
+ * Pages can drop <p class="nc-kicker">...</p> above their h2 for the
+ * same treatment.
+ */
+.nc-kicker {
+    color: var(--nc-lime);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    margin: 0 0 8px 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+}
+.nc-kicker::before {
+    content: "";
+    width: 28px;
+    height: 1.5px;
+    background: var(--nc-lime);
+}
+
+/* ============================================================
+   Slice O.4 — globalize .nc-approve-modal styles.
+
+   These styles previously lived inside clip_detail.html's inline
+   <style> block (added in N.2 for the verdict-card issues modal).
+   Other pages — stream_publish.html in particular — also need the
+   modal for their guided-connect flows, but they don't include the
+   clip-detail stylesheet. Moving the rules here makes the modal a
+   first-class theme primitive every dashboard page can use.
+
+   Markup contract:
+     <div class="nc-approve-modal" hidden>
+       <div class="nc-approve-modal__panel"> … </div>
+     </div>
+   ============================================================ */
+.nc-approve-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    background: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    animation: nc-fade-in 180ms ease-out 1;
+}
+.nc-approve-modal[hidden] { display: none; }
+@keyframes nc-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+.nc-approve-modal__panel {
+    background: var(--nc-bg-elevated, #0c1018);
+    border: 1px solid rgba(255, 200, 0, 0.40);
+    border-radius: 14px;
+    padding: 22px 24px;
+    width: 100%;
+    max-width: 520px;
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+    box-shadow:
+        0 12px 48px rgba(0, 0, 0, 0.65),
+        inset 0 0 28px -10px rgba(255, 200, 0, 0.18);
+}
+.nc-approve-modal__head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+.nc-approve-modal__icon {
+    font-size: 26px;
+    filter: drop-shadow(0 0 8px rgba(255, 200, 0, 0.55));
+}
+.nc-approve-modal__title {
+    color: #ffd066;
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+    text-shadow: 0 0 12px rgba(255, 184, 0, 0.35);
+}
+.nc-approve-modal__body {
+    color: var(--nc-text, #fff);
+    font-size: 14px;
+    line-height: 1.5;
+    margin-bottom: 18px;
+}
+.nc-approve-modal__body p { margin: 0 0 10px; }
+.nc-approve-modal__body strong { color: var(--nc-lime, #c8ff5c); }
+.nc-approve-modal__issues {
+    list-style: none;
+    margin: 10px 0 0;
+    padding: 0;
+    max-height: 220px;
+    overflow-y: auto;
+}
+.nc-approve-modal__issues-row {
+    display: flex;
+    gap: 8px;
+    padding: 6px 0;
+    font-size: 12px;
+    line-height: 1.4;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.nc-approve-modal__issues-row:last-child { border-bottom: 0; }
+.nc-approve-modal__issues-row--block { color: #ff8a8a; }
+.nc-approve-modal__issues-row--warn  { color: #ffd066; }
+.nc-approve-modal__actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+.nc-approve-modal__actions .nc-btn {
+    flex: 1 1 auto;
+    min-width: 130px;
+    justify-content: center;
+}
+.nc-approve-modal__cancel {
+    background: transparent;
+    border: 1px solid var(--nc-border);
+    color: var(--nc-text);
+}
+.nc-approve-modal__autofix {
+    background: rgba(200, 255, 92, 0.08);
+    border: 1px solid rgba(200, 255, 92, 0.40);
+    color: var(--nc-lime, #c8ff5c);
+}
+
+/* Slice O.4 — guided-connect modal variant: the same modal
+   primitive, but with a lime accent instead of amber (lime reads
+   as "ready to connect, low risk" vs amber's "review issues"). */
+.nc-approve-modal--connect .nc-approve-modal__panel {
+    border-color: rgba(200, 255, 92, 0.40);
+    box-shadow:
+        0 12px 48px rgba(0, 0, 0, 0.65),
+        inset 0 0 28px -10px rgba(200, 255, 92, 0.20);
+}
+.nc-approve-modal--connect .nc-approve-modal__icon {
+    filter: drop-shadow(0 0 8px rgba(200, 255, 92, 0.55));
+}
+.nc-approve-modal--connect .nc-approve-modal__title {
+    color: var(--nc-lime, #c8ff5c);
+    text-shadow: 0 0 12px rgba(200, 255, 92, 0.35);
+}

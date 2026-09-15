@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from nexoclip.db import Database, DriveWatchesRepo, TenantsRepo
-from nexoclip.errors import NexoClipError
-from nexoclip.tenancy import bound_tenant
+from chalybclip.db import Database, DriveWatchesRepo, TenantsRepo
+from chalybclip.errors import ChalybClipError
+from chalybclip.tenancy import bound_tenant
 
 
 async def test_create_and_get(drive_db: Database) -> None:
@@ -12,12 +12,12 @@ async def test_create_and_get(drive_db: Database) -> None:
     with bound_tenant(t.id):
         watch = await DriveWatchesRepo(drive_db).create(
             folder_id="folder_xyz",
-            folder_name="NexoClip Inbox",
+            folder_name="ChalyClip Inbox",
             refresh_token="rt-1",
         )
         assert watch.id.startswith("drv_")
         assert watch.folder_id == "folder_xyz"
-        assert watch.folder_name == "NexoClip Inbox"
+        assert watch.folder_name == "ChalyClip Inbox"
         assert watch.refresh_token == "rt-1"
         assert watch.seen_file_ids == []
         assert watch.enabled is True
@@ -82,7 +82,7 @@ async def test_set_enabled_unknown_raises(drive_db: Database) -> None:
         repo = DriveWatchesRepo(drive_db)
         import pytest
 
-        with pytest.raises(NexoClipError, match="not found"):
+        with pytest.raises(ChalybClipError, match="not found"):
             await repo.set_enabled("drv_nope", True)
 
 

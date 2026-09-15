@@ -1,0 +1,747 @@
+{% extends "base.html" %}
+{% block title %}{{ stream.title or stream.id }} - ChalyClip{% endblock %}
+{% block content %}
+
+{# =====================================================================
+   Creator-facing redesign. The clips are the product; the pipeline is
+   infrastructure. Order: outcome hero → AI summary → clips → timeline →
+   (collapsed) technical details. The `overview` view model is built in
+   dashboard._stream_overview.
+   ===================================================================== #}
+
+{%- set ov = overview -%}
+{%- set _complete = ov.status_kind == 'complete' -%}
+{# _running gates the live progress panel — pending included, so a stream
+   whose run is queued/downloading/abandoned still gets the panel (its
+   abandoned-run detector + Córrelo button explain a dead run). _analyzing
+   is running ONLY — the "Buscando tus mejores momentos" hero must not
+   show over a run that isn't actually executing. #}
+{%- set _running = ov.status_kind in ('running', 'pending') -%}
+{%- set _analyzing = ov.status_kind == 'running' -%}
+{%- set _failed = ov.status_kind == 'failed' -%}
+
+{# ---- viral-score → color (lime ≥80, amber ≥60, muted below) ---- #}
+{%- macro score_color(s) -%}
+  {%- if s is none -%}var(--nc-text-muted)
+  {%- elif s >= 80 -%}var(--nc-lime, #c8ff5c)
+  {%- elif s >= 60 -%}var(--nc-warn, #f5b13d)
+  {%- else -%}var(--nc-text-muted){%- endif -%}
+{%- endmacro -%}
+
+<style>
+  .nc-hero {
+    border: var(--nc-hairline);
+    border-radius: var(--nc-radius);
+    background:
+      radial-gradient(120% 140% at 0% 0%, rgba(200,255,92,0.06), transparent 60%),
+      var(--nc-panel-bg, #14171c);
+    padding: 22px 24px;
+    margin-bottom: 18px;
+  }
+  .nc-hero__status {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 13px; font-weight: 700; letter-spacing: 0.02em;
+  }
+  .nc-hero__headline {
+    font-size: 26px; font-weight: 800; margin: 8px 0 0;
+    color: var(--nc-text); line-height: 1.15;
+  }
+  .nc-hero__metrics {
+    display: flex; gap: 28px; flex-wrap: wrap; margin: 18px 0 4px;
+  }
+  .nc-hero__metric small {
+    display: block; color: var(--nc-text-muted);
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .nc-hero__metric b {
+    font-size: 22px; font-weight: 800; color: var(--nc-text);
+  }
+  .nc-hero__cta { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+
+  .nc-summary-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 14px;
+  }
+  .nc-summary-cell small {
+    display: block; color: var(--nc-text-muted);
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+    margin-bottom: 4px;
+  }
+  .nc-summary-cell b { font-size: 16px; color: var(--nc-text); font-weight: 700; }
+
+  /* Big clip cards — 2 per row on desktop, large previews. */
+  .nc-cliplist { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  @media (max-width: 760px) { .nc-cliplist { grid-template-columns: 1fr; } }
+  .nc-bigclip {
+    border: var(--nc-hairline); border-radius: var(--nc-radius);
+    background: var(--nc-panel-bg, #14171c); overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .nc-bigclip--rejected { opacity: 0.55; }
+  .nc-bigclip--top { border-color: var(--nc-lime, #c8ff5c); box-shadow: 0 0 0 1px rgba(200,255,92,0.25); }
+  .nc-bigclip__thumb {
+    position: relative; aspect-ratio: 16/9; background: #000;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .nc-bigclip__thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .nc-bigclip__score {
+    position: absolute; top: 10px; right: 10px;
+    background: rgba(0,0,0,0.72); border-radius: 10px; padding: 6px 10px;
+    text-align: center; line-height: 1.05;
+  }
+  .nc-bigclip__score b { font-size: 20px; font-weight: 800; display: block; }
+  .nc-bigclip__score small { font-size: 9px; color: #cfd3da; letter-spacing: 0.08em; }
+  .nc-bigclip__toppick {
+    position: absolute; top: 10px; left: 10px;
+    background: var(--nc-lime, #c8ff5c); color: #10130a;
+    font-size: 10px; font-weight: 800; letter-spacing: 0.08em;
+    padding: 3px 8px; border-radius: 6px;
+  }
+  .nc-bigclip__body { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .nc-bigclip__time { font-size: 15px; font-weight: 700; color: var(--nc-text); }
+  .nc-bigclip__ai { display: flex; flex-direction: column; gap: 4px; }
+  .nc-bigclip__ai li {
+    list-style: none; font-size: 12.5px; color: var(--nc-text);
+    display: flex; gap: 7px; align-items: flex-start;
+  }
+  .nc-bigclip__ai li i { color: var(--nc-lime, #c8ff5c); font-size: 13px; margin-top: 1px; }
+  .nc-bigclip__stamp {
+    position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; font-size: 22px; font-weight: 900;
+    color: var(--nc-danger); transform: rotate(-12deg);
+    letter-spacing: 0.1em; pointer-events: none;
+  }
+
+  /* Visual timeline — clip segments over the source duration. */
+  .nc-timeline { position: relative; }
+  .nc-timeline__track {
+    position: relative; height: 10px; border-radius: 6px;
+    background: var(--nc-line-soft, #23272e); margin: 10px 0 6px;
+  }
+  .nc-timeline__seg {
+    position: absolute; top: 0; height: 100%; border-radius: 6px;
+    background: var(--nc-lime, #c8ff5c); opacity: 0.85;
+  }
+  .nc-timeline__labels {
+    display: flex; justify-content: space-between;
+    font-size: 11px; color: var(--nc-text-muted); font-family: var(--nc-mono), monospace;
+  }
+</style>
+
+{# ---- Page header (compact) ---- #}
+<div class="nc-page-header">
+  <div>
+    <h2 class="nc-trunc" style="max-width: 720px;" title="{{ stream.title or stream.vod_url }}">
+      {{ stream.title or stream.vod_url }}
+    </h2>
+    <div class="nc-row" style="margin-top: 4px;">
+      <span class="nc-chip nc-chip--muted">
+        <i class="ti ti-broadcast" aria-hidden="true"></i>
+        <span>{{ stream.platform }}</span>
+      </span>
+      <span style="color: var(--nc-text-muted); font-size: 12px;">
+        {{ stream.channel or "—" }} · <span class="nc-mono">{{ "%d"|format(stream.duration_s|int) }}s</span>
+      </span>
+    </div>
+  </div>
+  <div class="nc-page-summary">
+    <a href="/dashboard/streams" class="nc-btn nc-btn--sm">
+      <i class="ti ti-arrow-left" aria-hidden="true"></i>
+      <span>Todos tus videos</span>
+    </a>
+  </div>
+</div>
+
+{# ============================ HERO ============================ #}
+<div class="nc-hero">
+  {% if _complete %}
+  <div class="nc-hero__status" style="color: var(--nc-success);">
+    <i class="ti ti-circle-check-filled" aria-hidden="true"></i>
+    <span>Ya quedó listo</span>
+  </div>
+  <h1 class="nc-hero__headline">
+    {{ ov.total_clips }} clip{{ '' if ov.total_clips == 1 else 's' }} listo{{ '' if ov.total_clips == 1 else 's' }}
+    {%- if ov.ready_count %} · {{ ov.ready_count }} aprobado{{ '' if ov.ready_count == 1 else 's' }}{% endif %}
+  </h1>
+  <div class="nc-hero__metrics">
+    <div class="nc-hero__metric"><small>Clips encontrados</small><b>{{ ov.total_clips }}</b></div>
+    <div class="nc-hero__metric"><small>Aprobados</small><b>{{ ov.ready_count }}</b></div>
+    {% if ov.best_score is not none %}
+    <div class="nc-hero__metric"><small>Mejor puntaje</small><b style="color: {{ score_color(ov.best_score) }};">{{ ov.best_score }}</b></div>
+    {% endif %}
+    <div class="nc-hero__metric"><small>Edición que te ahorraste</small><b>~{{ ov.time_saved_min }} min</b></div>
+  </div>
+  <div class="nc-hero__cta">
+    {% if ov.ready_count %}
+    <a href="/dashboard/streams/{{ stream.id }}/download-approved" class="nc-btn nc-btn--primary" download>
+      <i class="ti ti-package-export" aria-hidden="true"></i>
+      <span>Descarga {{ ov.ready_count }} aprobados</span>
+    </a>
+    {% endif %}
+    <a href="#clips" class="nc-btn">
+      <i class="ti ti-scissors" aria-hidden="true"></i>
+      <span>Revisa tus clips</span>
+    </a>
+    {% if pending_approval_count %}
+    <form method="post" action="/dashboard/streams/{{ stream.id }}/clips/approve-all" style="display:inline;">
+      <button type="submit" class="nc-btn nc-btn--primary">
+        <i class="ti ti-checks" aria-hidden="true"></i>
+        <span>Aprobar todos ({{ pending_approval_count }})</span>
+      </button>
+    </form>
+    {% endif %}
+    {% if ov.ready_count %}
+    <a href="/dashboard/publish/zernio" class="nc-btn">
+      <i class="ti ti-rocket" aria-hidden="true"></i>
+      <span>Publica</span>
+    </a>
+    {% endif %}
+  </div>
+  {% elif _analyzing %}
+  <div class="nc-hero__status" style="color: var(--nc-warn);">
+    <i class="ti ti-loader-2 nc-spin" aria-hidden="true"></i>
+    <span>Estoy analizando tu video…</span>
+  </div>
+  <h1 class="nc-hero__headline">Buscando tus mejores momentos</h1>
+  <p style="color: var(--nc-text-muted); margin: 8px 0 0; font-size: 13px;">
+    Tu voz, los picos de audio y las señales que se vuelven virales — mira el avance abajo.
+  </p>
+  {% elif _failed %}
+  <div class="nc-hero__status" style="color: var(--nc-danger);">
+    <i class="ti ti-alert-triangle" aria-hidden="true"></i>
+    <span>Algo falló al procesar</span>
+  </div>
+  <h1 class="nc-hero__headline">Algo salió mal</h1>
+  <p style="color: var(--nc-text-muted); margin: 8px 0 0; font-size: 13px;">
+    Vuelve a correrlo desde Detalles técnicos aquí abajo — puedes repetirlo sin problema.
+  </p>
+  {% else %}
+  <div class="nc-hero__status" style="color: var(--nc-text-muted);">
+    <i class="ti ti-clock" aria-hidden="true"></i>
+    <span>Listo para empezar</span>
+  </div>
+  <h1 class="nc-hero__headline">Córrelo para encontrar tus clips</h1>
+  <p style="color: var(--nc-text-muted); margin: 8px 0 0; font-size: 13px;">
+    Abre Detalles técnicos aquí abajo y elige una firma para empezar.
+  </p>
+  {% endif %}
+</div>
+
+{# Live pipeline progress — only while running (self-polls + swaps). #}
+{% if _running %}
+<div id="stream-progress"
+     hx-get="/dashboard/streams/{{ stream.id }}/progress"
+     hx-trigger="load, every 3s"
+     hx-swap="outerHTML">
+  <div class="nc-panel">
+    <div class="nc-panel__header">
+      <i class="ti ti-loader" aria-hidden="true"></i>
+      <span class="nc-panel__title">Estado del proceso</span>
+    </div>
+    <div class="nc-panel__body"><small>Cargando el avance…</small></div>
+  </div>
+</div>
+{% endif %}
+
+{# ======================= VIDEO SUMMARY ======================= #}
+{% if _complete and ov.total_clips %}
+<div class="nc-panel">
+  <div class="nc-panel__header">
+    <i class="ti ti-sparkles" aria-hidden="true" style="color: var(--nc-lime, #c8ff5c);"></i>
+    <span class="nc-panel__title">Resumen de la IA</span>
+  </div>
+  <div class="nc-panel__body">
+    <div class="nc-summary-grid">
+      <div class="nc-summary-cell"><small>Duración</small><b>{{ "%d"|format(ov.duration_s|int) }}s</b></div>
+      <div class="nc-summary-cell"><small>Momentos detectados</small><b>{{ ov.moments_detected }}</b></div>
+      <div class="nc-summary-cell"><small>Clips generados</small><b>{{ ov.total_clips }}</b></div>
+      {% if ov.best %}
+      <div class="nc-summary-cell">
+        <small>Mejor clip</small>
+        <b>{{ "%d"|format(ov.best.clip.start_s|int) }}s → {{ "%d"|format(ov.best.clip.end_s|int) }}s</b>
+      </div>
+      {% endif %}
+      <div class="nc-summary-cell">
+        <small>Qué tan bien le va a ir</small>
+        <b style="color: {{ score_color(ov.best_score) }};">{{ ov.perf_label }}</b>
+      </div>
+    </div>
+    <div style="margin-top: 14px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+      <small style="color: var(--nc-text-muted);">Plataformas sugeridas:</small>
+      {% for p in ov.suggested_platforms %}
+      <span class="nc-chip nc-chip--muted" style="font-size: 11px;">{{ p }}</span>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# ===================== RUN COST (tokens) ===================== #}
+{# Token T5 — what this run cost the creator, in TOKENS (their currency).
+   Creators NEVER see USD — raw provider cost is internal economics, shown
+   only to admins (show_usd_cost). The token figures mirror Chalyb's
+   deduction exactly (incl. the per-run base charge), so this matches the
+   balance chip's drop. #}
+{% set _has_actual = actual_spend and actual_spend.total_calls and actual_spend.total_calls > 0 %}
+{% if _has_actual or estimate %}
+<div class="nc-panel">
+  <div class="nc-panel__header">
+    <i class="ti ti-coin" aria-hidden="true" style="color: var(--nc-lime, #c8ff5c);"></i>
+    <span class="nc-panel__title">Uso de este video</span>
+    <small>— tokens consumidos</small>
+  </div>
+  <div class="nc-panel__body">
+    <div class="nc-summary-grid">
+      {% if _has_actual and run_tokens_used %}
+      <div class="nc-summary-cell">
+        <small>Tokens usados</small>
+        <b style="color: var(--nc-lime, #c8ff5c);">{{ '{:,}'.format(run_tokens_used) }}</b>
+      </div>
+      <div class="nc-summary-cell">
+        <small>Procesos</small>
+        <b>{{ actual_spend.total_calls }}</b>
+      </div>
+      {% endif %}
+      {% if estimate %}
+      <div class="nc-summary-cell">
+        <small>{% if _has_actual %}Estimado (máx){% else %}Estimado{% endif %}</small>
+        <b style="color: var(--nc-text-muted);">~{{ '{:,}'.format(est_tokens_total) }}</b>
+      </div>
+      {% endif %}
+    </div>
+
+    {% if _has_actual and run_tokens_by_source %}
+    <div style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+      <small style="color: var(--nc-text-muted);">Desglose:</small>
+      {% for s in run_tokens_by_source %}
+      <span class="nc-chip nc-chip--muted" style="font-size: 11px;">
+        {{ s.label }} · {{ s.tokens_fmt }} tokens
+      </span>
+      {% endfor %}
+    </div>
+    {% elif not _has_actual %}
+    <small style="display: block; margin-top: 10px; color: var(--nc-text-muted);">
+      Estimación máxima (incluye transcripción y procesamiento base). El uso real aparece aquí después de correr.
+    </small>
+    {% endif %}
+
+    {# Admin-only: the raw USD economics behind these tokens. Creators
+       never see this block. #}
+    {% if show_usd_cost %}
+    <div style="margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--nc-border, #2a2a2a);">
+      <small style="color: var(--nc-text-muted);">
+        <i class="ti ti-lock" aria-hidden="true"></i> Admin · costo real:
+        {% if _has_actual %}<b>${{ '%.4f'|format(actual_spend.cost_usd) }}</b> ({{ '{:,}'.format(actual_spend.total_tokens) }} LLM tok){% endif %}
+        {% if estimate %} · est. ~${{ '%.4f'|format(estimate.total_cost_usd) }}{% endif %}
+        {% if _has_actual and actual_spend.by_provider %}
+          —
+          {% for p in actual_spend.by_provider %}{{ p.provider }} ${{ '%.4f'|format(p.cost_usd_micros / 1000000) }}{{ ', ' if not loop.last }}{% endfor %}
+        {% endif %}
+      </small>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{# =========================== CLIPS =========================== #}
+<div class="nc-panel" id="clips">
+  <div class="nc-panel__header">
+    <i class="ti ti-scissors" aria-hidden="true" style="color: var(--nc-blue-bright);"></i>
+    <span class="nc-panel__title">Tus clips</span>
+    <small>— {{ ov.total_clips }}{% if ov.ready_count %} · {{ ov.ready_count }} aprobados{% endif %}</small>
+    {% if ov.ready_count %}
+    <a href="/dashboard/streams/{{ stream.id }}/download-approved"
+       class="nc-btn nc-btn--primary" download style="margin-left: auto;"
+       title="Guarda todos tus clips aprobados y publicados en un zip">
+      <i class="ti ti-package-export" aria-hidden="true"></i>
+      <span>Descarga {{ ov.ready_count }} aprobados</span>
+    </a>
+    {% endif %}
+  </div>
+  <div class="nc-panel__body">
+    {% if ov.enriched_clips %}
+    <div class="nc-cliplist">
+      {% for e in ov.enriched_clips %}
+      {%- set c = e.clip -%}
+      {%- set _is_top = ov.best and ov.best.clip.id == c.id and c.status != 'rejected' -%}
+      <div class="nc-bigclip{% if c.status == 'rejected' %} nc-bigclip--rejected{% endif %}{% if _is_top %} nc-bigclip--top{% endif %}">
+        <div class="nc-bigclip__thumb">
+          {% if c.thumbnail_frame_path %}
+          {# Hide on 404 (thumbnail reclaimed from disk + no bucket copy —
+             common on pre-object-storage clips) so the card shows an empty
+             thumb slot instead of a broken-image icon. #}
+          <img src="/dashboard/clips/{{ c.id }}/thumbnail" alt="miniatura del clip"
+               onerror="this.style.display='none'">
+          {% else %}
+          <i class="ti ti-photo-off" aria-hidden="true" style="font-size: 32px; color: var(--nc-text-muted);"></i>
+          {% endif %}
+          {% if _is_top %}<div class="nc-bigclip__toppick">★ EL MEJOR</div>{% endif %}
+          {% if e.viral_score is not none %}
+          <div class="nc-bigclip__score">
+            <b style="color: {{ score_color(e.viral_score) }};">{{ e.viral_score }}</b>
+            <small>POTENCIAL VIRAL</small>
+          </div>
+          {% endif %}
+          {% if c.status == 'rejected' %}<div class="nc-bigclip__stamp">DESCARTADO</div>{% endif %}
+        </div>
+        <div class="nc-bigclip__body">
+          <div class="nc-bigclip__time">
+            {{ "%d"|format(c.start_s|int) }}s <span style="color: var(--nc-text-muted);">→</span> {{ "%d"|format(c.end_s|int) }}s
+            <span style="font-size: 12px; color: var(--nc-text-muted); font-weight: 500;">· {{ "%.1f"|format(c.duration_s) }}s</span>
+            <span class="nc-chip nc-chip--{{ {'cut':'muted','approved':'success','rejected':'danger','published':'success'}.get(c.status, 'muted') }}" style="font-size: 10px; padding: 0 6px; margin-left: 6px;">{{ c.status }}</span>
+          </div>
+
+          {% if e.signals %}
+          <ul class="nc-bigclip__ai">
+            {% for s in e.signals %}
+            <li><i class="ti ti-check" aria-hidden="true"></i><span>{{ s }}</span></li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+
+          <div class="nc-bigclip__actions" style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px;">
+            <a href="/dashboard/clips/{{ c.id }}" class="nc-btn nc-btn--primary" style="flex: 1;">
+              <i class="ti ti-cut" aria-hidden="true"></i>
+              <span>Revisa y ajusta</span>
+            </a>
+            {% if c.status in ('approved', 'published') %}
+            {%- set _tier = (request.state.tenant_tier if request and request.state else 'free') or 'free' -%}
+            {%- set _all_access = (_tier == 'all_access') -%}
+            {%- if _all_access -%}
+            <div class="nc-download-group" style="display: flex; gap: 6px; flex: 1;">
+              <a href="/dashboard/clips/{{ c.id }}/download?quality=1080"
+                 class="nc-btn js-download-btn js-download-btn--main" download
+                 title="Guarda el MP4 final" data-label-busy="Preparando…"
+                 data-duration-s="{{ '%.1f'|format(c.duration_s) }}"
+                 style="position: relative; overflow: hidden; flex: 1;">
+                <span class="js-download-progress" aria-hidden="true"></span>
+                <i class="ti ti-download js-download-icon" aria-hidden="true"></i>
+                <span class="js-download-label">1080</span>
+              </a>
+              <a href="/dashboard/clips/{{ c.id }}/download?quality=2k"
+                 class="nc-btn js-download-btn" download title="Exportar en 2K"
+                 data-label-busy="2K…" data-duration-s="{{ '%.1f'|format(c.duration_s * 1.8) }}"
+                 style="position: relative; overflow: hidden;">
+                <span class="js-download-progress" aria-hidden="true"></span>
+                <span class="js-download-label">2K</span>
+              </a>
+              <a href="/dashboard/clips/{{ c.id }}/download?quality=4k"
+                 class="nc-btn js-download-btn" download title="Exportar en 4K"
+                 data-label-busy="4K…" data-duration-s="{{ '%.1f'|format(c.duration_s * 3.6) }}"
+                 style="position: relative; overflow: hidden;">
+                <span class="js-download-progress" aria-hidden="true"></span>
+                <span class="js-download-label">4K</span>
+              </a>
+            </div>
+            {%- else -%}
+            <a href="/dashboard/clips/{{ c.id }}/download?quality=1080"
+               class="nc-btn js-download-btn" download
+               title="Guarda el MP4 final en 1080p. Pásate a all-access para 2K y 4K."
+               data-label-busy="Preparando…" data-duration-s="{{ '%.1f'|format(c.duration_s) }}"
+               style="position: relative; overflow: hidden; flex: 1;">
+              <span class="js-download-progress" aria-hidden="true"></span>
+              <i class="ti ti-download js-download-icon" aria-hidden="true"></i>
+              <span class="js-download-label">Descargar</span>
+            </a>
+            {%- endif -%}
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="nc-empty">
+      <div class="nc-empty__icon"><i class="ti ti-scissors-off" aria-hidden="true"></i></div>
+      <div class="nc-empty__title">{% if _analyzing %}Creando tus clips…{% else %}Todavía no hay clips{% endif %}</div>
+      <p class="nc-empty__body">
+        {% if _analyzing %}Todavía estoy analizando — tus clips van a ir apareciendo aquí conforme los corto.
+        {% else %}Córrelo desde Detalles técnicos para generar tus clips.{% endif %}
+      </p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{# ========================= TIMELINE ========================= #}
+{% if ov.enriched_clips and ov.duration_s %}
+<div class="nc-panel">
+  <div class="nc-panel__header">
+    <i class="ti ti-timeline" aria-hidden="true"></i>
+    <span class="nc-panel__title">Línea de tiempo</span>
+    <small>— dónde caen tus clips dentro del video original</small>
+  </div>
+  <div class="nc-panel__body">
+    <div class="nc-timeline">
+      <div class="nc-timeline__track">
+        {% for e in ov.enriched_clips %}
+        <div class="nc-timeline__seg"
+             style="left: {{ '%.2f'|format(e.timeline_left_pct) }}%; width: {{ '%.2f'|format(e.timeline_width_pct) }}%; {% if ov.best and ov.best.clip.id == e.clip.id %}background: var(--nc-lime, #c8ff5c); opacity: 1;{% endif %}"
+             title="Clip {{ "%d"|format(e.clip.start_s|int) }}s → {{ "%d"|format(e.clip.end_s|int) }}s{% if e.viral_score is not none %} · puntaje {{ e.viral_score }}{% endif %}"></div>
+        {% endfor %}
+      </div>
+      <div class="nc-timeline__labels">
+        <span>0:00</span>
+        <span>{{ "%d:%02d"|format((ov.duration_s|int)//60, (ov.duration_s|int)%60) }}</span>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{#- Ready-to-publish CTA — only with at least one approved clip. -#}
+{% if ov.ready_count %}
+<div class="nc-panel nc-panel--cta-rail" style="margin-top: 16px;">
+  <div class="nc-panel__body" style="display:flex;align-items:center;justify-content:space-between;gap:14px;padding:18px;">
+    <div>
+      <div style="font-size:14px;font-weight:800;color:var(--nc-lime, #c8ff5c);letter-spacing:0.02em;">
+        <i class="ti ti-rocket" aria-hidden="true"></i>
+        Listo para publicar · {{ ov.ready_count }} clip{% if ov.ready_count != 1 %}s{% endif %}
+      </div>
+      <small style="color:var(--nc-text-muted);">
+        Súbelo a tus cuentas conectadas de TikTok / Instagram / YouTube / X / LinkedIn / Facebook / Threads / Pinterest / Bluesky.
+      </small>
+    </div>
+    <a href="/dashboard/publish/zernio" class="nc-btn nc-btn--primary" style="white-space:nowrap;">
+      <i class="ti ti-arrow-right" aria-hidden="true"></i>
+      <span>Ir a publicar</span>
+    </a>
+  </div>
+</div>
+{% endif %}
+
+{# ===================== TECHNICAL DETAILS ===================== #}
+{# Everything an engineer wants, a creator doesn't — collapsed by default. #}
+<details id="tech-details" class="nc-panel" style="margin-top: 18px;" {% if _running or (not ov.total_clips and not _complete) %}open{% endif %}>
+  <summary style="cursor: pointer; padding: 14px 16px; display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--nc-text);">
+    <i class="ti ti-settings" aria-hidden="true" style="color: var(--nc-text-muted);"></i>
+    Detalles técnicos
+    <small style="color: var(--nc-text-muted); font-weight: 400;">— video original, volver a correr, proceso, candidatos</small>
+  </summary>
+  <div style="padding: 0 16px 16px;">
+
+    {# ---- Source video ---- #}
+    <div style="margin-top: 8px;">
+      <small style="color: var(--nc-text-muted); text-transform: uppercase; letter-spacing: 0.06em; font-size: 11px;">Video original</small>
+      {% if source_available %}
+      <video controls preload="metadata" style="width: 100%; max-width: 640px; margin-top: 6px; background: #000; border-radius: var(--nc-radius); border: var(--nc-hairline);">
+        <source src="/dashboard/streams/{{ stream.id }}/source">
+        Tu navegador no puede reproducir el video aquí. Ábrelo en <code>{{ stream.source_video_path }}</code>.
+      </video>
+      {% else %}
+      {# Retention reclaims the source once processing finishes (the clips
+         are already cut and don't need it) — a broken black <video> that
+         404s reads as a bug, so say what actually happened. #}
+      <p class="nc-text--muted" style="margin: 6px 0 0; font-size: 13px;">
+        <i class="ti ti-database-off" aria-hidden="true"></i>
+        Video original liberado para ahorrar espacio — tus clips ya están
+        cortados y no lo necesitan. Para volver a correr el proceso,
+        ChalyClip lo vuelve a descargar solo.
+      </p>
+      {% endif %}
+    </div>
+
+    {# ---- Re-run pipeline (estimate + persona + run) ---- #}
+    {# id="rerun" — jump target for the failure/abandoned banners' Córrelo
+       buttons; their onclick opens the collapsed <details> first. #}
+    <div id="rerun" style="margin-top: 18px;">
+      <small style="color: var(--nc-text-muted); text-transform: uppercase; letter-spacing: 0.06em; font-size: 11px;">Volver a correrlo</small>
+      {% if estimate %}
+        {%- if is_unlimited -%}{%- set _est_severity = 'ok' -%}
+        {%- elif runs_available is not none and runs_available < 1 -%}{%- set _est_severity = 'danger' -%}
+        {%- elif runs_available is not none and runs_available < 3 -%}{%- set _est_severity = 'warn' -%}
+        {%- else -%}{%- set _est_severity = 'ok' -%}{%- endif -%}
+        {%- set _est_color = 'var(--nc-success)' if _est_severity == 'ok' else ('var(--nc-warn)' if _est_severity == 'warn' else 'var(--nc-danger)') -%}
+      <div style="border: 1px solid {{ _est_color }}; border-radius: 8px; padding: 10px 12px; margin: 8px 0 12px; font-size: 12px;">
+        Costo estimado: <span style="color: {{ _est_color }}; font-weight: 600;">~{{ estimate_total_fmt }} tokens</span>
+        {% if is_unlimited %}<span style="color: var(--nc-success);"> · ∞ admin</span>
+        {% elif runs_available is not none %} · te quedan ~{{ runs_available }} corrida{{ 's' if runs_available != 1 else '' }} en tu saldo{% endif %}
+        <details style="margin-top: 6px;">
+          <summary style="cursor: pointer; font-size: 11px; color: var(--nc-text-muted);">Desglose por fase</summary>
+          <table style="width: 100%; margin-top: 6px; font-size: 11px; border-collapse: collapse;">
+            <tbody>
+              {% for line in estimate.lines_list %}
+              <tr style="border-bottom: 1px solid var(--nc-line-soft);">
+                <td style="padding: 4px 0;">{{ line.phase }}</td>
+                <td style="padding: 4px 8px; color: var(--nc-text-muted);">{{ line.note }}</td>
+                <td style="padding: 4px 0; text-align: right; font-family: var(--nc-mono), monospace;">{{ '{:,}'.format(line.tokens) }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </details>
+      </div>
+      {% endif %}
+      <form action="/dashboard/streams/{{ stream.id }}/rerun" method="post"
+            style="display: flex; gap: 12px; align-items: end; flex-wrap: wrap;">
+        <label class="nc-label" style="flex: 1; min-width: 220px; margin: 0;">
+          Tu firma
+          <select class="nc-select" name="persona_id" required>
+            {% for p in personas %}
+            <option value="{{ p.id }}">{{ p.name }} ({{ p.primary_language }})</option>
+            {% endfor %}
+          </select>
+        </label>
+        <button type="submit" class="nc-btn nc-btn--primary" {% if not personas %}disabled{% endif %}>
+          <i class="ti ti-player-play" aria-hidden="true"></i>
+          <span>Córrelo</span>
+        </button>
+      </form>
+      {% if not personas %}
+      <small style="display: block; margin-top: 8px;">
+        Primero crea tu firma — pásate a la pestaña de <a href="/dashboard/personas">Firmas</a>.
+      </small>
+      {% endif %}
+    </div>
+
+    {# ---- Run summary ---- #}
+    <div style="margin-top: 18px;">
+      <small style="color: var(--nc-text-muted); text-transform: uppercase; letter-spacing: 0.06em; font-size: 11px;">Resumen de la corrida</small>
+      <div class="nc-grid-3" style="margin-top: 6px;">
+        <div><small>ID del video</small><div class="nc-mono nc-trunc" title="{{ stream.id }}">{{ stream.id }}</div></div>
+        <div><small>Candidatos</small><div class="nc-mono">{{ candidates|length }}</div></div>
+        <div><small>Clips</small><div class="nc-mono">{{ clips|length }}</div></div>
+      </div>
+      <div style="margin-top: 10px;">
+        <small>Enlace del VOD</small>
+        <div class="nc-trunc"><a href="{{ stream.vod_url }}" class="nc-mono">{{ stream.vod_url }}</a></div>
+      </div>
+    </div>
+
+    {# ---- Candidates table (raw signals) ---- #}
+    <div style="margin-top: 18px;">
+      <small style="color: var(--nc-text-muted); text-transform: uppercase; letter-spacing: 0.06em; font-size: 11px;">Candidatos</small>
+      {% if candidates %}
+      <table class="nc-table" style="margin-top: 6px;">
+        <thead>
+          <tr><th class="nc-num">ts</th><th>Motivo</th><th class="nc-num">Puntaje</th><th>Frase / señal</th></tr>
+        </thead>
+        <tbody>
+          {% for c in candidates %}
+          <tr>
+            <td class="nc-num nc-mono">{{ "%.1f"|format(c.ts) }}s</td>
+            <td><span class="nc-chip nc-chip--muted">{{ c.reason }}</span></td>
+            <td class="nc-num nc-mono">{{ "%.3f"|format(c.score) }}</td>
+            <td><small>{{ c.evidence.get("phrase") or c.evidence.get("transcript_snippet") or "—" }}</small></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div style="color: var(--nc-text-muted); font-size: 12px; margin-top: 6px;">Sin candidatos.</div>
+      {% endif %}
+    </div>
+
+  </div>
+</details>
+
+{#- Download button progress bar — CSS-only time-based estimate + fetch/blob
+    delivery. Preserved verbatim from the prior page; the clip-card download
+    anchors above carry the js-download-* hooks this script wires up. -#}
+<style>
+  .nc-spin { animation: nc-spin 0.9s linear infinite; }
+  @keyframes nc-spin { to { transform: rotate(360deg); } }
+  .js-download-progress {
+    position: absolute; inset: 0 auto 0 0; width: 0%;
+    background: linear-gradient(90deg, rgba(200,255,92,0.22) 0%, rgba(200,255,92,0.40) 100%);
+    transition: width linear; pointer-events: none; z-index: 0;
+  }
+  .js-download-icon, .js-download-label { position: relative; z-index: 1; }
+  .js-download-btn.is-preparing { pointer-events: none; cursor: progress; }
+</style>
+<script>
+  (function () {
+    document.querySelectorAll(".js-download-btn").forEach(function (btn) {
+      var label = btn.querySelector(".js-download-label");
+      var fill = btn.querySelector(".js-download-progress");
+      var origText = label ? label.textContent : null;
+      var busyText = btn.getAttribute("data-label-busy") || "Preparando…";
+      var dur = parseFloat(btn.getAttribute("data-duration-s") || "0");
+      if (!isFinite(dur) || dur <= 0) dur = 20;
+      var totalMs = (dur + 5) * 1000;
+
+      function restoreButton() {
+        btn.classList.remove("is-preparing");
+        if (label && origText !== null) label.textContent = origText;
+        if (fill) { fill.style.transition = "none"; fill.style.width = "0%"; }
+      }
+
+      btn.addEventListener("click", async function (ev) {
+        ev.preventDefault();
+        if (btn.classList.contains("is-preparing")) return;
+        btn.classList.add("is-preparing");
+        if (label) label.textContent = busyText;
+        if (fill) {
+          fill.style.transition = "none"; fill.style.width = "0%";
+          fill.offsetWidth;
+          fill.style.transition = "width " + totalMs + "ms linear";
+          fill.style.width = "90%";
+        }
+
+        async function deliverBlob(resp) {
+          var blob = await resp.blob();
+          if (fill) { fill.style.transition = "width 200ms ease-out"; fill.style.width = "100%"; }
+          var disp = resp.headers.get("Content-Disposition") || "";
+          var match = disp.match(/filename="?([^"]+)"?/);
+          var filename = match ? match[1] : "chalybclip.mp4";
+          var url = URL.createObjectURL(blob);
+          var tempAnchor = document.createElement("a");
+          tempAnchor.href = url; tempAnchor.download = filename; tempAnchor.style.display = "none";
+          document.body.appendChild(tempAnchor); tempAnchor.click(); document.body.removeChild(tempAnchor);
+          setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+          setTimeout(restoreButton, 600);
+        }
+
+        async function pollUntilReady(statusUrl) {
+          var deadline = Date.now() + 15 * 60 * 1000;
+          while (Date.now() < deadline) {
+            await new Promise(function (r) { setTimeout(r, 1000); });
+            var s = await fetch(statusUrl, { credentials: "same-origin" });
+            if (!s.ok) throw new Error("status poll returned " + s.status);
+            var body = await s.json();
+            if (typeof body.progress_pct === "number" && fill) {
+              fill.style.transition = "width 200ms linear";
+              fill.style.width = Math.max(0, Math.min(100, body.progress_pct)) + "%";
+            }
+            if (body.state === "ready" && body.download_url) {
+              var got = await fetch(body.download_url, { credentials: "same-origin" });
+              if (!got.ok) throw new Error("download returned " + got.status);
+              return deliverBlob(got);
+            }
+            if (body.state === "failed") throw new Error(body.error || "render failed");
+          }
+          throw new Error("render timed out — reload the page");
+        }
+
+        try {
+          var resp = await fetch(btn.href, { credentials: "same-origin" });
+          var ctype = (resp.headers.get("Content-Type") || "").toLowerCase();
+          if (resp.status === 200 && ctype.indexOf("video/") === 0) return deliverBlob(resp);
+          if (resp.status === 202) {
+            var body202 = await resp.json();
+            if (body202.status_url) return await pollUntilReady(body202.status_url);
+            throw new Error("server scheduled render but returned no status_url");
+          }
+          if (resp.status === 409) {
+            var body409 = await resp.json();
+            var msg = body409.error || "render failed";
+            if (label) label.textContent = "Falló — reintenta";
+            if (fill) { fill.style.transition = "none"; fill.style.width = "0%"; }
+            if (body409.retry_url) await fetch(body409.retry_url, { method: "POST", credentials: "same-origin" });
+            console.warn("render failed:", msg);
+            setTimeout(restoreButton, 2200);
+            return;
+          }
+          throw new Error("server returned " + resp.status);
+        } catch (err) {
+          console.error("download failed:", err);
+          if (label) label.textContent = "Falló la descarga — reintenta";
+          if (fill) { fill.style.transition = "none"; fill.style.width = "0%"; }
+          setTimeout(restoreButton, 2200);
+        }
+      });
+    });
+  })();
+</script>
+{% endblock %}

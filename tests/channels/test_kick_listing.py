@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from nexoclip.channels import service as svc
+from chalybclip.channels import service as svc
 
 
 @pytest.mark.parametrize(

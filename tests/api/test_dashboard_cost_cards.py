@@ -2,7 +2,7 @@
 
 This HTML view shows raw USD economics, so it's ADMIN-ONLY (creators see
 tokens, never cost). Each test flags alice as admin via
-NEXOCLIP_ADMIN_TENANT_IDS so the page renders.
+CHALYBCLIP_ADMIN_TENANT_IDS so the page renders.
 """
 
 from __future__ import annotations
@@ -12,9 +12,9 @@ import datetime as _dt
 import httpx
 import pytest
 
-from nexoclip.db import Database, LLMCallsRepo
-from nexoclip.db.models import LLMCallRow
-from nexoclip.tenancy import bound_tenant
+from chalybclip.db import Database, LLMCallsRepo
+from chalybclip.db.models import LLMCallRow
+from chalybclip.tenancy import bound_tenant
 
 from .conftest import auth
 
@@ -25,9 +25,9 @@ def _now() -> str:
 
 def _make_admin(monkeypatch: pytest.MonkeyPatch, tenant_id: str) -> None:
     """Flag a tenant as admin so the USD cost pages render for it."""
-    from nexoclip.settings import get_settings
+    from chalybclip.settings import get_settings
 
-    monkeypatch.setenv("NEXOCLIP_ADMIN_TENANT_IDS", tenant_id)
+    monkeypatch.setenv("CHALYBCLIP_ADMIN_TENANT_IDS", tenant_id)
     get_settings.cache_clear()
 
 
@@ -76,7 +76,7 @@ async def test_dashboard_llm_calls_renders_budget_bar_when_set(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """When the tenant has a budget cap, the headroom bar shows."""
-    from nexoclip.db import TenantsRepo
+    from chalybclip.db import TenantsRepo
 
     tenant_id = tenants["alice"]["id"]
     _make_admin(monkeypatch, tenant_id)

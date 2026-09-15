@@ -18,7 +18,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from nexoclip.clip.thumbnail_brand import (
+from chalybclip.clip.thumbnail_brand import (
     pick_brand_kit_handle,
     render_branded_thumbnails,
 )

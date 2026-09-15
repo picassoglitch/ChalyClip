@@ -23,17 +23,17 @@ from types import SimpleNamespace
 
 import pytest_asyncio
 
-from nexoclip.api import _pipeline
-from nexoclip.db import (
+from chalybclip.api import _pipeline
+from chalybclip.db import (
     Database,
     PersonasRepo,
     StreamsRepo,
     TenantsRepo,
     apply_migrations,
 )
-from nexoclip.db.models import StreamRow
-from nexoclip.db.repos import _streams_repo_try_claim_for_processing
-from nexoclip.tenancy import bound_tenant
+from chalybclip.db.models import StreamRow
+from chalybclip.db.repos import _streams_repo_try_claim_for_processing
+from chalybclip.tenancy import bound_tenant
 
 
 def _now() -> str:
@@ -128,7 +128,7 @@ async def test_autoclip_schedules_runner_when_enabled(
     await _seed_live_ended(db, tenant_id=tenant.id, stream_id="str_a")
     await _seed_persona(db, tenant.id, "per_a")
     monkeypatch.setattr(
-        "nexoclip.settings.get_settings",
+        "chalybclip.settings.get_settings",
         lambda: _stub_settings(tmp_path / "live.db", tmp_path / "out"),
     )
 
@@ -163,7 +163,7 @@ async def test_autoclip_idempotent_second_call_skips(
     await _seed_live_ended(db, tenant_id=tenant.id, stream_id="str_i")
     await _seed_persona(db, tenant.id, "per_i")
     monkeypatch.setattr(
-        "nexoclip.settings.get_settings",
+        "chalybclip.settings.get_settings",
         lambda: _stub_settings(tmp_path / "live.db", tmp_path / "out"),
     )
     calls: list[dict] = []
@@ -185,13 +185,13 @@ async def test_autoclip_idempotent_second_call_skips(
 async def test_autoclip_skips_when_disabled(
     db: Database, tmp_path: Path, monkeypatch
 ) -> None:
-    """NEXOCLIP_LIVE_AUTO_CLIP=false → recording-only; nothing scheduled,
+    """CHALYBCLIP_LIVE_AUTO_CLIP=false → recording-only; nothing scheduled,
     nothing claimed."""
     tenant = await TenantsRepo(db).create(name="Aldo")
     await _seed_live_ended(db, tenant_id=tenant.id, stream_id="str_d")
     await _seed_persona(db, tenant.id, "per_d")
     monkeypatch.setattr(
-        "nexoclip.settings.get_settings",
+        "chalybclip.settings.get_settings",
         lambda: _stub_settings(tmp_path / "live.db", tmp_path / "out", enabled=False),
     )
     calls: list[dict] = []
@@ -215,7 +215,7 @@ async def test_autoclip_skips_when_no_persona(
     tenant = await TenantsRepo(db).create(name="Aldo")
     await _seed_live_ended(db, tenant_id=tenant.id, stream_id="str_p")
     monkeypatch.setattr(
-        "nexoclip.settings.get_settings",
+        "chalybclip.settings.get_settings",
         lambda: _stub_settings(tmp_path / "live.db", tmp_path / "out"),
     )
     calls: list[dict] = []
@@ -253,9 +253,9 @@ async def test_acquire_uses_r2_store_when_configured(
     rec.write_bytes(b"\x00" * 4096)
     store = _FakeStore(rec)
     monkeypatch.setattr(
-        "nexoclip.integrations.storage.build_recording_store", lambda _s: store
+        "chalybclip.integrations.storage.build_recording_store", lambda _s: store
     )
-    monkeypatch.setattr("nexoclip.settings.get_settings", lambda: SimpleNamespace())
+    monkeypatch.setattr("chalybclip.settings.get_settings", lambda: SimpleNamespace())
 
     got = await _pipeline._acquire_live_recording(
         stream_id="str_1", recording_path="/data/unused", work_dir=tmp_path / "in"
@@ -273,9 +273,9 @@ async def test_acquire_falls_back_to_disk_without_r2(
     f = d / "source.mp4"
     f.write_bytes(b"\x00" * 4096)
     monkeypatch.setattr(
-        "nexoclip.integrations.storage.build_recording_store", lambda _s: None
+        "chalybclip.integrations.storage.build_recording_store", lambda _s: None
     )
-    monkeypatch.setattr("nexoclip.settings.get_settings", lambda: SimpleNamespace())
+    monkeypatch.setattr("chalybclip.settings.get_settings", lambda: SimpleNamespace())
 
     got = await _pipeline._acquire_live_recording(
         stream_id="str_1", recording_path=str(d / "source"), work_dir=tmp_path / "in"
@@ -309,7 +309,7 @@ async def test_live_runner_ingests_then_processes(
         assert str(kwargs["stream_id"]) == "str_r"
         return fake_stream
 
-    monkeypatch.setattr("nexoclip.ingest.ingest_uploaded", fake_ingest)
+    monkeypatch.setattr("chalybclip.ingest.ingest_uploaded", fake_ingest)
 
     def fake_stream_to_row(_stream: object, **_kw: object) -> StreamRow:
         return StreamRow(
@@ -326,21 +326,21 @@ async def test_live_runner_ingests_then_processes(
             created_at=_now(),
         )
 
-    monkeypatch.setattr("nexoclip.db.adapters.stream_to_row", fake_stream_to_row)
+    monkeypatch.setattr("chalybclip.db.adapters.stream_to_row", fake_stream_to_row)
 
     async def fake_process(**kwargs: object) -> None:
         seq.append("process")
         # Pipeline runs against the live stream id.
         assert str(kwargs["stream_id"]) == "str_r"
 
-    monkeypatch.setattr("nexoclip.pipeline.process_vod", fake_process)
+    monkeypatch.setattr("chalybclip.pipeline.process_vod", fake_process)
 
     async def fake_refresh(**_kwargs: object) -> None:
         seq.append("refresh")
 
     monkeypatch.setattr(_pipeline, "_refresh_balance_after_run", fake_refresh)
     monkeypatch.setattr(
-        "nexoclip.settings.get_settings",
+        "chalybclip.settings.get_settings",
         lambda: _stub_settings(tmp_path / "live.db", tmp_path / "out"),
     )
 

@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Personas - ChalyClip{% endblock %}
+{% block content %}
+
+<div class="nc-page-header">
+  <div>
+    <h2>Personas</h2>
+    <small>La voz que usa tu IA para escribir los textos y los ganchos de cada clip.</small>
+  </div>
+  <div class="nc-page-summary">
+    <span class="nc-mono">{{ personas|length }}</span> persona{{ "s" if personas|length != 1 else "" }}
+  </div>
+</div>
+
+<div class="nc-panel">
+  <div class="nc-panel__header">
+    <i class="ti ti-user-plus" aria-hidden="true" style="color: var(--nc-blue-bright);"></i>
+    <span class="nc-panel__title">Crear una voz</span>
+  </div>
+  <div class="nc-panel__body">
+    <form action="/dashboard/personas" method="post">
+      <div class="nc-grid-3">
+        <label class="nc-label">id
+          <input class="nc-input nc-input--mono" name="id" required placeholder="aldo_villanueva">
+        </label>
+        <label class="nc-label">Nombre
+          <input class="nc-input" name="name" required>
+        </label>
+        <label class="nc-label">Idioma principal
+          <input class="nc-input nc-input--mono" name="primary_language" required value="es" maxlength="5">
+        </label>
+      </div>
+      <label class="nc-label">Cómo suena tu voz
+        <textarea class="nc-textarea" name="voice_prompt" rows="3" required></textarea>
+      </label>
+      <div class="nc-grid-2">
+        <label class="nc-label">Idiomas en los que publicas <small>(sepáralos con comas)</small>
+          <input class="nc-input" name="target_languages" placeholder="es, en">
+        </label>
+        <label class="nc-label">Etiquetas de tu contenido <small>(sepáralas con comas)</small>
+          <input class="nc-input" name="routing_tags" placeholder="mindset, irl">
+        </label>
+      </div>
+      <button type="submit" class="nc-btn nc-btn--primary">
+        <i class="ti ti-plus" aria-hidden="true"></i>
+        <span>Crear voz</span>
+      </button>
+    </form>
+  </div>
+</div>
+
+<div class="nc-panel">
+  <div class="nc-panel__header">
+    <i class="ti ti-users" aria-hidden="true"></i>
+    <span class="nc-panel__title">Todas tus voces</span>
+  </div>
+  <div class="nc-panel__body" style="padding: 0;">
+    {% if personas %}
+    <table class="nc-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Nombre</th>
+          <th>Idioma</th>
+          <th>Publicas en</th>
+          <th>Etiquetas</th>
+          <th class="nc-cell-actions"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in personas %}
+        <tr>
+          <td><span class="nc-mono">{{ p.id }}</span></td>
+          <td>{{ p.name }}</td>
+          <td><span class="nc-chip nc-chip--code">{{ p.primary_language }}</span></td>
+          <td>
+            {% for lang in p.target_languages %}
+            <span class="nc-chip nc-chip--muted nc-chip--code">{{ lang }}</span>
+            {% endfor %}
+          </td>
+          <td>
+            {% for tag in p.routing_tags %}
+            <span class="nc-chip nc-chip--muted">{{ tag }}</span>
+            {% endfor %}
+          </td>
+          <td class="nc-cell-actions">
+            <a href="/dashboard/personas/{{ p.id }}/edit" class="nc-btn nc-btn--sm">
+              <i class="ti ti-edit" aria-hidden="true"></i>
+              <span>Editar</span>
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="nc-empty">
+      <div class="nc-empty__icon"><i class="ti ti-user-off" aria-hidden="true"></i></div>
+      <div class="nc-empty__title">Todavía no tienes voces</div>
+      <p class="nc-empty__body">Crea una arriba. Tu voz es el estilo con el que la IA escribe los textos de tus clips.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

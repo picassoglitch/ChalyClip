@@ -1,6 +1,6 @@
 """Tests for the diarize service — focuses on graceful-skip semantics
 and the cached-result handling. The actual pyannote call lives in
-nexoclip.diarize._worker (subprocess) and is integration-tested
+chalybclip.diarize._worker (subprocess) and is integration-tested
 manually since it needs HF_TOKEN + a GPU."""
 
 from __future__ import annotations
@@ -10,10 +10,10 @@ from pathlib import Path
 
 import pytest
 
-from nexoclip.config import DiarizationConfig
-from nexoclip.diarize import Diarization, diarize, is_diarization_available
-from nexoclip.diarize.models import DiarizationSegment, SpeakerEmbedding
-from nexoclip.ingest import Stream
+from chalybclip.config import DiarizationConfig
+from chalybclip.diarize import Diarization, diarize, is_diarization_available
+from chalybclip.diarize.models import DiarizationSegment, SpeakerEmbedding
+from chalybclip.ingest import Stream
 
 
 def _make_stream(tmp_path: Path) -> Stream:
@@ -185,7 +185,7 @@ async def test_worker_timeout_degrades_to_skipped(
     to skipped-with-reason instead of hanging the whole pipeline forever."""
     import subprocess as _subprocess
 
-    from nexoclip.diarize import service as service_mod
+    from chalybclip.diarize import service as service_mod
 
     monkeypatch.setenv("HF_TOKEN", "hf_fake_for_tests")
     monkeypatch.setattr(service_mod, "is_diarization_available", lambda: True)

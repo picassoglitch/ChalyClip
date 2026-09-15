@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from nexoclip.clip import Clip
-from nexoclip.db.adapters import (
+from chalybclip.clip import Clip
+from chalybclip.db.adapters import (
     candidate_pk,
     candidate_to_row,
     clip_to_row,
@@ -14,10 +14,10 @@ from nexoclip.db.adapters import (
     transcript_to_row,
     variant_to_row,
 )
-from nexoclip.detect import Candidate
-from nexoclip.ingest import Stream
-from nexoclip.llm import Variant
-from nexoclip.transcribe import Segment, Transcript, Word
+from chalybclip.detect import Candidate
+from chalybclip.ingest import Stream
+from chalybclip.llm import Variant
+from chalybclip.transcribe import Segment, Transcript, Word
 
 
 def _stream(tenant: str = "ten_a") -> Stream:

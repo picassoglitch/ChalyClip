@@ -17,9 +17,9 @@ from pathlib import Path
 
 import pytest
 
-from nexoclip.clip import auto_correct as ac
-from nexoclip.clip.auto_correct import auto_correct_clip
-from nexoclip.clip.breakdown import ClipBreakdown
+from chalybclip.clip import auto_correct as ac
+from chalybclip.clip.auto_correct import auto_correct_clip
+from chalybclip.clip.breakdown import ClipBreakdown
 
 
 @pytest.fixture(autouse=True)

@@ -1,4 +1,4 @@
-"""CLI smoke tests for `nexoclip detect`."""
+"""CLI smoke tests for `chalybclip detect`."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from nexoclip.cli import app
-from nexoclip.transcribe import Segment, Transcript, Word
+from chalybclip.cli import app
+from chalybclip.transcribe import Segment, Transcript, Word
 
 from ._fixtures import make_stream
 
@@ -48,7 +48,7 @@ def _seed_artifacts(tmp_path: Path, *, stream_id: str = "str_01CLI") -> Path:
 
 
 def _seed_config(tmp_path: Path) -> Path:
-    config_path = tmp_path / "nexoclip.yaml"
+    config_path = tmp_path / "chalybclip.yaml"
     config_path.write_text(
         """
 detection:

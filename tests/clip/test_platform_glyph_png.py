@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from nexoclip.clip.platform_glyph_png import platform_glyph_png_path
+from chalybclip.clip.platform_glyph_png import platform_glyph_png_path
 
 
 def test_supported_platforms_render_a_png() -> None:

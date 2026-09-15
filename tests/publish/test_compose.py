@@ -8,7 +8,7 @@ feeding it the full caption shipped every tag block twice.
 
 from __future__ import annotations
 
-from nexoclip.publish.compose import assemble_caption
+from chalybclip.publish.compose import assemble_caption
 
 
 def test_assemble_caption_orders_blocks() -> None:
@@ -34,7 +34,7 @@ def test_sans_tags_variant_drops_only_the_tag_line() -> None:
 def test_growth_content_plus_asset_tags_never_duplicates() -> None:
     """End-to-end shape of the fix: sans-tags caption through the asset
     matrix + caption_with_tags() yields exactly ONE tag block."""
-    from nexoclip.publish.assets import build_platform_assets
+    from chalybclip.publish.assets import build_platform_assets
 
     sans_tags = assemble_caption(
         hook="HOOK", body="cuerpo", hashtags=[], handle_suffix="",

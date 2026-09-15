@@ -12,7 +12,7 @@ import httpx
 import pytest
 import respx
 
-from nexoclip.integrations.zernio.client import ZernioClient, ZernioError
+from chalybclip.integrations.zernio.client import ZernioClient, ZernioError
 
 _BASE = "https://zernio.com/api/v1"
 
@@ -134,7 +134,7 @@ async def test_connect_url_returns_authurl_with_profile_id() -> None:
             link = await _client(http).connect_url(
                 "tiktok",
                 profile_id="ten_alice",
-                redirect_url="https://nexoclip.test/dashboard/publish/zernio/connected",
+                redirect_url="https://chalybclip.test/dashboard/publish/zernio/connected",
             )
     assert link.auth_url.startswith("https://zernio.com/oauth/tiktok")
     sent = route.calls.last.request
@@ -145,7 +145,7 @@ async def test_connect_url_returns_authurl_with_profile_id() -> None:
     # redirect_url sends the post-OAuth popup back to OUR page instead
     # of Zernio's dashboard (white-label flow).
     assert sent.url.params.get("redirect_url") == (
-        "https://nexoclip.test/dashboard/publish/zernio/connected"
+        "https://chalybclip.test/dashboard/publish/zernio/connected"
     )
 
 
@@ -173,7 +173,7 @@ async def test_connect_url_headless_sets_param() -> None:
             await _client(http).connect_url(
                 "facebook",
                 profile_id="ten_alice",
-                redirect_url="https://nexoclip.test/dashboard/publish/zernio/connected?platform=facebook",
+                redirect_url="https://chalybclip.test/dashboard/publish/zernio/connected?platform=facebook",
                 headless=True,
             )
     sent = route.calls.last.request
@@ -181,7 +181,7 @@ async def test_connect_url_headless_sets_param() -> None:
     # The platform rides on the redirect_url query string, percent-
     # encoding intact, so /connected knows which chip just connected.
     assert sent.url.params.get("redirect_url") == (
-        "https://nexoclip.test/dashboard/publish/zernio/connected?platform=facebook"
+        "https://chalybclip.test/dashboard/publish/zernio/connected?platform=facebook"
     )
 
 
@@ -431,7 +431,7 @@ async def test_create_post_sends_media_url_accounts_and_tiktok_consent() -> None
             result = await _client(http).create_post(
                 profile_id="ten_alice",
                 content="My caption",
-                media_url="https://nexoclip.test/api/internal/clip/clp_x?sig=...",
+                media_url="https://chalybclip.test/api/internal/clip/clp_x?sig=...",
                 platforms=[("tiktok", "acct_tt_1"), ("youtube", "acct_yt_2")],
                 publish_now=True,
                 tiktok_settings={
@@ -447,7 +447,7 @@ async def test_create_post_sends_media_url_accounts_and_tiktok_consent() -> None
     payload = json.loads(sent.content.decode())
     # Media referenced BY URL (no presigned upload in the common path).
     assert payload["mediaItems"] == [
-        {"type": "video", "url": "https://nexoclip.test/api/internal/clip/clp_x?sig=..."}
+        {"type": "video", "url": "https://chalybclip.test/api/internal/clip/clp_x?sig=..."}
     ]
     # Per-platform accountId is required on every platforms[] entry.
     assert payload["platforms"] == [
@@ -599,7 +599,7 @@ async def test_list_queues_empty_when_none() -> None:
 async def test_upsert_default_queue_sends_slots() -> None:
     body = {
         "success": True,
-        "schedule": {"_id": "q9", "name": "NexoClip Queue", "slots": []},
+        "schedule": {"_id": "q9", "name": "ChalyClip Queue", "slots": []},
     }
     slots = [{"dayOfWeek": 1, "time": "09:00"}, {"dayOfWeek": 5, "time": "18:30"}]
     async with httpx.AsyncClient() as http:
@@ -781,7 +781,7 @@ async def test_create_sequence_sends_steps() -> None:
             )
             await _client(http).create_sequence(
                 profile_id="prof", account_id="acc1", platform="instagram",
-                name="Bienvenida Nexo", steps=steps,
+                name="Bienvenida Chalyb", steps=steps,
             )
     payload = json.loads(route.calls.last.request.content.decode())
     assert payload["steps"] == steps

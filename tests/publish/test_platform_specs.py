@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from nexoclip.publish.platform_specs import (
+from chalybclip.publish.platform_specs import (
     DEFAULT_SPEC,
     PLATFORM_SPECS,
     fit_caption,

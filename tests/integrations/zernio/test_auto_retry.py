@@ -17,22 +17,22 @@ import pytest
 import pytest_asyncio
 import respx
 
-from nexoclip.db import (
+from chalybclip.db import (
     Database,
     ZernioAutoRetriesRepo,
     ZernioEventsRepo,
     apply_migrations,
 )
-from nexoclip.integrations.zernio.events import process_zernio_event
-from nexoclip.settings import get_settings
+from chalybclip.integrations.zernio.events import process_zernio_event
+from chalybclip.settings import get_settings
 
 _ZBASE = "https://zernio.com/api/v1"
 
 
 @pytest.fixture
 def retry_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    monkeypatch.setenv("NEXOCLIP_ZERNIO_API_KEY", "sk_test_retry")
-    monkeypatch.setenv("NEXOCLIP_HUB_AUTO_RETRY_DELAY_S", "0")  # inline
+    monkeypatch.setenv("CHALYBCLIP_ZERNIO_API_KEY", "sk_test_retry")
+    monkeypatch.setenv("CHALYBCLIP_HUB_AUTO_RETRY_DELAY_S", "0")  # inline
     get_settings.cache_clear()
     try:
         yield
@@ -130,8 +130,8 @@ async def test_non_transient_failure_does_not_auto_retry(
 async def test_auto_retry_disabled_when_delay_negative(
     db: Database, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("NEXOCLIP_ZERNIO_API_KEY", "sk_x")
-    monkeypatch.setenv("NEXOCLIP_HUB_AUTO_RETRY_DELAY_S", "-1")
+    monkeypatch.setenv("CHALYBCLIP_ZERNIO_API_KEY", "sk_x")
+    monkeypatch.setenv("CHALYBCLIP_HUB_AUTO_RETRY_DELAY_S", "-1")
     get_settings.cache_clear()
     try:
         await _store_failed(

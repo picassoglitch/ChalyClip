@@ -9,7 +9,7 @@ from pathlib import Path
 import httpx
 import pytest_asyncio
 
-from nexoclip.db import (
+from chalybclip.db import (
     CandidatesRepo,
     ClipsRepo,
     ConnectedAccountsRepo,
@@ -22,7 +22,7 @@ from nexoclip.db import (
     VariantsRepo,
     apply_migrations,
 )
-from nexoclip.db.models import (
+from chalybclip.db.models import (
     CandidateRow,
     ClipRow,
     ConnectedAccount,
@@ -30,8 +30,8 @@ from nexoclip.db.models import (
     StreamRow,
     VariantRow,
 )
-from nexoclip.metrics import NormalizedMetric, run_metrics_ingest
-from nexoclip.tenancy import bound_tenant
+from chalybclip.metrics import NormalizedMetric, run_metrics_ingest
+from chalybclip.tenancy import bound_tenant
 
 
 def _now() -> str:

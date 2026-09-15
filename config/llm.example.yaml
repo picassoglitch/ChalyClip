@@ -13,7 +13,7 @@
 
 providers:
   # Self-hosted open models. Default base_url is a local Ollama; the
-  # NEXOCLIP_OPENLLM_BASE_URL env var overrides it in prod (point it at a
+  # CHALYBCLIP_OPENLLM_BASE_URL env var overrides it in prod (point it at a
   # tunneled/hosted runtime). Keyless by default — if you use a hosted
   # OpenAI-compatible gateway instead, set OPENLLM_API_KEY.
   openllm:
@@ -21,7 +21,7 @@ providers:
     api_key_env: OPENLLM_API_KEY
     api_key_required: false
     base_url: http://localhost:11434/v1
-    base_url_env: NEXOCLIP_OPENLLM_BASE_URL
+    base_url_env: CHALYBCLIP_OPENLLM_BASE_URL
     models:
       standard: qwen2.5:7b-instruct-q4_K_M      # already pulled on the Quantor PC
       premium: qwen2.5:7b-instruct-q4_K_M       # bump when the box has VRAM for a 14B
@@ -34,7 +34,7 @@ providers:
     api_key_env: OPENLLM_API_KEY
     api_key_required: false
     base_url: http://localhost:11434/v1
-    base_url_env: NEXOCLIP_OPENLLM_BASE_URL
+    base_url_env: CHALYBCLIP_OPENLLM_BASE_URL
     models:
       standard: qwen2.5vl:7b
       premium: qwen2.5vl:7b

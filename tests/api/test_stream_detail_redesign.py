@@ -13,14 +13,14 @@ import datetime as _dt
 import httpx
 import pytest
 
-from nexoclip.db import (
+from chalybclip.db import (
     CandidatesRepo,
     ClipsRepo,
     Database,
     StreamsRepo,
 )
-from nexoclip.db.models import CandidateRow, ClipRow, StreamRow
-from nexoclip.tenancy import bound_tenant
+from chalybclip.db.models import CandidateRow, ClipRow, StreamRow
+from chalybclip.tenancy import bound_tenant
 
 from .conftest import auth
 
@@ -138,8 +138,8 @@ async def test_complete_stream_shows_humanized_ai_signals(
 async def _seed_run_spend(db: Database, tenant_id: str) -> None:
     """Record an anthropic LLM call (37k tokens) + an assemblyai
     transcription ($0.043) against str_sd."""
-    from nexoclip.db import LLMCallsRepo
-    from nexoclip.db.models import LLMCallRow
+    from chalybclip.db import LLMCallsRepo
+    from chalybclip.db.models import LLMCallRow
 
     with bound_tenant(tenant_id):
         repo = LLMCallsRepo(db)
@@ -166,11 +166,11 @@ async def test_run_cost_shows_tokens_not_usd_to_creator(
     """Token T5 — creators see this run's cost in TOKENS only, never USD.
     Per-source breakdown: LLM native token count, transcription cost→tokens,
     plus the per-run base charge."""
-    from nexoclip.settings import get_settings
+    from chalybclip.settings import get_settings
 
     # Pin the base charge so the totals are deterministic; non-admin tenant.
-    monkeypatch.setenv("NEXOCLIP_PIPELINE_BASE_CHARGE_USD_MICROS", "60000")
-    monkeypatch.delenv("NEXOCLIP_ADMIN_TENANT_IDS", raising=False)
+    monkeypatch.setenv("CHALYBCLIP_PIPELINE_BASE_CHARGE_USD_MICROS", "60000")
+    monkeypatch.delenv("CHALYBCLIP_ADMIN_TENANT_IDS", raising=False)
     get_settings.cache_clear()
 
     tenant_id = tenants["alice"]["id"]
@@ -209,10 +209,10 @@ async def test_run_cost_shows_usd_to_admin_only(
 ) -> None:
     """The admin-only USD economics block renders for an admin tenant —
     on TOP of the token view creators see."""
-    from nexoclip.settings import get_settings
+    from chalybclip.settings import get_settings
 
     tenant_id = tenants["alice"]["id"]
-    monkeypatch.setenv("NEXOCLIP_ADMIN_TENANT_IDS", tenant_id)
+    monkeypatch.setenv("CHALYBCLIP_ADMIN_TENANT_IDS", tenant_id)
     get_settings.cache_clear()
 
     await _seed_stream(db, tenant_id)

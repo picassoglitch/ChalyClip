@@ -8,9 +8,9 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 
-from nexoclip.db import Database, StreamsRepo, TenantsRepo, apply_migrations
-from nexoclip.db.models import StreamRow
-from nexoclip.tenancy import bound_tenant
+from chalybclip.db import Database, StreamsRepo, TenantsRepo, apply_migrations
+from chalybclip.db.models import StreamRow
+from chalybclip.tenancy import bound_tenant
 
 
 @pytest_asyncio.fixture

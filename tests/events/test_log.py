@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from nexoclip.db import Database, EventsRepo, TenantsRepo, apply_migrations
-from nexoclip.errors import TenancyError
-from nexoclip.events import (
+from chalybclip.db import Database, EventsRepo, TenantsRepo, apply_migrations
+from chalybclip.errors import TenancyError
+from chalybclip.events import (
     CLIP_READY_FOR_REVIEW,
     LLM_EXHAUSTED,
     LLM_FALLBACK,
@@ -17,7 +17,7 @@ from nexoclip.events import (
     STREAM_PROCESSED,
     emit,
 )
-from nexoclip.tenancy import bound_tenant
+from chalybclip.tenancy import bound_tenant
 
 
 def test_canonical_event_types_have_stable_strings() -> None:

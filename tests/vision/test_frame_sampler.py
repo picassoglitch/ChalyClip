@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from nexoclip.errors import DetectionError
-from nexoclip.vision import sample_frames, save_frames
+from chalybclip.errors import DetectionError
+from chalybclip.vision import sample_frames, save_frames
 
 from ._synth import build_indexed_clip
 

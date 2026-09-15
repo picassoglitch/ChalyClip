@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from nexoclip.db import Database, apply_migrations, schema_version
-from nexoclip.db.migrations import MigrationError, _discover_migrations
+from chalybclip.db import Database, apply_migrations, schema_version
+from chalybclip.db.migrations import MigrationError, _discover_migrations
 
 from .._db_backend import pg_enabled
 
-_CURRENT_HEAD = 57  # bumped each time we add a migration (057_platform_cooldowns)
+_CURRENT_HEAD = 58  # bumped each time we add a migration (058_rebrand_brand_kit_columns)
 
 # These assert SQLite implementation details (sqlite_master, PRAGMA). The
 # Postgres schema + FK enforcement are covered by test_pg_migration.py.

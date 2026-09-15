@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import pytest
 
-from nexoclip.db import Database, DriveExportSettingsRepo, TenantsRepo
-from nexoclip.tenancy import bound_tenant
+from chalybclip.db import Database, DriveExportSettingsRepo, TenantsRepo
+from chalybclip.tenancy import bound_tenant
 
 
 async def test_get_returns_none_before_any_touch(migrated_db: Database) -> None:

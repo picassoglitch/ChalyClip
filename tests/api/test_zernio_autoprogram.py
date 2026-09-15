@@ -27,8 +27,8 @@ import pytest
 import pytest_asyncio
 import respx
 
-import nexoclip.api._clip_render as _clip_render
-from nexoclip.db import (
+import chalybclip.api._clip_render as _clip_render
+from chalybclip.db import (
     AutopublishSettingsRepo,
     CandidatesRepo,
     ClipsRepo,
@@ -39,10 +39,10 @@ from nexoclip.db import (
     VariantsRepo,
     ZernioPublishesRepo,
 )
-from nexoclip.db.models import CandidateRow, ClipRow, StreamRow, VariantRow
-from nexoclip.integrations.nexo_ai.service import sync_tenant_tier
-from nexoclip.settings import get_settings
-from nexoclip.tenancy import bound_tenant
+from chalybclip.db.models import CandidateRow, ClipRow, StreamRow, VariantRow
+from chalybclip.integrations.chalyb.service import sync_tenant_tier
+from chalybclip.settings import get_settings
+from chalybclip.tenancy import bound_tenant
 
 from .conftest import auth
 
@@ -51,8 +51,8 @@ _ZBASE = "https://zernio.com/api/v1"
 
 @pytest.fixture
 def publish_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    monkeypatch.setenv("NEXOCLIP_ZERNIO_API_KEY", "sk_test_ap2")
-    monkeypatch.setenv("NEXOCLIP_INTERNAL_SIGNING_SECRET", "sign_me_ap2")
+    monkeypatch.setenv("CHALYBCLIP_ZERNIO_API_KEY", "sk_test_ap2")
+    monkeypatch.setenv("CHALYBCLIP_INTERNAL_SIGNING_SECRET", "sign_me_ap2")
     get_settings.cache_clear()
 
     async def _rendered(**_kw: Any) -> None:
@@ -156,7 +156,7 @@ def _mock_accounts(mock: respx.Router, *platforms: str) -> None:
 async def test_build_post_stitches_hook_body_hashtags_suffix(
     db: Database, alice: dict[str, str]
 ) -> None:
-    from nexoclip.publish.compose import build_post
+    from chalybclip.publish.compose import build_post
 
     with bound_tenant(alice["id"]):
         post = await build_post(
@@ -172,7 +172,7 @@ async def test_build_post_stitches_hook_body_hashtags_suffix(
 async def test_build_post_no_variant_is_empty(
     db: Database, alice: dict[str, str]
 ) -> None:
-    from nexoclip.publish.compose import build_post
+    from chalybclip.publish.compose import build_post
 
     with bound_tenant(alice["id"]):
         post = await build_post(db, "clp_missing", handle_suffix="@x")
@@ -190,7 +190,7 @@ async def test_build_post_flags_degenerate_one_word_caption(
     """A hookless variant whose caption is a stray token (the persona-name
     fallback that shipped literal "viral" posts) must be flagged so the
     automated publish paths refuse it."""
-    from nexoclip.publish.compose import build_post
+    from chalybclip.publish.compose import build_post
 
     now = _dt.datetime.now(_dt.UTC).isoformat()
     await _seed_clip(
@@ -299,7 +299,7 @@ async def test_schedule_auto_409s_while_a_run_is_fresh(
     tenants: dict[str, dict[str, str]],
 ) -> None:
     """A held cross-worker lock blocks a second click — no double-schedule."""
-    from nexoclip.db import AutoprogLocksRepo
+    from chalybclip.db import AutoprogLocksRepo
 
     tid = tenants["alice"]["id"]
     await sync_tenant_tier(db, tenant_id=tid, tier="all_access")
@@ -371,7 +371,7 @@ async def test_handsfree_queue_spreads_and_enriches(
 ) -> None:
     """A finished VOD's clips, in hands_free + queue mode, schedule across
     best-time slots (scheduledFor set, not immediate) with enriched text."""
-    from nexoclip.api.routers.zernio import autopublish_hands_free_sweep
+    from chalybclip.api.routers.zernio import autopublish_hands_free_sweep
 
     await AutopublishSettingsRepo(db).upsert(
         alice["id"], enabled=True, mode="hands_free", targets="tiktok",
@@ -410,7 +410,7 @@ async def test_handsfree_first_clip_scheduled_immediately(
 ) -> None:
     """The single, first eligible clip schedules ~now (min_gap spaces the rest,
     it shouldn't delay the first) — the rulebook path always uses scheduledFor."""
-    from nexoclip.api.routers.zernio import autopublish_hands_free_sweep
+    from chalybclip.api.routers.zernio import autopublish_hands_free_sweep
 
     await AutopublishSettingsRepo(db).upsert(
         alice["id"], enabled=True, mode="hands_free", targets="tiktok",
@@ -428,7 +428,7 @@ async def test_handsfree_first_clip_scheduled_immediately(
             clip_scores=[("clp_1", 0.9)],
         )
     assert n == 1
-    from nexoclip.publish.pacing import DEFAULT_PLATFORM_RULES
+    from chalybclip.publish.pacing import DEFAULT_PLATFORM_RULES
     rule = DEFAULT_PLATFORM_RULES["tiktok"]
     payload = json.loads(post_route.calls.last.request.content.decode())
     # Scheduled ~now (within the jitter window), NOT a full min_gap (180m) out.
@@ -444,7 +444,7 @@ async def test_handsfree_publishes_low_signal_but_publish_ready_clip(
     score. A YouTube-style clip with a tiny candidate score (no chat heat) but
     a publish_ready render must still go out — the old detector-score gate
     silently dropped every such clip."""
-    from nexoclip.api.routers.zernio import autopublish_hands_free_sweep
+    from chalybclip.api.routers.zernio import autopublish_hands_free_sweep
 
     now = _dt.datetime.now(_dt.UTC).isoformat()
     await _seed_clip(
@@ -479,7 +479,7 @@ async def test_handsfree_skips_reject_clip_despite_high_detector_score(
     """A clip the publishability verdict marks `reject` is never auto-posted,
     even when its detector score and raw publishability score are high (a
     blocking integrity issue forces reject)."""
-    from nexoclip.api.routers.zernio import autopublish_hands_free_sweep
+    from chalybclip.api.routers.zernio import autopublish_hands_free_sweep
 
     now = _dt.datetime.now(_dt.UTC).isoformat()
     await _seed_clip(
@@ -513,7 +513,7 @@ async def test_handsfree_skips_degenerate_caption_clip(
 ) -> None:
     """Hands-free must never ship a contentless post (no hook, one-word
     body) — the exact failure that published 18 shorts titled "viral"."""
-    from nexoclip.api.routers.zernio import autopublish_hands_free_sweep
+    from chalybclip.api.routers.zernio import autopublish_hands_free_sweep
 
     now = _dt.datetime.now(_dt.UTC).isoformat()
     await _seed_clip(
@@ -548,7 +548,7 @@ async def test_handsfree_empty_targets_falls_back_to_all_connected(
     """Regression: hands_free with NO target platforms picked must post to all
     connected accounts (it used to silently no-op on empty targets, so
     channel-auto clips never published)."""
-    from nexoclip.api.routers.zernio import autopublish_hands_free_sweep
+    from chalybclip.api.routers.zernio import autopublish_hands_free_sweep
 
     await AutopublishSettingsRepo(db).upsert(
         alice["id"], enabled=True, mode="hands_free", targets="",  # EMPTY
@@ -579,8 +579,8 @@ async def test_handsfree_spaces_by_platform_min_gap(
     """Two clips to TikTok → consecutive scheduled posts respect TikTok's
     min_gap from the rulebook (180 min), not a flat 30-min drip. The first
     fires ~now; the second a gap later (± the jitter window)."""
-    from nexoclip.api.routers.zernio import autopublish_hands_free_sweep
-    from nexoclip.publish.pacing import DEFAULT_PLATFORM_RULES
+    from chalybclip.api.routers.zernio import autopublish_hands_free_sweep
+    from chalybclip.publish.pacing import DEFAULT_PLATFORM_RULES
 
     await AutopublishSettingsRepo(db).upsert(
         alice["id"], enabled=True, mode="hands_free", targets="tiktok",
@@ -719,7 +719,7 @@ async def test_reprocess_failed_reschedules_via_rulebook(
 
     # Both new posts are SCHEDULED, spaced by TikTok's rulebook min_gap (180
     # min, ± jitter) — not a flat 60-min drip — each with a fresh signed URL.
-    from nexoclip.publish.pacing import DEFAULT_PLATFORM_RULES
+    from chalybclip.publish.pacing import DEFAULT_PLATFORM_RULES
     rule = DEFAULT_PLATFORM_RULES["tiktok"]
     whens = sorted(_dt.datetime.fromisoformat(p["scheduledFor"]) for p in created)
     assert whens[1] - whens[0] >= _dt.timedelta(minutes=rule.min_gap_minutes - 2 * rule.jitter_minutes)

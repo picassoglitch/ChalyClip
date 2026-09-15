@@ -1,7 +1,7 @@
 """Task 3 — Drop-a-URL self-serve ingest endpoints.
 
 NB: dashboard cookie-login flow is pre-broken in the test fixtures
-(slice O.22 redirected login to nexo-ai; tests never got updated).
+(slice O.22 redirected login to chalyb; tests never got updated).
 We use bearer-header auth here — the auth middleware accepts either
 mechanism for /dashboard/* routes, and bearer is what the other
 passing API tests use.
@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import httpx
 
-from nexoclip.db import Database, PersonasRepo, StreamsRepo
-from nexoclip.tenancy import bound_tenant
+from chalybclip.db import Database, PersonasRepo, StreamsRepo
+from chalybclip.tenancy import bound_tenant
 
 
 def auth(token: str) -> dict[str, str]:

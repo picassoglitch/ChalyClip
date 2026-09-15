@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from nexoclip.retention import reclaim_stream_source
+from chalybclip.retention import reclaim_stream_source
 
 
 def _make_source(stream_dir: Path) -> tuple[Path, Path]:

@@ -12,9 +12,9 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel
 
-from nexoclip.errors import LLMError
-from nexoclip.llm import LLMRouter, MultimodalImage
-from nexoclip.llm.config import ProviderConfig
+from chalybclip.errors import LLMError
+from chalybclip.llm import LLMRouter, MultimodalImage
+from chalybclip.llm.config import ProviderConfig
 
 from ._fakes import FakeProvider
 from ._fixtures import make_llm_config

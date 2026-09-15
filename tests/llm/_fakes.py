@@ -6,8 +6,8 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from nexoclip.errors import LLMError
-from nexoclip.llm import LLMProvider, MultimodalImage, ProviderResult, RetryableLLMError
+from chalybclip.errors import LLMError
+from chalybclip.llm import LLMProvider, MultimodalImage, ProviderResult, RetryableLLMError
 
 
 class FakeProvider(LLMProvider):

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from nexoclip.clip import cut_window
-from nexoclip.errors import ClipError
+from chalybclip.clip import cut_window
+from chalybclip.errors import ClipError
 
 
 def test_normal_window() -> None:

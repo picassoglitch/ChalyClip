@@ -19,8 +19,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from nexoclip.clip import hybrid_recorder
-from nexoclip.clip.hybrid_recorder import (
+from chalybclip.clip import hybrid_recorder
+from chalybclip.clip.hybrid_recorder import (
     HybridRecordingError,
     _capture_overlay_alpha_sequence,
     _ffmpeg_composite_alpha_over_source,
@@ -280,7 +280,7 @@ def test_composite_writes_to_partial_then_renames(
         # on hybrid_recorder.subprocess.run is GLOBAL (it's the stdlib
         # module), so the outro step's ffprobe calls land here too —
         # and ffprobe's last arg is the file being probed, i.e. the
-        # bundled nexoclip/clip/assets/outro.mp4. Writing to cmd[-1]
+        # bundled chalybclip/clip/assets/outro.mp4. Writing to cmd[-1]
         # unconditionally overwrote the real end card in the working
         # tree on every test run (it even got committed broken once).
         if tmp_path in out.parents:

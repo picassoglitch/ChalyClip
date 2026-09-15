@@ -6,8 +6,8 @@ import asyncio
 
 import pytest
 
-from nexoclip.errors import TenancyError
-from nexoclip.tenancy import (
+from chalybclip.errors import TenancyError
+from chalybclip.tenancy import (
     assert_tenant,
     bound_tenant,
     current_tenant_id,

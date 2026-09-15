@@ -4,7 +4,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 
-from nexoclip.integrations.zernio.webhooks import (
+from chalybclip.integrations.zernio.webhooks import (
     parse_post_event,
     verify_zernio_signature,
 )

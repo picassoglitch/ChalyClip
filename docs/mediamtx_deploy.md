@@ -1,13 +1,13 @@
-# Deploying MediaMTX for NexoClip live ingest
+# Deploying MediaMTX for ChalyClip live ingest
 
-> **Canonical deploy is now Path B — the `nexoclip-live` repo + S3-compatible
+> **Canonical deploy is now Path B — the `chalybclip-live` repo + S3-compatible
 > object storage.** The MediaMTX service lives in its own repo
-> (`picassoglitch/nexoclip-live`), records each stream, and uploads it to an
-> object store; NexoClip pulls it to auto-clip (Phase L.2). **Default store is
+> (`picassoglitch/chalybclip-live`), records each stream, and uploads it to an
+> object store; ChalyClip pulls it to auto-clip (Phase L.2). **Default store is
 > Cloudflare R2** — $0 egress, so the once-per-stream download is free
 > (~$0.005/stream vs ~$0.40 on metered-egress stores); cheapest for video and
 > it isolates bulky recordings from the shared Supabase egress budget.
-> Supabase/MinIO/S3 also work — it's all the same `NEXOCLIP_LIVE_STORAGE_*`
+> Supabase/MinIO/S3 also work — it's all the same `CHALYBCLIP_LIVE_STORAGE_*`
 > config, only the endpoint + keys change.
 >
 > The shared-`/data`-volume approach below is **Path A (legacy)** — kept for
@@ -19,29 +19,29 @@
 ## Path B — separate repo + object storage (recommended)
 
 ```
-OBS ──rtmp──▶ nexoclip-live (MediaMTX svc) ──upload──▶ store/live/<stream_id>/
+OBS ──rtmp──▶ chalybclip-live (MediaMTX svc) ──upload──▶ store/live/<stream_id>/
                      │ webhooks (authorize/started/ended)        ▲
                      ▼                                            │ pull
-                  NexoClip  ──auto-clip──────────────────────────┘
+                  ChalyClip  ──auto-clip──────────────────────────┘
 ```
 
-- **Service repo + full deploy steps:** `nexoclip-live/README.md`.
-- **NexoClip side:** set `NEXOCLIP_LIVE_STORAGE_BUCKET`,
-  `NEXOCLIP_LIVE_STORAGE_ENDPOINT`, `NEXOCLIP_LIVE_STORAGE_ACCESS_KEY_ID`,
-  `NEXOCLIP_LIVE_STORAGE_SECRET_ACCESS_KEY` (+ optional
-  `NEXOCLIP_LIVE_STORAGE_PREFIX`, `NEXOCLIP_LIVE_STORAGE_REGION`) and
-  `NEXOCLIP_LIVE_RTMP_BASE_URL`. When the bucket is set, the live runner
+- **Service repo + full deploy steps:** `chalybclip-live/README.md`.
+- **ChalyClip side:** set `CHALYBCLIP_LIVE_STORAGE_BUCKET`,
+  `CHALYBCLIP_LIVE_STORAGE_ENDPOINT`, `CHALYBCLIP_LIVE_STORAGE_ACCESS_KEY_ID`,
+  `CHALYBCLIP_LIVE_STORAGE_SECRET_ACCESS_KEY` (+ optional
+  `CHALYBCLIP_LIVE_STORAGE_PREFIX`, `CHALYBCLIP_LIVE_STORAGE_REGION`) and
+  `CHALYBCLIP_LIVE_RTMP_BASE_URL`. When the bucket is set, the live runner
   pulls recordings from the store instead of disk — no shared volume.
 
   **Cloudflare R2 (default):** create a bucket, create an R2 API token, and set
-  `NEXOCLIP_LIVE_STORAGE_ENDPOINT=https://<ACCOUNT_ID>.r2.cloudflarestorage.com`
-  with `NEXOCLIP_LIVE_STORAGE_REGION=auto`. $0 egress + a 10 GB / 1M-op free
+  `CHALYBCLIP_LIVE_STORAGE_ENDPOINT=https://<ACCOUNT_ID>.r2.cloudflarestorage.com`
+  with `CHALYBCLIP_LIVE_STORAGE_REGION=auto`. $0 egress + a 10 GB / 1M-op free
   tier, so low volume is genuinely free and there's no monthly minimum.
 
   **Supabase Storage (alternative):** create a private bucket, grab S3 keys
   from *Project Settings → Storage*, set
-  `NEXOCLIP_LIVE_STORAGE_ENDPOINT=https://<ref>.supabase.co/storage/v1/s3`
-  + `NEXOCLIP_LIVE_STORAGE_REGION=<project region>`, and raise the bucket's
+  `CHALYBCLIP_LIVE_STORAGE_ENDPOINT=https://<ref>.supabase.co/storage/v1/s3`
+  + `CHALYBCLIP_LIVE_STORAGE_REGION=<project region>`, and raise the bucket's
   file-size limit (default 50 MB). Note: ~$0.09/GB egress on every pull, and
   it draws from the project-wide egress budget.
 
@@ -52,7 +52,7 @@ The rest of this doc is **Path A (legacy, shared volume).**
 # Path A (legacy) — shared `/data` volume
 
 This is the operator-side deploy guide for the MediaMTX service that
-sits in front of NexoClip and accepts RTMP push from OBS.
+sits in front of ChalyClip and accepts RTMP push from OBS.
 
 **One-time setup**. Run through this once; MediaMTX then runs as a
 separate Railway service indefinitely.
@@ -61,57 +61,57 @@ separate Railway service indefinitely.
 
 ```
 OBS / Streamlabs
-    │  rtmp://live.nexoclip.nexo-ai.world/live/<stream_key>
+    │  rtmp://live.chalybclip.chalyb.com/live/<stream_key>
     ▼
 ┌────────────────────────────┐
 │ MediaMTX (Railway service) │  config: infra/mediamtx.yml
 │ - RTMP on :1935            │
 │ - records to /data/live/   │
-│ - calls NexoClip webhooks  │
+│ - calls ChalyClip webhooks  │
 └──────────┬─────────────────┘
            │ webhooks (auth, started, ended)
            ▼
 ┌────────────────────────────┐
-│ NexoClip (existing service)│
+│ ChalyClip (existing service)│
 │ - creates streams row      │
 │ - existing VOD pipeline    │
 └────────────────────────────┘
 ```
 
 The two services share the same `/data` volume so MediaMTX's
-recording lands where NexoClip's existing pipeline expects to find
+recording lands where ChalyClip's existing pipeline expects to find
 clip sources.
 
 ## Step 1 — Create the MediaMTX Railway service
 
-In your Railway project (the one already running NexoClip):
+In your Railway project (the one already running ChalyClip):
 
 1. **+ New** → **Empty Service**
 2. Settings → name it `mediamtx`
 3. **Source** → switch to **Image** → use `bluenviron/mediamtx:latest`
 4. **Networking** → enable Public Networking → expose port `1935`
    (TCP, not HTTP). The host gives you a TCP proxy host + port; CNAME
-   `live.nexoclip.nexo-ai.world` to that host in DNS so the public
-   endpoint is `live.nexoclip.nexo-ai.world:NNNN` — note the port.
-5. **Volume** → attach the SAME volume that NexoClip is mounted on
+   `live.chalybclip.chalyb.com` to that host in DNS so the public
+   endpoint is `live.chalybclip.chalyb.com:NNNN` — note the port.
+5. **Volume** → attach the SAME volume that ChalyClip is mounted on
    (don't create a new one). Mount path `/data`. This is what makes
    the recording handoff work.
 6. **Variables** → add the four below.
 
 ## Step 2 — Environment variables
 
-These three URLs all point at your NexoClip dashboard service
+These three URLs all point at your ChalyClip dashboard service
 (same Railway project, different service):
 
 ```bash
-NEXOCLIP_AUTH_URL=https://nexoclip.nexo-ai.world/api/internal/live/authorize
-NEXOCLIP_STARTED_URL=https://nexoclip.nexo-ai.world/api/internal/live/started
-NEXOCLIP_ENDED_URL=https://nexoclip.nexo-ai.world/api/internal/live/ended
-NEXOCLIP_INTERNAL_SIGNING_SECRET=<SAME value already set on the NexoClip service>
+CHALYBCLIP_AUTH_URL=https://chalybclip.chalyb.com/api/internal/live/authorize
+CHALYBCLIP_STARTED_URL=https://chalybclip.chalyb.com/api/internal/live/started
+CHALYBCLIP_ENDED_URL=https://chalybclip.chalyb.com/api/internal/live/ended
+CHALYBCLIP_INTERNAL_SIGNING_SECRET=<SAME value already set on the ChalyClip service>
 ```
 
-The signing secret MUST match what's set on the NexoClip side — it's
-the bearer MediaMTX passes back to NexoClip on each webhook.
+The signing secret MUST match what's set on the ChalyClip side — it's
+the bearer MediaMTX passes back to ChalyClip on each webhook.
 
 ## Step 3 — Mount the config file
 
@@ -132,13 +132,13 @@ point at `Dockerfile.mediamtx`.
 **Alternative** — use Railway's Config File feature to mount the YAML
 at `/mediamtx.yml`. Slightly more setup; not recommended.
 
-## Step 4 — Set the RTMP URL in NexoClip
+## Step 4 — Set the RTMP URL in ChalyClip
 
-On the NexoClip service (not MediaMTX), add the env var so the
+On the ChalyClip service (not MediaMTX), add the env var so the
 dashboard knows what URL to show operators:
 
 ```bash
-NEXOCLIP_LIVE_RTMP_BASE_URL=rtmp://live.nexoclip.nexo-ai.world:NNNN/live
+CHALYBCLIP_LIVE_RTMP_BASE_URL=rtmp://live.chalybclip.chalyb.com:NNNN/live
 ```
 
 (Replace `NNNN` with the port Railway exposed in step 1.5.)
@@ -146,7 +146,7 @@ NEXOCLIP_LIVE_RTMP_BASE_URL=rtmp://live.nexoclip.nexo-ai.world:NNNN/live
 ## Step 5 — Verify
 
 1. Both services should show **Active** in Railway.
-2. From NexoClip's `/dashboard/live` page: the "Push URL for OBS"
+2. From ChalyClip's `/dashboard/live` page: the "Push URL for OBS"
    section should now be populated (not the "not configured" state).
 3. Click "Generate stream key" — the key value should appear.
 4. In OBS: Settings → Stream → Custom → paste the Server URL +
@@ -168,8 +168,8 @@ NEXOCLIP_LIVE_RTMP_BASE_URL=rtmp://live.nexoclip.nexo-ai.world:NNNN/live
 
 **OBS connects but the publish is rejected**:
 - Stream key is wrong / revoked. Re-generate from the live dashboard.
-- `NEXOCLIP_AUTH_URL` is unset or wrong on the MediaMTX service.
-- `NEXOCLIP_INTERNAL_SIGNING_SECRET` doesn't match across services.
+- `CHALYBCLIP_AUTH_URL` is unset or wrong on the MediaMTX service.
+- `CHALYBCLIP_INTERNAL_SIGNING_SECRET` doesn't match across services.
 
 **Streaming works, recording doesn't appear**:
 - The volume isn't shared between services. Each Railway service must

@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from nexoclip.safety import (
+from chalybclip.safety import (
     PlatformSafetyRule,
     SafetyPolicy,
     evaluate_post_window,

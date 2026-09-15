@@ -21,7 +21,7 @@ from pathlib import Path
 
 _RECORDER_PATH = (
     Path(__file__).resolve().parents[2]
-    / "nexoclip" / "clip" / "preview_recorder.py"
+    / "chalybclip" / "clip" / "preview_recorder.py"
 )
 
 

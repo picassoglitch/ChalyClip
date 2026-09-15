@@ -11,19 +11,19 @@ import pytest
 import pytest_asyncio
 from pydantic import BaseModel
 
-from nexoclip.db import (
+from chalybclip.db import (
     Database,
     EventsRepo,
     LLMCallsRepo,
     TenantsRepo,
     apply_migrations,
 )
-from nexoclip.db.models import LLMCallRow
-from nexoclip.errors import BudgetExceeded
-from nexoclip.governance import BudgetGovernor
-from nexoclip.llm import LLMRouter
-from nexoclip.llm.config import ProviderConfig
-from nexoclip.tenancy import bound_tenant
+from chalybclip.db.models import LLMCallRow
+from chalybclip.errors import BudgetExceeded
+from chalybclip.governance import BudgetGovernor
+from chalybclip.llm import LLMRouter
+from chalybclip.llm.config import ProviderConfig
+from chalybclip.tenancy import bound_tenant
 from tests.llm._fakes import FakeProvider  # type: ignore[import]
 from tests.llm._fixtures import make_llm_config  # type: ignore[import]
 

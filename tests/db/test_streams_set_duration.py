@@ -1,5 +1,5 @@
 """StreamsRepo.set_duration — backfill the real length onto a row that
-was created without one (e.g. a live stream the NexoOBS webhook inserted
+was created without one (e.g. a live stream the ChalyOBS webhook inserted
 with duration 0)."""
 
 from __future__ import annotations
@@ -10,9 +10,9 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 
-from nexoclip.db import Database, StreamsRepo, TenantsRepo, apply_migrations
-from nexoclip.db.models import StreamRow
-from nexoclip.tenancy import bound_tenant
+from chalybclip.db import Database, StreamsRepo, TenantsRepo, apply_migrations
+from chalybclip.db.models import StreamRow
+from chalybclip.tenancy import bound_tenant
 
 
 @pytest_asyncio.fixture
@@ -29,7 +29,7 @@ def _row(sid: str, tenant: str, duration_s: float) -> StreamRow:
     return StreamRow(
         id=sid,
         tenant_id=tenant,
-        vod_url=f"live://nexoobs/{sid}",
+        vod_url=f"live://chalybobs/{sid}",
         platform="live",
         duration_s=duration_s,
         source_video_path="v.mp4",

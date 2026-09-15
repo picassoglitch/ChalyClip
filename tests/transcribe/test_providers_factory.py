@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from nexoclip.errors import NexoClipError, TranscriptionError
-from nexoclip.settings import get_settings
-from nexoclip.transcribe.providers import (
+from chalybclip.errors import ChalybClipError, TranscriptionError
+from chalybclip.settings import get_settings
+from chalybclip.transcribe.providers import (
     CloudWhisperProvider,
     LocalWhisperProvider,
     TranscribeRequest,
@@ -30,7 +30,7 @@ def _req() -> TranscribeRequest:
 
 
 def test_factory_defaults_to_local(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("NEXOCLIP_TRANSCRIBE_PROVIDER", raising=False)
+    monkeypatch.delenv("CHALYBCLIP_TRANSCRIBE_PROVIDER", raising=False)
     get_settings.cache_clear()
     p = get_provider()
     assert isinstance(p, LocalWhisperProvider)
@@ -38,18 +38,18 @@ def test_factory_defaults_to_local(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_factory_picks_local_explicitly(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("NEXOCLIP_TRANSCRIBE_PROVIDER", "local")
+    monkeypatch.setenv("CHALYBCLIP_TRANSCRIBE_PROVIDER", "local")
     get_settings.cache_clear()
     assert isinstance(get_provider(), LocalWhisperProvider)
 
 
 def test_factory_threads_whisper_settings(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Local provider must honor NEXOCLIP_WHISPER_* env vars so operators
+    """Local provider must honor CHALYBCLIP_WHISPER_* env vars so operators
     can flip model size / device without code changes."""
-    monkeypatch.setenv("NEXOCLIP_TRANSCRIBE_PROVIDER", "local")
-    monkeypatch.setenv("NEXOCLIP_WHISPER_MODEL", "tiny")
-    monkeypatch.setenv("NEXOCLIP_WHISPER_DEVICE", "cpu")
-    monkeypatch.setenv("NEXOCLIP_WHISPER_COMPUTE_TYPE", "int8")
+    monkeypatch.setenv("CHALYBCLIP_TRANSCRIBE_PROVIDER", "local")
+    monkeypatch.setenv("CHALYBCLIP_WHISPER_MODEL", "tiny")
+    monkeypatch.setenv("CHALYBCLIP_WHISPER_DEVICE", "cpu")
+    monkeypatch.setenv("CHALYBCLIP_WHISPER_COMPUTE_TYPE", "int8")
     get_settings.cache_clear()
     p = get_provider()
     assert isinstance(p, LocalWhisperProvider)
@@ -62,10 +62,10 @@ def test_factory_picks_real_assemblyai_provider(
     """Task A1 — `transcribe_provider=assemblyai` now returns the real
     AssemblyAIProvider (replaced the CloudWhisperProvider stub).
     Deepgram + OpenAI stay on the stub for now."""
-    from nexoclip.transcribe.providers import AssemblyAIProvider
+    from chalybclip.transcribe.providers import AssemblyAIProvider
 
-    monkeypatch.setenv("NEXOCLIP_TRANSCRIBE_PROVIDER", "assemblyai")
-    monkeypatch.setenv("NEXOCLIP_ASSEMBLYAI_API_KEY", "fake-key")
+    monkeypatch.setenv("CHALYBCLIP_TRANSCRIBE_PROVIDER", "assemblyai")
+    monkeypatch.setenv("CHALYBCLIP_ASSEMBLYAI_API_KEY", "fake-key")
     get_settings.cache_clear()
     p = get_provider()
     assert isinstance(p, AssemblyAIProvider)
@@ -75,25 +75,25 @@ def test_factory_picks_real_assemblyai_provider(
 def test_factory_rejects_assemblyai_without_api_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("NEXOCLIP_TRANSCRIBE_PROVIDER", "assemblyai")
-    monkeypatch.delenv("NEXOCLIP_ASSEMBLYAI_API_KEY", raising=False)
+    monkeypatch.setenv("CHALYBCLIP_TRANSCRIBE_PROVIDER", "assemblyai")
+    monkeypatch.delenv("CHALYBCLIP_ASSEMBLYAI_API_KEY", raising=False)
     get_settings.cache_clear()
-    with pytest.raises(NexoClipError, match="requires NEXOCLIP_ASSEMBLYAI_API_KEY"):
+    with pytest.raises(ChalybClipError, match="requires CHALYBCLIP_ASSEMBLYAI_API_KEY"):
         get_provider()
 
 
 def test_factory_rejects_cloud_without_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("NEXOCLIP_TRANSCRIBE_PROVIDER", "deepgram")
-    monkeypatch.delenv("NEXOCLIP_DEEPGRAM_API_KEY", raising=False)
+    monkeypatch.setenv("CHALYBCLIP_TRANSCRIBE_PROVIDER", "deepgram")
+    monkeypatch.delenv("CHALYBCLIP_DEEPGRAM_API_KEY", raising=False)
     get_settings.cache_clear()
-    with pytest.raises(NexoClipError, match="requires NEXOCLIP_DEEPGRAM_API_KEY"):
+    with pytest.raises(ChalybClipError, match="requires CHALYBCLIP_DEEPGRAM_API_KEY"):
         get_provider()
 
 
 def test_factory_rejects_unknown_provider(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("NEXOCLIP_TRANSCRIBE_PROVIDER", "whispersaurus")
+    monkeypatch.setenv("CHALYBCLIP_TRANSCRIBE_PROVIDER", "whispersaurus")
     get_settings.cache_clear()
-    with pytest.raises(NexoClipError, match="unknown transcribe_provider"):
+    with pytest.raises(ChalybClipError, match="unknown transcribe_provider"):
         get_provider()
 
 

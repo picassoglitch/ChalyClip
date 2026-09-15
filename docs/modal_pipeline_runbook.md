@@ -2,60 +2,60 @@
 
 Moves `process_vod` off the Railway web container onto Modal CPU workers.
 Design + rationale: `docs/phase2_offload_design.md`. Dispatcher contract:
-`nexoclip/jobs/modal.py`. Worker: `infra/modal_pipeline_app.py`.
+`chalybclip/jobs/modal.py`. Worker: `infra/modal_pipeline_app.py`.
 
 ## Prerequisites
 
 - Phase 2a merged and deployed (clip artifacts persist to R2 — without it
   the worker's clips die with the container; the worker refuses to run).
-- `NEXOCLIP_OBJECT_STORAGE_*` vars set on Railway (done 2026-07-08).
+- `CHALYBCLIP_OBJECT_STORAGE_*` vars set on Railway (done 2026-07-08).
 - A Modal account + `pip install modal` + `modal token new` on the
   operator's machine.
 
 ## 1. Create the worker secret (once)
 
-The worker is a full NexoClip process minus the web server — it needs the
+The worker is a full ChalyClip process minus the web server — it needs the
 same env Railway has, minus web-only bits. Create ONE Modal secret named
-`nexoclip-pipeline-env` containing:
+`chalybclip-pipeline-env` containing:
 
 | Variable | Value / notes |
 | --- | --- |
-| `MODAL_BEARER_TOKEN` | same string as Railway's `NEXOCLIP_MODAL_TOKEN` |
+| `MODAL_BEARER_TOKEN` | same string as Railway's `CHALYBCLIP_MODAL_TOKEN` |
 | `DATABASE_URL` | Railway Postgres **public** URL (`DATABASE_PUBLIC_URL` from the Postgres service — the internal hostname doesn't resolve outside Railway). **Required**; the worker 500s without it. |
-| `NEXOCLIP_OBJECT_STORAGE_BUCKET` / `_ENDPOINT` / `_ACCESS_KEY_ID` / `_SECRET_ACCESS_KEY` / `_REGION` / `_PREFIX` / `_PUBLIC_BASE_URL` / `_PRESIGN_TTL_S` | copy from Railway. **Bucket required**; the worker 500s without it. |
+| `CHALYBCLIP_OBJECT_STORAGE_BUCKET` / `_ENDPOINT` / `_ACCESS_KEY_ID` / `_SECRET_ACCESS_KEY` / `_REGION` / `_PREFIX` / `_PUBLIC_BASE_URL` / `_PRESIGN_TTL_S` | copy from Railway. **Bucket required**; the worker 500s without it. |
 | `ANTHROPIC_API_KEY` | copy from Railway (detect/viral + hooks + variants) |
-| `NEXOCLIP_TRANSCRIBE_PROVIDER` | copy from Railway (`modal` or `assemblyai`) |
-| `NEXOCLIP_MODAL_ENDPOINT_URL` / `NEXOCLIP_MODAL_TOKEN` / `NEXOCLIP_MODAL_MODEL` | copy from Railway — the pipeline worker calls the **whisper** app over HTTP like any other client |
-| `NEXOCLIP_TRANSCRIBE_AUDIO_VIA_OBJECT_STORAGE` | `1` — **worker-specific.** The WAV lives on the worker's ephemeral disk, so the provider uploads it to R2 and hands the whisper app a presigned URL instead of a `NEXOCLIP_PUBLIC_URL`-signed one (which would 410). |
-| `NEXOCLIP_ASSEMBLYAI_API_KEY` | copy if provider=assemblyai |
-| `NEXOCLIP_COOKIES_TXT` (+ `NEXOCLIP_COOKIES_TXT_B64=1` if base64) | copy from Railway — Modal egress IPs are datacenter IPs, YouTube bot-gates them the same way |
-| `NEXOCLIP_NEXO_AI_BASE_URL` / `NEXOCLIP_NEXO_AI_ADMIN_TOKEN` | copy from Railway (usage reporting + post-run balance refresh) |
-| `NEXOCLIP_PUBLIC_URL` | copy from Railway (harmless; some URL-building paths read it) |
-| `NEXOCLIP_DEFAULT_OUTPUT_DIR` | optional; defaults to `/tmp/nexoclip-out` on the worker |
+| `CHALYBCLIP_TRANSCRIBE_PROVIDER` | copy from Railway (`modal` or `assemblyai`) |
+| `CHALYBCLIP_MODAL_ENDPOINT_URL` / `CHALYBCLIP_MODAL_TOKEN` / `CHALYBCLIP_MODAL_MODEL` | copy from Railway — the pipeline worker calls the **whisper** app over HTTP like any other client |
+| `CHALYBCLIP_TRANSCRIBE_AUDIO_VIA_OBJECT_STORAGE` | `1` — **worker-specific.** The WAV lives on the worker's ephemeral disk, so the provider uploads it to R2 and hands the whisper app a presigned URL instead of a `CHALYBCLIP_PUBLIC_URL`-signed one (which would 410). |
+| `CHALYBCLIP_ASSEMBLYAI_API_KEY` | copy if provider=assemblyai |
+| `CHALYBCLIP_COOKIES_TXT` (+ `CHALYBCLIP_COOKIES_TXT_B64=1` if base64) | copy from Railway — Modal egress IPs are datacenter IPs, YouTube bot-gates them the same way |
+| `CHALYBCLIP_CHALYB_BASE_URL` / `CHALYBCLIP_CHALYB_ADMIN_TOKEN` | copy from Railway (usage reporting + post-run balance refresh) |
+| `CHALYBCLIP_PUBLIC_URL` | copy from Railway (harmless; some URL-building paths read it) |
+| `CHALYBCLIP_DEFAULT_OUTPUT_DIR` | optional; defaults to `/tmp/chalybclip-out` on the worker |
 
-Do NOT set `NEXOCLIP_JOB_DISPATCHER` in the secret — the worker calls the
+Do NOT set `CHALYBCLIP_JOB_DISPATCHER` in the secret — the worker calls the
 runner directly and must never dispatch to itself.
 
 CLI form (fill in values):
 
 ```bash
-modal secret create nexoclip-pipeline-env \
+modal secret create chalybclip-pipeline-env \
   MODAL_BEARER_TOKEN=... DATABASE_URL=... \
-  NEXOCLIP_OBJECT_STORAGE_BUCKET=... NEXOCLIP_OBJECT_STORAGE_ENDPOINT=... \
-  NEXOCLIP_OBJECT_STORAGE_ACCESS_KEY_ID=... NEXOCLIP_OBJECT_STORAGE_SECRET_ACCESS_KEY=... \
-  NEXOCLIP_OBJECT_STORAGE_PUBLIC_BASE_URL=... \
+  CHALYBCLIP_OBJECT_STORAGE_BUCKET=... CHALYBCLIP_OBJECT_STORAGE_ENDPOINT=... \
+  CHALYBCLIP_OBJECT_STORAGE_ACCESS_KEY_ID=... CHALYBCLIP_OBJECT_STORAGE_SECRET_ACCESS_KEY=... \
+  CHALYBCLIP_OBJECT_STORAGE_PUBLIC_BASE_URL=... \
   ANTHROPIC_API_KEY=... \
-  NEXOCLIP_TRANSCRIBE_PROVIDER=modal \
-  NEXOCLIP_MODAL_ENDPOINT_URL=... NEXOCLIP_MODAL_TOKEN=... \
-  NEXOCLIP_TRANSCRIBE_AUDIO_VIA_OBJECT_STORAGE=1 \
-  NEXOCLIP_COOKIES_TXT="..." \
-  NEXOCLIP_NEXO_AI_BASE_URL=... NEXOCLIP_NEXO_AI_ADMIN_TOKEN=... \
-  NEXOCLIP_PUBLIC_URL=https://nexoclip.nexo-ai.world
+  CHALYBCLIP_TRANSCRIBE_PROVIDER=modal \
+  CHALYBCLIP_MODAL_ENDPOINT_URL=... CHALYBCLIP_MODAL_TOKEN=... \
+  CHALYBCLIP_TRANSCRIBE_AUDIO_VIA_OBJECT_STORAGE=1 \
+  CHALYBCLIP_COOKIES_TXT="..." \
+  CHALYBCLIP_CHALYB_BASE_URL=... CHALYBCLIP_CHALYB_ADMIN_TOKEN=... \
+  CHALYBCLIP_PUBLIC_URL=https://chalybclip.chalyb.com
 ```
 
 ## 2. Deploy the worker
 
-From the repo root (the image bundles the local `nexoclip/` + `config/`):
+From the repo root (the image bundles the local `chalybclip/` + `config/`):
 
 ```bash
 modal deploy infra/modal_pipeline_app.py
@@ -63,7 +63,7 @@ modal deploy infra/modal_pipeline_app.py
 
 Copy the printed endpoint URL. Concurrency/cost ceiling (default 5
 simultaneous runs, each 8 CPU): re-deploy with
-`NEXOCLIP_MODAL_PIPELINE_MAX_CONTAINERS=<n>` in the shell to change.
+`CHALYBCLIP_MODAL_PIPELINE_MAX_CONTAINERS=<n>` in the shell to change.
 
 Re-deploy after any merge that touches pipeline code — the worker ships a
 snapshot of the local source, it does not track Railway deploys.
@@ -71,11 +71,11 @@ snapshot of the local source, it does not track Railway deploys.
 ## 3. Flip Railway
 
 ```bash
-railway variables --set NEXOCLIP_MODAL_PIPELINE_ENDPOINT_URL=<printed URL> \
-                  --set NEXOCLIP_JOB_DISPATCHER=modal
+railway variables --set CHALYBCLIP_MODAL_PIPELINE_ENDPOINT_URL=<printed URL> \
+                  --set CHALYBCLIP_JOB_DISPATCHER=modal
 ```
 
-(`NEXOCLIP_MODAL_TOKEN` is already set from the whisper integration.)
+(`CHALYBCLIP_MODAL_TOKEN` is already set from the whisper integration.)
 
 ## 4. Verify
 
@@ -84,7 +84,7 @@ railway variables --set NEXOCLIP_MODAL_PIPELINE_ENDPOINT_URL=<printed URL> \
    via shared Postgres).
 2. `railway logs` should show `jobs.modal.dispatch` and NO
    `pipeline.step.*` work — the box only polls. CPU should stay flat.
-3. `modal app logs nexoclip-pipeline` shows the actual run.
+3. `modal app logs chalybclip-pipeline` shows the actual run.
 4. When it finishes: clips + thumbnails render in the dashboard (serving
    falls back to R2 keys `clips/<tenant>/<clip>/...` — the local files
    never existed on the web box).
@@ -92,7 +92,7 @@ railway variables --set NEXOCLIP_MODAL_PIPELINE_ENDPOINT_URL=<printed URL> \
 
 ## Rollback
 
-Unset `NEXOCLIP_JOB_DISPATCHER` (or set `in_process`) and redeploy —
+Unset `CHALYBCLIP_JOB_DISPATCHER` (or set `in_process`) and redeploy —
 dispatch reverts to in-process immediately. In-flight Modal runs finish on
 their own and stay visible (their events keep flowing). The dispatcher
 also falls back to in-process BY ITSELF at boot if the endpoint/token

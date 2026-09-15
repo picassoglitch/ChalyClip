@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from nexoclip.branding import (
+from chalybclip.branding import (
     CaptionShadow,
     CaptionStyle,
     builtin_presets,

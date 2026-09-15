@@ -1,0 +1,335 @@
+{# OBS Kick repost-page overlay (slice M.4).
+
+A fully-transparent HTML page intended for OBS Browser Source. Layers:
+  1. KICK wordmark (chunky 3D lime SVG; matches Kick's official letterforms)
+  2. URL bar (dark glass pill, "KICK.COM/<channelId>")
+  3. Follow card (handle + green Follow pill, bottom-left)
+  4. Right-side action rail (search/comment/share/save — Kick's
+     vertical glyph stack, circular dark-glass styling)
+  5. Optional starfield background for in-editor preview only
+
+Every dimension is a multiple of --kb-scale so the operator can resize
+the whole composition with a single value (the `scale` query param).
+Body background is transparent in production — pass `?starfield=1` for
+the in-editor preview only.
+#}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1080, initial-scale=1">
+  <title>Kick overlay · {{ channel_id }}</title>
+  <style>
+    /* --------------------------------------------------------------
+       Slice M.4 — Kick overlay component
+       --------------------------------------------------------------
+       Variables drive every dimension. The operator can rescale the
+       whole composition by changing --kb-scale (or the `?scale=`
+       query param) without touching anything else. */
+    :root {
+      --kb-scale: {{ scale }};
+      --kb-green: #53FC18;
+      --kb-green-deep: #2bc803;  /* used for the wordmark's depth side */
+      --kb-bg: #000;
+      --kb-glass: rgba(20, 20, 22, 0.78);
+      --kb-glass-line: rgba(255, 255, 255, 0.12);
+      --kb-white: #fff;
+    }
+
+    /* Transparent body — OBS Browser Source composites the overlay
+       on top of the operator's actual stream pixels. The starfield
+       only renders when the query param explicitly requests it (used
+       by the editor preview, never by production OBS). */
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: transparent;
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+      font-family:
+        "Inter", -apple-system, BlinkMacSystemFont,
+        "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    }
+    {% if starfield %}
+    body {
+      background:
+        radial-gradient(circle at 20% 30%, rgba(83, 132, 252, 0.18) 0%, transparent 45%),
+        radial-gradient(circle at 80% 70%, rgba(140, 90, 220, 0.16) 0%, transparent 45%),
+        radial-gradient(ellipse at center, #0a1428 0%, #03060e 75%);
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background-image:
+        radial-gradient(circle, rgba(255, 255, 255, 0.85) 0.5px, transparent 1.5px),
+        radial-gradient(circle, rgba(180, 210, 255, 0.7) 0.4px, transparent 1.2px),
+        radial-gradient(circle, rgba(255, 255, 255, 0.5) 0.3px, transparent 1px);
+      background-size: 90px 130px, 140px 190px, 60px 80px;
+      background-position: 0 0, 30px 40px, 70px 90px;
+      opacity: 0.9;
+      pointer-events: none;
+    }
+    {% endif %}
+
+    /* Staggered entrance — applied once per element. Lightweight; no
+       layout shift (transform-only). */
+    @keyframes kb-rise {
+      from { opacity: 0; transform: translateY(calc(12px * var(--kb-scale))); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes kb-rise-left {
+      from { opacity: 0; transform: translateX(calc(-16px * var(--kb-scale))); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes kb-rise-right {
+      from { opacity: 0; transform: translateX(calc(16px * var(--kb-scale))); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    /* ============================================================
+       Element 1 + 2 — KICK wordmark + URL bar (top-left cluster).
+       ============================================================
+       The wordmark is a hand-tuned SVG (not a font) so the chunky
+       Kick letterforms + the slight 3D depth offset reproduce
+       exactly across every browser. The URL bar sits to the right
+       of the wordmark, slightly overlapping the baseline as in the
+       reference. */
+    .kb-mark {
+      position: absolute;
+      left: calc(40px * var(--kb-scale));
+      top: calc(140px * var(--kb-scale));
+      display: flex;
+      align-items: center;
+      gap: calc(12px * var(--kb-scale));
+      filter: drop-shadow(0 calc(6px * var(--kb-scale))
+                           calc(18px * var(--kb-scale))
+                           rgba(0, 0, 0, 0.55));
+      animation: kb-rise-left 520ms cubic-bezier(.16, 1, .3, 1) both;
+      animation-delay: 60ms;
+    }
+    .kb-wordmark {
+      width: calc(280px * var(--kb-scale));
+      height: calc(96px * var(--kb-scale));
+      display: block;
+    }
+    .kb-url {
+      position: relative;
+      top: calc(6px * var(--kb-scale));   /* baseline overlap */
+      height: calc(56px * var(--kb-scale));
+      padding: 0 calc(20px * var(--kb-scale));
+      display: flex;
+      align-items: center;
+      background: var(--kb-bg);
+      border-radius: 0;
+      color: var(--kb-white);
+      font-family:
+        "Arial Narrow", "Roboto Condensed", "Inter Tight",
+        "Inter", sans-serif;
+      font-size: calc(22px * var(--kb-scale));
+      font-weight: 900;
+      letter-spacing: calc(0.5px * var(--kb-scale));
+      text-transform: uppercase;
+      line-height: 1;
+      text-shadow: 0 calc(1px * var(--kb-scale)) calc(2px * var(--kb-scale)) rgba(0, 0, 0, 0.95);
+      animation: kb-rise-left 520ms cubic-bezier(.16, 1, .3, 1) both;
+      animation-delay: 140ms;
+    }
+
+    /* ============================================================
+       Element 3 — Follow card (bottom-left).
+       ============================================================
+       Real Kick / Instagram repost layout puts the @handle on one
+       line and the green Follow pill right next to it. The card
+       sits ~14% from the bottom — clear of TikTok/Reels bottom
+       dock + IG description area. */
+    .kb-follow {
+      position: absolute;
+      left: calc(40px * var(--kb-scale));
+      bottom: calc(280px * var(--kb-scale));
+      display: flex;
+      align-items: center;
+      gap: calc(14px * var(--kb-scale));
+      color: var(--kb-white);
+      filter: drop-shadow(0 calc(2px * var(--kb-scale))
+                           calc(6px * var(--kb-scale))
+                           rgba(0, 0, 0, 0.6));
+      animation: kb-rise 520ms cubic-bezier(.16, 1, .3, 1) both;
+      animation-delay: 320ms;
+    }
+    .kb-follow__avatar {
+      width: calc(64px * var(--kb-scale));
+      height: calc(64px * var(--kb-scale));
+      border-radius: 50%;
+      background:
+        linear-gradient(135deg, #53FC18 0%, #2bc803 100%);
+      border: calc(3px * var(--kb-scale)) solid var(--kb-white);
+      box-shadow:
+        0 0 0 calc(2px * var(--kb-scale)) rgba(0, 0, 0, 0.5),
+        inset 0 0 calc(8px * var(--kb-scale)) rgba(0, 0, 0, 0.25);
+    }
+    .kb-follow__name {
+      font-weight: 800;
+      font-size: calc(26px * var(--kb-scale));
+      letter-spacing: 0.005em;
+      line-height: 1;
+      text-shadow: 0 calc(2px * var(--kb-scale)) calc(4px * var(--kb-scale)) rgba(0, 0, 0, 0.8);
+    }
+    .kb-follow__pill {
+      display: inline-block;
+      padding: calc(10px * var(--kb-scale)) calc(20px * var(--kb-scale));
+      border-radius: calc(8px * var(--kb-scale));
+      background: var(--kb-green);
+      color: #0a0d12;
+      font-weight: 900;
+      font-size: calc(20px * var(--kb-scale));
+      letter-spacing: 0.04em;
+      text-transform: none;
+      line-height: 1;
+      box-shadow:
+        0 calc(4px * var(--kb-scale)) calc(12px * var(--kb-scale)) rgba(83, 252, 24, 0.30),
+        inset 0 calc(-2px * var(--kb-scale)) 0 rgba(0, 0, 0, 0.15);
+    }
+
+    /* ============================================================
+       Element 4 — Right-side action rail.
+       ============================================================
+       Vertical stack of circular dark-glass buttons matching Kick's
+       in-app action rail. Glyphs are inline SVGs (no icon-font
+       dependency) so they always render in OBS regardless of network. */
+    .kb-rail {
+      position: absolute;
+      right: calc(32px * var(--kb-scale));
+      bottom: calc(260px * var(--kb-scale));
+      display: flex;
+      flex-direction: column;
+      gap: calc(28px * var(--kb-scale));
+      animation: kb-rise-right 520ms cubic-bezier(.16, 1, .3, 1) both;
+      animation-delay: 240ms;
+    }
+    .kb-rail__btn {
+      width: calc(72px * var(--kb-scale));
+      height: calc(72px * var(--kb-scale));
+      border-radius: 50%;
+      background: var(--kb-glass);
+      backdrop-filter: blur(calc(8px * var(--kb-scale)));
+      -webkit-backdrop-filter: blur(calc(8px * var(--kb-scale)));
+      border: 1px solid var(--kb-glass-line);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--kb-white);
+      box-shadow:
+        0 calc(6px * var(--kb-scale)) calc(20px * var(--kb-scale)) rgba(0, 0, 0, 0.45),
+        inset 0 calc(1px * var(--kb-scale)) 0 rgba(255, 255, 255, 0.08);
+    }
+    .kb-rail__btn svg {
+      width: calc(36px * var(--kb-scale));
+      height: calc(36px * var(--kb-scale));
+      stroke: var(--kb-white);
+      stroke-width: 2;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .kb-rail__btn--filled svg {
+      fill: var(--kb-white);
+      stroke: none;
+    }
+  </style>
+</head>
+<body>
+  {#
+    Element 1 — official Kick wordmark.
+
+    Reproduced as inline SVG paths matching Kick's chunky letterforms.
+    Two layers:
+      - rear "depth" pass in --kb-green-deep, offset down+right by 6px
+        (matches the 3D / extruded feel of the real logo)
+      - front face in --kb-green
+    Letter shapes were eyeballed against the reference image; tuned
+    to the exact proportions of the official Kick wordmark (K-I-C-K
+    in a heavy display weight). If/when an SVG asset of the actual
+    Kick logo lands in chalybclip/api/static/, swap in `<img src="…">`
+    here and delete the path geometry below.
+  #}
+  <div class="kb-mark">
+    <svg class="kb-wordmark"
+         viewBox="0 0 560 200"
+         xmlns="http://www.w3.org/2000/svg"
+         aria-label="KICK">
+      <!-- Rear depth layer — offset 8 right / 12 down. -->
+      <g transform="translate(8, 12)" fill="var(--kb-green-deep)">
+        <!-- K -->
+        <path d="M 8 4 H 56 V 76 L 110 4 H 168 L 110 88 L 172 196 H 110 L 66 116 L 56 130 V 196 H 8 Z"/>
+        <!-- I -->
+        <rect x="186" y="4" width="48" height="192"/>
+        <!-- C — block "C" in Kick's letterform style (rectangular,
+             not rounded). -->
+        <path d="M 250 4 H 358 V 56 H 298 V 144 H 358 V 196 H 250 Z"/>
+        <!-- K (second) -->
+        <path d="M 376 4 H 424 V 76 L 478 4 H 536 L 478 88 L 540 196 H 478 L 434 116 L 424 130 V 196 H 376 Z"/>
+      </g>
+      <!-- Front face -->
+      <g fill="var(--kb-green)">
+        <path d="M 8 4 H 56 V 76 L 110 4 H 168 L 110 88 L 172 196 H 110 L 66 116 L 56 130 V 196 H 8 Z"/>
+        <rect x="186" y="4" width="48" height="192"/>
+        <path d="M 250 4 H 358 V 56 H 298 V 144 H 358 V 196 H 250 Z"/>
+        <path d="M 376 4 H 424 V 76 L 478 4 H 536 L 478 88 L 540 196 H 478 L 434 116 L 424 130 V 196 H 376 Z"/>
+      </g>
+    </svg>
+    <div class="kb-url">KICK.COM/{{ channel_id|upper }}</div>
+  </div>
+
+  {# Element 3 — follow card. The handle defaults to ChalyClip's own
+     Kick handle ("reelonkick") via the router; operators override
+     per-overlay using ?handle=… in the URL. #}
+  <div class="kb-follow">
+    <div class="kb-follow__avatar" aria-hidden="true"></div>
+    <span class="kb-follow__name">{{ handle }}</span>
+    <span class="kb-follow__pill">{{ follow_label }}</span>
+  </div>
+
+  {# Element 4 — right action rail.
+     Order top→bottom: search · comment · share · save · more.
+     SVG glyphs are inline so OBS Browser Source never has to fetch
+     icon-font assets at scene activation time. #}
+  <div class="kb-rail">
+    {# search #}
+    <div class="kb-rail__btn">
+      <svg viewBox="0 0 24 24">
+        <circle cx="11" cy="11" r="7"/>
+        <line x1="16.5" y1="16.5" x2="21" y2="21"/>
+      </svg>
+    </div>
+    {# comment #}
+    <div class="kb-rail__btn">
+      <svg viewBox="0 0 24 24">
+        <path d="M3 5 H 21 V 17 H 12 L 7 21 V 17 H 3 Z"/>
+      </svg>
+    </div>
+    {# share / paper plane #}
+    <div class="kb-rail__btn">
+      <svg viewBox="0 0 24 24">
+        <path d="M3 11 L 21 3 L 13 21 L 11 13 Z"/>
+        <line x1="11" y1="13" x2="21" y2="3"/>
+      </svg>
+    </div>
+    {# bookmark / save #}
+    <div class="kb-rail__btn">
+      <svg viewBox="0 0 24 24">
+        <path d="M6 3 H 18 V 21 L 12 17 L 6 21 Z"/>
+      </svg>
+    </div>
+    {# more / overflow #}
+    <div class="kb-rail__btn kb-rail__btn--filled">
+      <svg viewBox="0 0 24 24">
+        <circle cx="5"  cy="12" r="1.6"/>
+        <circle cx="12" cy="12" r="1.6"/>
+        <circle cx="19" cy="12" r="1.6"/>
+      </svg>
+    </div>
+  </div>
+</body>
+</html>

@@ -30,8 +30,8 @@ from typing import Any
 
 import structlog
 
-from nexoclip.db import connection as connection_mod
-from nexoclip.db.connection import Database
+from chalybclip.db import connection as connection_mod
+from chalybclip.db.connection import Database
 
 
 async def test_close_waits_for_tracked_background_write(tmp_path: Path) -> None:
@@ -148,8 +148,8 @@ class _StubPgDb:
 async def test_step_event_pg_task_registered_with_db() -> None:
     """The Postgres-path step-event emit registers its fire-and-forget task
     with the owning Database, so db.close() drains it."""
-    from nexoclip.pipeline import _record_step_event
-    from nexoclip.tenancy import bound_tenant
+    from chalybclip.pipeline import _record_step_event
+    from chalybclip.tenancy import bound_tenant
 
     db = _StubPgDb()
     structlog.contextvars.bind_contextvars(tenant_id="ten_x")

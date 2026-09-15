@@ -27,7 +27,7 @@ from pathlib import Path
 import pytest
 
 
-_ROOT = Path(__file__).resolve().parents[2] / "nexoclip"
+_ROOT = Path(__file__).resolve().parents[2] / "chalybclip"
 
 
 # Files that produce the FINAL rendered MP4 (the one downloaded /

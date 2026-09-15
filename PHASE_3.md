@@ -1,6 +1,6 @@
 ## Phase 3 - cloud + earned automation (backlog stub)
 
-**Goal:** turn the local single-machine NexoClip into a deployable
+**Goal:** turn the local single-machine ChalyClip into a deployable
 multi-tenant SaaS, then — *only after* engagement metrics show our scoring
 predicts performance — earn the right to auto-publish high-confidence
 clips at scale.
@@ -37,7 +37,7 @@ This is a backlog. The order isn't fixed; the user-facing direction is.
 - **Aurora / Postgres migration.** SQLite stays for local; production
   swaps to Postgres behind the same `Database` interface. The migration
   files are SQLite-flavored today; we add a parallel Postgres dialect
-  generator and a one-shot `nexoclip db migrate-to-postgres` tool.
+  generator and a one-shot `chalybclip db migrate-to-postgres` tool.
 - **ECS / Fargate worker pool.** The Phase 2 publisher + webhook drains
   run as background tasks inside the FastAPI process; Phase 3 splits
   them into worker containers consuming SQS. Same `run_publish_jobs` /
