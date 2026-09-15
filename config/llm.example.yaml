@@ -1,21 +1,22 @@
 # LLM provider configuration.
-# Copy to llm.yaml and edit as needed.
+# Copy to llm.yaml and edit as needed. When llm.yaml is absent the router
+# loads THIS file, so these are the production defaults.
 #
 # API keys are loaded from environment variables (see .env.example).
 # This file controls model selection, routing, and rate limits — not credentials.
 #
-# Cost policy: all purposes route to `openllm` / `openllm_vision` — a
-# self-hosted OpenAI-compatible runtime (Ollama, LM Studio, vLLM,
-# llama.cpp-server) with ZERO per-token cost. The anthropic block stays
-# defined so any purpose can be pointed back at it (or added as a
-# fallback) deliberately; nothing routes there by default, so no call
-# can silently spend money.
+# Cost policy (docs/compute_cost_evaluation.md): every purpose routes to
+# `anthropic`, a metered API that costs cents per VOD and nothing when idle.
+# The `openllm` / `openllm_vision` entries stay defined for an operator who
+# runs a GPU box with Ollama (docs/pc_worker_runbook.md) — point the purposes
+# back at them and set CHALYBCLIP_OPENLLM_BASE_URL. Nothing routes there by
+# default because an unreachable localhost fails every call.
 
 providers:
-  # Self-hosted open models. Default base_url is a local Ollama; the
-  # CHALYBCLIP_OPENLLM_BASE_URL env var overrides it in prod (point it at a
-  # tunneled/hosted runtime). Keyless by default — if you use a hosted
-  # OpenAI-compatible gateway instead, set OPENLLM_API_KEY.
+  # Self-hosted open models (optional). Default base_url is a local Ollama;
+  # the CHALYBCLIP_OPENLLM_BASE_URL env var overrides it (a tunneled GPU box,
+  # or a hosted OpenAI-compatible gateway such as Groq / OpenRouter — then
+  # set OPENLLM_API_KEY too). Not in any routing chain by default.
   openllm:
     kind: openai_compatible
     api_key_env: OPENLLM_API_KEY
@@ -45,8 +46,8 @@ providers:
     api_key_env: ANTHROPIC_API_KEY
     base_url: https://api.anthropic.com
     models:
-      standard: claude-haiku-4-5                # fast + cheap, great for structured short-form
-      premium: claude-opus-4-6                  # premium quality for high-stakes generation
+      standard: claude-haiku-4-5                # fast + cheap, vision-capable; ~$0.03/VOD for text
+      premium: claude-opus-5                    # the two `premium` purposes only (logo, agent decisions)
     rate_limits:
       requests_per_minute: 1000
       input_tokens_per_minute: 400000
@@ -58,37 +59,37 @@ providers:
 routing:
   vision_rescore:                               # frame-based rescore of detect candidates
     default_quality: standard
-    primary: openllm_vision
+    primary: anthropic
     fallbacks: []
 
   variant_generation_visual:                    # Phase 2+, multimodal
     default_quality: standard
-    primary: openllm_vision
+    primary: anthropic
     fallbacks: []
 
   clip_scoring:                                 # Phase 2+, multimodal scoring
     default_quality: standard
-    primary: openllm_vision
+    primary: anthropic
     fallbacks: []
 
   agent_decision:                               # alter-ego auto-approval reasoning
     default_quality: premium
-    primary: openllm
+    primary: anthropic
     fallbacks: []
 
   viral_detection:                              # LLM scan of transcript for viral moments
     default_quality: standard
-    primary: openllm
+    primary: anthropic
     fallbacks: []
 
   logo_generation:                              # AI-generated SVG brand mark (voice-markers §3.3.a)
     default_quality: premium
-    primary: openllm
+    primary: anthropic
     fallbacks: []
 
   hook_generation:                              # Viral-hook title variants (slice F.7-B)
     default_quality: standard
-    primary: openllm
+    primary: anthropic
     fallbacks: []
 
 # Reliability
@@ -110,6 +111,6 @@ pricing:
     claude-haiku-4-5:
       input_per_mtok_usd: 1.00
       output_per_mtok_usd: 5.00
-    claude-opus-4-6:
-      input_per_mtok_usd: 15.00
-      output_per_mtok_usd: 75.00
+    claude-opus-5:
+      input_per_mtok_usd: 5.00
+      output_per_mtok_usd: 25.00
