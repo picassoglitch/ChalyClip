@@ -518,17 +518,22 @@ _SERIES_TAG_RE = re.compile(r"\s+—\s+Part(?:e)?\s+\d+/\d+$")
 def _series_parts(clips: list[Any]) -> dict[str, tuple[int, int, int]]:
     """Map clip.id -> (part_no, total, run_key) for temporally contiguous
     runs of >= 2 clips. Interval-fallback clips are evenly spaced by
-    construction and never chain into a fake series."""
+    construction and never chain into a fake series; viral picks are
+    standalone clips with their own edges (neighbours or overlapping
+    hook/full cuts are separate posts, not parts of one moment)."""
+
+    def chainable(c: Any) -> bool:
+        reason = str(getattr(c.candidate, "reason", "") or "")
+        return reason not in {"interval", "viral"}
+
     ordered = sorted(clips, key=lambda c: float(getattr(c, "start_s", 0.0)))
     runs: list[list[Any]] = []
     for c in ordered:
-        reason = str(getattr(c.candidate, "reason", "") or "")
-        chainable = reason != "interval"
         if (
-            chainable
+            chainable(c)
             and runs
             and runs[-1]
-            and str(getattr(runs[-1][-1].candidate, "reason", "") or "") != "interval"
+            and chainable(runs[-1][-1])
             and float(c.start_s) <= float(runs[-1][-1].end_s) + _SERIES_MAX_GAP_S
         ):
             runs[-1].append(c)
@@ -540,6 +545,25 @@ def _series_parts(clips: list[Any]) -> dict[str, tuple[int, int, int]]:
             for i, c in enumerate(run, start=1):
                 parts[c.id] = (i, len(run), run_key)
     return parts
+
+
+def _resolve_hook_language(
+    *,
+    requested: str | None,
+    detected: str | None,
+    persona_language: str | None,
+) -> str:
+    """Language the hooks are written in: an explicit run language, else the
+    language the transcriber detected in the audio, else the persona's.
+
+    `requested` is often the literal "auto" (transcriber auto-detect); passing
+    that straight to the hook prompt made the model default to English on
+    Spanish videos."""
+    for lang in (requested, detected, persona_language):
+        code = (lang or "").strip().lower()
+        if code and code != "auto":
+            return code
+    return "es"
 
 
 def _series_hook(base: str, part: int, total: int, *, language: str) -> str:
@@ -1264,7 +1288,11 @@ async def _run_pipeline(
     # (Was gated on the raw candidate score, which is uniformly low for YouTube
     # VODs with no chat heat — so those clips got no hook and shipped plain.)
     auto_hook_enabled = bool(getattr(settings, "auto_hook_enabled", True))
-    hook_language = language or persona.primary_language or "es"
+    hook_language = _resolve_hook_language(
+        requested=language,
+        detected=getattr(transcript, "language", None) if transcript.segments else None,
+        persona_language=persona.primary_language,
+    )
     # Contiguous clips are one long moment → "Parte 1/N" series titles;
     # every hook in the batch must be unique across the whole stream.
     series_parts = _series_parts(clips)
@@ -1298,7 +1326,7 @@ async def _run_pipeline(
                         )
                     else:
                         base = await _auto_hook_for_clip(
-                            clip=clip, persona=persona, language=language,
+                            clip=clip, persona=persona, language=hook_language,
                             tenant_id=tenant_id, router=router,
                             stream_title=stream.title or "",
                             avoid_hooks=tuple(used_hooks),
@@ -1332,7 +1360,7 @@ async def _run_pipeline(
                 variants = [
                     Variant(
                         id="v_stub",
-                        language=language or persona.primary_language or "es",
+                        language=hook_language,
                         caption=str(stub_caption)[:240],
                         title_card_text=auto_hook,
                         hashtags=[],

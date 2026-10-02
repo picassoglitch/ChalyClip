@@ -148,7 +148,15 @@ def fuse_candidates(
             c.reason == "voice"
             and any(member.reason == "voice" for member in prev_cluster)
         )
-        if within_window and not voice_voice_collision:
+        # Same for viral + viral: the LLM already returns distinct clips
+        # with exact edges (and deliberately overlapping hook/full cuts).
+        # Chaining them by the 30s window collapsed e.g. 3 picks in an
+        # 84s video into a single clip.
+        viral_viral_collision = (
+            c.reason == "viral"
+            and any(member.reason == "viral" for member in prev_cluster)
+        )
+        if within_window and not voice_voice_collision and not viral_viral_collision:
             prev_cluster.append(c)
         else:
             clusters.append([c])

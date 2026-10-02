@@ -32,6 +32,7 @@ from chalybclip.ingest import Stream
 from chalybclip.llm import LLMRouter
 from chalybclip.llm.config import Quality
 from chalybclip.transcribe import Transcript
+from chalybclip.transcribe.models import Word
 
 from .models import Candidate
 
@@ -57,11 +58,20 @@ class ViralMoment(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    timestamp_s: float = Field(ge=0.0, description="Start of the moment in VOD seconds.")
+    timestamp_s: float = Field(
+        ge=0.0,
+        description=(
+            "Exact start of the clip in VOD seconds: the start time of the "
+            "first word of the hook line."
+        ),
+    )
     duration_s: float = Field(
         ge=1.0,
         le=120.0,
-        description="Estimated length of the interesting bit, typically 5-60s.",
+        description=(
+            "Exact clip length in seconds, so timestamp_s + duration_s is the "
+            "end time of the last word of the payoff. Typically 8-60s."
+        ),
     )
     score: float = Field(
         ge=0.0,
@@ -92,36 +102,55 @@ class ViralMomentList(BaseModel):
 
 
 _SYSTEM_PROMPT = """\
-You are analyzing a livestream transcript to find the moments most likely \
-to go viral on TikTok, Instagram Reels, and YouTube Shorts. You are looking \
-for the kind of moments that make a scroller stop and a friend share with \
-another friend.
+You are a short-form video editor. The transcript below comes from a \
+livestream VOD or from a creator's own recorded video. Find the clips most \
+likely to go viral on TikTok, Instagram Reels and YouTube Shorts, and that \
+also work when cross-posted to all of them: the kind of moment that makes a \
+scroller stop and a friend share it.
 
-Score on 0.0-1.0 for VIRAL POTENTIAL. Things that work:
+Things that work:
   * Hot takes / strong opinions — especially counter-narrative or controversial
   * Emotional peaks — anger, shock, vulnerability, infectious laughter
   * Quotable one-liners that punch standalone, no setup needed
+  * Practical value — a tip, a reveal, a "nobody tells you this" insight
   * Drama / conflict — between speakers, with audience, with a topic
   * Shocking revelations or genuinely unexpected statements
   * Moments where the speaker is clearly fired up or breaking script
 
 Do NOT pick:
   * Dead air, transitions, sign-on / sign-off, sponsor reads
-  * Generic banter, meta-commentary about the stream itself
+  * Generic banter, meta-commentary about the stream or the recording itself
   * Low-effort content the speaker is clearly phoning in
   * Moments without a clear hook in the first 3 seconds
 
-For each moment include:
-  * timestamp_s: where it starts in the VOD (use the [HH:MM:SS] markers below)
-  * duration_s: how long the interesting bit lasts, 5-60s typically
-  * score: 0.0-1.0. Be selective. Reserve 0.8+ for genuine bangers.
+Each transcript line carries its time in seconds — "[start-end] text" per \
+sentence, or "[HH:MM:SS] (start s) text" per 30s block on very long VODs. \
+Use those times to place every clip as exactly as you can:
+  * timestamp_s = the start time of the first word of the hook. Start ON the \
+hook — no warm-up, no "okay so", no breath before it.
+  * duration_s = from timestamp_s to the end time of the last word of the \
+payoff. Stop right after the payoff lands; never run into the next topic, a \
+pause, or the speaker reaching to stop the recording.
+  * The clip must make sense on its own to someone who never saw the rest.
+  * Recorded videos often contain retakes: the speaker says a line, stops, \
+and says it again. Never include both attempts — pick the cleanest, most \
+energetic take and place the clip around that one only.
+
+Give each strong idea its own clip. You MAY return two clips that overlap \
+when they are genuinely different cuts — e.g. a punchy 8-20s hook-only cut \
+AND a fuller 25-60s cut with the context — since both get posted. Never \
+return two near-identical windows.
+
+For each clip include:
+  * timestamp_s and duration_s as above
+  * score: 0.0-1.0 viral potential. Be selective. Reserve 0.8+ for bangers.
   * reason: one line explaining why this would go viral
   * type: classify the trigger from {controversial, emotional, quotable, \
 hot_take, drama, humor, shock, vulnerable, other}
   * transcript_snippet: the actual words, copied verbatim from the transcript
 
-Return the top moments ranked by score. If the transcript doesn't have \
-genuine viral content, return fewer moments or an empty list. Do NOT pad.
+Return the clips ranked by score. If the transcript doesn't have genuine \
+viral content, return fewer clips or an empty list. Do NOT pad.
 """
 
 
@@ -154,6 +183,66 @@ def _format_transcript(transcript: Transcript, *, window_s: float = 30.0) -> str
     return "\n".join(lines)
 
 
+# Above this length the per-sentence listing gets token-heavy; long VODs
+# fall back to the 30s windows (moment placement is then refined by the
+# word-level snapping in clip windowing).
+_SENTENCE_FORMAT_MAX_S = 90 * 60
+
+# A line break happens at sentence punctuation, at a pause this long, or
+# once a line spans this many seconds — whichever comes first.
+_SENTENCE_GAP_S = 0.7
+_SENTENCE_MAX_S = 15.0
+
+
+def _format_for_llm(transcript: Transcript, *, duration_s: float) -> str:
+    """Per-sentence "[start-end] text" lines so the model can place clip
+    edges on exact words; 30s windows for very long VODs."""
+    words = [w for seg in transcript.segments for w in seg.words]
+    if not words or duration_s > _SENTENCE_FORMAT_MAX_S:
+        return _format_transcript(transcript)
+    lines: list[str] = []
+    line: list[Word] = []
+    for w in words:
+        if line and (
+            w.ts - line[-1].end_ts >= _SENTENCE_GAP_S
+            or w.end_ts - line[0].ts > _SENTENCE_MAX_S
+        ):
+            lines.append(_fmt_sentence(line))
+            line = []
+        line.append(w)
+        if w.text.rstrip().endswith((".", "?", "!", "…")):
+            lines.append(_fmt_sentence(line))
+            line = []
+    if line:
+        lines.append(_fmt_sentence(line))
+    return "\n".join(lines)
+
+
+def _fmt_sentence(words: list[Word]) -> str:
+    text = " ".join(w.text.strip() for w in words).strip()
+    return f"[{words[0].ts:.2f}-{words[-1].end_ts:.2f}] {text}"
+
+
+def _dedupe_near_identical(moments: list[ViralMoment]) -> list[ViralMoment]:
+    """Drop a moment whose window is nearly the same as a higher-ranked one
+    (IoU above 0.7). A short hook cut inside a longer story cut has low IoU,
+    so both survive — that pairing is deliberate."""
+    kept: list[ViralMoment] = []
+    for m in moments:
+        a0, a1 = m.timestamp_s, m.timestamp_s + m.duration_s
+        duplicate = False
+        for k in kept:
+            b0, b1 = k.timestamp_s, k.timestamp_s + k.duration_s
+            inter = max(0.0, min(a1, b1) - max(a0, b0))
+            union = max(a1, b1) - min(a0, b0)
+            if union > 0 and inter / union > 0.7:
+                duplicate = True
+                break
+        if not duplicate:
+            kept.append(m)
+    return kept
+
+
 def _fmt_window(ts: float, parts: list[str]) -> str:
     h = int(ts // 3600)
     m = int((ts % 3600) // 60)
@@ -184,7 +273,7 @@ async def detect_viral_moments(
             f"transcript={transcript.tenant_id!r}"
         )
 
-    formatted = _format_transcript(transcript)
+    formatted = _format_for_llm(transcript, duration_s=stream.duration_s)
     quality: Quality = "premium" if config.quality == "premium" else "standard"
 
     try:
@@ -212,6 +301,10 @@ async def detect_viral_moments(
     effective_max = max(config.max_moments, duration_cap)
     moments = response.moments[:effective_max]
     moments = [m for m in moments if m.score >= config.min_score]
+    moments = _dedupe_near_identical(
+        sorted(moments, key=lambda m: m.score, reverse=True)
+    )
+    moments.sort(key=lambda m: m.timestamp_s)
 
     candidates: list[Candidate] = []
     for m in moments:
@@ -226,6 +319,11 @@ async def detect_viral_moments(
                     "reason": m.reason,
                     "transcript_snippet": m.transcript_snippet,
                     "estimated_duration_s": m.duration_s,
+                    # Exact clip edges picked by the model — clip windowing
+                    # cuts on these (snapped to word boundaries) instead of
+                    # padding a band around `timestamp`.
+                    "start_s": m.timestamp_s,
+                    "end_s": m.timestamp_s + m.duration_s,
                 },
             )
         )

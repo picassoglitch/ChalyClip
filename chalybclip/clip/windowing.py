@@ -158,6 +158,24 @@ def plan_clip_window(
     kind = classify_window_kind(candidate)
     ceiling = max(60.0, float(max_clip_duration_s))
     band = _lift_band(WINDOW_BANDS[kind], kind, ceiling)
+
+    # ---- 0. Exact edges from the viral LLM ----
+    # The model picked the hook's first word and the payoff's last word.
+    # Cut there (snapped to real word edges) instead of padding a band
+    # around the timestamp — the band's pre-roll dragged in warm-up,
+    # retakes and the reach-for-the-phone at the end of a recording.
+    edges = _llm_edges(candidate)
+    if edges is not None and transcript is not None:
+        exact = _plan_exact(
+            start_s=edges[0],
+            end_s=edges[1],
+            transcript=transcript,
+            stream_duration_s=stream_duration_s,
+            max_s=ceiling,
+            kind=kind,
+        )
+        if exact is not None:
+            return exact
     ts = candidate.timestamp
     # When the operator lifts the ceiling, a default clip should reach the
     # monetization length too — extend its post-roll so its window targets the
@@ -299,6 +317,90 @@ def _segments_overlapping(transcript: Transcript, t: float) -> Iterable[Segment]
         reverse=True,
     )
     yield from earlier
+
+
+# ---- Exact-edge windowing (viral LLM start/end) ----
+
+# Shortest clip worth posting; below this we extend to the next sentence end.
+EXACT_MIN_S = 6.0
+# Breathing room around the first / last word so cuts don't clip syllables.
+_LEAD_PAD_S = 0.12
+_TAIL_PAD_S = 0.35
+# How far the model's times may be off before we stop trusting a word match.
+_EDGE_TOLERANCE_S = 1.0
+
+
+def _llm_edges(candidate: Candidate) -> tuple[float, float] | None:
+    """(start_s, end_s) the viral detector attached, from the candidate's own
+    evidence or — when fusion picked another detector as anchor — from the
+    viral entry in `matches`."""
+    ev = candidate.evidence or {}
+    sources: list[dict[str, object]] = [ev]
+    matches = ev.get("matches")
+    if isinstance(matches, list):
+        sources += [m for m in matches if isinstance(m, dict) and "viral_type" in m]
+    for src in sources:
+        start, end = src.get("start_s"), src.get("end_s")
+        if isinstance(start, int | float) and isinstance(end, int | float) and end > start:
+            return float(start), float(end)
+    return None
+
+
+def _plan_exact(
+    *,
+    start_s: float,
+    end_s: float,
+    transcript: Transcript,
+    stream_duration_s: float,
+    max_s: float,
+    kind: WindowKind,
+) -> WindowPlan | None:
+    """Snap the model's edges to word boundaries. None when the transcript has
+    no words near the requested window (caller falls back to bands)."""
+    words = [w for seg in transcript.segments for w in seg.words]
+    inside = [
+        w for w in words
+        if w.end_ts > start_s - _EDGE_TOLERANCE_S and w.ts < end_s + _EDGE_TOLERANCE_S
+    ]
+    if not inside:
+        return None
+
+    # First word: the one starting closest to the requested start.
+    first = min(inside, key=lambda w: abs(w.ts - start_s))
+    # Last word: the one ending closest to the requested end, never before first.
+    tail = [w for w in inside if w.ts >= first.ts]
+    last = min(tail, key=lambda w: abs(w.end_ts - end_s))
+    reasons = [f"{kind}: exact edges from viral pick"]
+
+    if last.end_ts - first.ts < EXACT_MIN_S:
+        # Too short to post — run on to the end of the next sentence.
+        for w in words:
+            if w.ts <= last.ts:
+                continue
+            last = w
+            if (
+                last.end_ts - first.ts >= EXACT_MIN_S
+                and w.text.rstrip().endswith((".", "?", "!", "…"))
+            ):
+                break
+        reasons.append(f"extended to {EXACT_MIN_S:.0f}s min")
+
+    if last.end_ts - first.ts > max_s:
+        fitting = [w for w in words if first.ts <= w.ts and w.end_ts - first.ts <= max_s]
+        if fitting:
+            last = fitting[-1]
+        reasons.append(f"capped at {max_s:.0f}s")
+
+    # Pad, but never into the neighbouring words.
+    prev_end = max((w.end_ts for w in words if w.end_ts <= first.ts), default=0.0)
+    next_start = min(
+        (w.ts for w in words if w.ts >= last.end_ts), default=stream_duration_s
+    )
+    start = max(0.0, prev_end, first.ts - _LEAD_PAD_S)
+    end = min(stream_duration_s, next_start, last.end_ts + _TAIL_PAD_S)
+    if end <= start:
+        return None
+    return WindowPlan(start_s=start, end_s=end, kind=kind, reason="; ".join(reasons))
 
 
 __all__ = [

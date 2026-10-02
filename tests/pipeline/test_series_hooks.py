@@ -72,3 +72,12 @@ def test_series_hook_never_stacks_tags() -> None:
     assert _series_hook("Base — Parte 1/3", 2, 3, language="es") == (
         "Base — Parte 2/3"
     )
+
+
+def test_series_parts_never_chains_viral_picks() -> None:
+    clips = [
+        _clip("hook", 3.0, 15.0, "viral"),
+        _clip("full", 3.0, 45.0, "viral"),
+        _clip("next", 50.0, 70.0, "viral"),
+    ]
+    assert _series_parts(clips) == {}
