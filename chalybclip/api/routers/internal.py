@@ -23,8 +23,9 @@ import time
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
+from chalybclip.api._video_response import video_file_response
 from chalybclip.db import ClipsRepo, Database, StreamsRepo
 from chalybclip.settings import get_settings
 from chalybclip.tenancy import bound_tenant
@@ -306,7 +307,7 @@ async def fetch_clip_for_publisher(
     tenant: str = "",
     exp: int = 0,
     sig: str = "",
-) -> FileResponse:
+) -> Response:
     """Serve the rendered clip MP4 to the publishing vendor (Zernio) or
     any caller with a valid signed URL.
 
@@ -356,8 +357,6 @@ async def fetch_clip_for_publisher(
             ),
         )
 
-    return FileResponse(
-        path=rendered,
-        media_type="video/mp4",
-        filename=f"chalybclip_{clip_id}.mp4",
+    return video_file_response(
+        request, rendered, filename=f"chalybclip_{clip_id}.mp4"
     )

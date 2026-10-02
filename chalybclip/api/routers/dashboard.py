@@ -34,6 +34,7 @@ from fastapi.responses import (
 )
 from fastapi.templating import Jinja2Templates
 
+from chalybclip.api._video_response import video_file_response
 from chalybclip.db import (
     BrandKitsRepo,
     CandidatesRepo,
@@ -4012,9 +4013,9 @@ async def clip_download(
     if rendered.exists():
         if is_servable_cached_mp4(rendered):
             pretty = f"chalybclip_{clip_id}.mp4"
-            return FileResponse(
-                path=rendered,
-                media_type="video/mp4",
+            return video_file_response(
+                request,
+                rendered,
                 filename=pretty,
                 headers={
                     "Content-Disposition": f'attachment; filename="{pretty}"',
@@ -4384,6 +4385,7 @@ async def clip_render_view(
 
 @router.get("/clips/{clip_id}/media")
 async def clip_media(
+    request: Request,
     clip_id: str,
     source: str = "original",
     tenant_id: str = Depends(tenant_binder),
@@ -4457,9 +4459,9 @@ async def clip_media(
             status_code=404,
             detail=f"clip file missing from disk: {clip_path}",
         )
-    return FileResponse(
-        path=clip_path,
-        media_type="video/mp4",
+    return video_file_response(
+        request,
+        clip_path,
         # Don't set Content-Disposition: attachment — we want inline playback.
         filename=clip_path.name,
     )
@@ -4777,10 +4779,11 @@ async def clip_waveform(
 
 @router.get("/streams/{stream_id}/source")
 async def stream_source(
+    request: Request,
     stream_id: str,
     tenant_id: str = Depends(tenant_binder),
     db: Database = Depends(get_db),
-) -> FileResponse:
+) -> Response:
     """Serve the original uploaded/downloaded source video for preview."""
     stream = await StreamsRepo(db).get(stream_id)
     if stream is None:
@@ -4791,11 +4794,7 @@ async def stream_source(
             status_code=404,
             detail=f"source video missing from disk: {src}",
         )
-    return FileResponse(
-        path=src,
-        media_type="video/mp4",
-        filename=src.name,
-    )
+    return video_file_response(request, src, filename=src.name)
 
 
 @router.post(
