@@ -184,6 +184,19 @@ class S3ArtifactStore:
             )
 
 
+def _s3_config() -> Any:
+    """boto3 >= 1.36 adds CRC32 checksum headers to every upload by default.
+    GCS's S3-interop API (and some other S3-compatibles) can't verify them and
+    rejects the request with SignatureDoesNotMatch, so only send checksums
+    when an operation strictly requires one."""
+    from botocore.config import Config
+
+    return Config(
+        request_checksum_calculation="when_required",
+        response_checksum_validation="when_required",
+    )
+
+
 def build_artifact_store(settings: Settings) -> ArtifactStore | None:
     """Construct the artifact store from settings, or None when no bucket is
     configured (→ the pipeline serves artifacts from the local volume, the
@@ -203,6 +216,7 @@ def build_artifact_store(settings: Settings) -> ArtifactStore | None:
             settings, "object_storage_secret_access_key", None
         ),
         region_name=(getattr(settings, "object_storage_region", None) or "auto"),
+        config=_s3_config(),
     )
     return S3ArtifactStore(
         client=client,
@@ -240,6 +254,7 @@ def build_recording_store(settings: Settings) -> RecordingStore | None:
         region_name=(
             getattr(settings, "live_recording_storage_region", None) or "auto"
         ),
+        config=_s3_config(),
     )
     return S3RecordingStore(
         client=client,
