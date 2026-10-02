@@ -39,17 +39,10 @@
       {% else %}
       <div style="font-size: 12.5px; color: var(--nc-text-muted); line-height: 1.55;">
         El detalle completo del error quedó guardado en el servidor.
-        Cuando lo resuelvas, vuelve a correr el proceso con <strong>Córrelo</strong>.
+        {% if can_rerun %}Cuando lo resuelvas, vuelve a correr el proceso con <strong>Córrelo</strong>.{% endif %}
       </div>
       {% endif %}
-      {# The re-run form lives inside the collapsed "Detalles técnicos"
-         <details> on the parent page — users told to "re-run" couldn't find
-         any button. Open the panel, then jump to the form. #}
-      <a href="#rerun" class="nc-btn nc-btn--primary" style="margin-top: 12px;"
-         onclick="var d = document.getElementById('tech-details'); if (d) d.open = true;">
-        <i class="ti ti-player-play" aria-hidden="true"></i>
-        <span>Córrelo</span>
-      </a>
+      {% include "_rerun_button.html" %}
     </div>
   </div>
   {% endif %}
@@ -167,9 +160,7 @@
               <em style="color: var(--nc-text-muted);">— se quedó a medias tras {{ "%.0f"|format(s.elapsed_s / 60.0) }}m</em>
               <small style="display: block; margin-top: 4px;">
                 Seguramente se reinició el panel mientras este paso estaba corriendo.
-                Toca <strong><a href="#rerun" style="color: inherit;"
-                  onclick="var d = document.getElementById('tech-details'); if (d) d.open = true;">Córrelo</a></strong>
-                en Detalles técnicos para empezar de nuevo — lo que
+                Toca <strong>Córrelo</strong> abajo para empezar de nuevo — lo que
                 ya estaba terminado se queda terminado.
               </small>
             </span>
@@ -202,13 +193,9 @@
       {% endif %}
 
       {% if (has_failed or is_abandoned) and not pipeline_failure %}
-      {# Same jump-to-rerun CTA as the failure banner — a failed/stalled run
-         with no visible button reads as a dead end. #}
-      <a href="#rerun" class="nc-btn nc-btn--primary" style="margin-top: 12px;"
-         onclick="var d = document.getElementById('tech-details'); if (d) d.open = true;">
-        <i class="ti ti-player-play" aria-hidden="true"></i>
-        <span>Córrelo</span>
-      </a>
+      {# Same re-run CTA as the failure banner — a failed/stalled run with
+         no visible button reads as a dead end. #}
+      {% include "_rerun_button.html" %}
       {% endif %}
     </div>
   </div>

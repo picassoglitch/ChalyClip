@@ -1,0 +1,35 @@
+{# Córrelo — starts the re-run itself (POST /rerun) instead of jumping to
+   the form inside the collapsed "Detalles técnicos". When the source is
+   gone (an upload on an instance that restarted), there is nothing to
+   re-run: say so and send the user to add the video again. #}
+{% if can_rerun %}
+<form action="/dashboard/streams/{{ stream.id }}/rerun" method="post"
+      style="margin-top: 12px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+  {% if personas|length > 1 %}
+  <select class="nc-select" name="persona_id" required aria-label="Tu firma" style="width: auto; margin: 0;">
+    {% for p in personas %}
+    <option value="{{ p.id }}">{{ p.name }}</option>
+    {% endfor %}
+  </select>
+  {% elif personas %}
+  <input type="hidden" name="persona_id" value="{{ personas[0].id }}">
+  {% endif %}
+  <button type="submit" class="nc-btn nc-btn--primary" {% if not personas %}disabled{% endif %}>
+    <i class="ti ti-player-play" aria-hidden="true"></i>
+    <span>Córrelo</span>
+  </button>
+</form>
+{% if not personas %}
+<small style="display: block; margin-top: 8px;">
+  Primero crea tu firma — pásate a la pestaña de <a href="/dashboard/personas">Firmas</a>.
+</small>
+{% endif %}
+{% else %}
+<div style="margin-top: 12px; font-size: 12.5px; color: var(--nc-text-muted); line-height: 1.55;">
+  Este video ya no está en el servidor, así que no se puede volver a correr.
+  <a href="/dashboard/start" class="nc-btn nc-btn--primary" style="margin-top: 8px;">
+    <i class="ti ti-upload" aria-hidden="true"></i>
+    <span>Súbelo de nuevo</span>
+  </a>
+</div>
+{% endif %}

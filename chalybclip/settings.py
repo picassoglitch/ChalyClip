@@ -141,14 +141,14 @@ class Settings(BaseSettings):
     #
     # `assemblyai_speaker_labels` — per-video diarization labels
     # (A / B / C). The pipeline reads these instead of running
-    # pyannote separately (Task A2). Default True; flip False to
-    # drop the ~$0.02/hr diarization upcharge if a particular run
-    # doesn't need speaker separation.
+    # pyannote separately (Task A2). Default False — speaker
+    # detection is off (see DiarizationConfig), so don't pay the
+    # ~$0.02/hr diarization upcharge for labels nothing reads.
     assemblyai_language_mode: str = "auto"
     assemblyai_speech_models: list[str] = Field(
         default_factory=lambda: ["universal-3-pro", "universal-2"]
     )
-    assemblyai_speaker_labels: bool = True
+    assemblyai_speaker_labels: bool = False
     # Slice O.44 — Modal Whisper provider. Wired when
     # `transcribe_provider="modal"`. The endpoint is the URL Modal
     # exposes for the `transcribe` web function (printed by

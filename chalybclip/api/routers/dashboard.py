@@ -1588,6 +1588,17 @@ async def stream_progress(
     has_failed = any(s["status"] == "failed" for s in steps)
     is_abandoned = any(s["status"] == "abandoned" for s in steps)
 
+    # The Córrelo button posts the re-run itself, so it needs a persona and
+    # a source that is still there to run on.
+    can_rerun = False
+    personas: list[object] = []
+    if has_failed or is_abandoned:
+        from chalybclip.settings import get_settings
+
+        can_rerun = _rerun_available(stream, Path(get_settings().default_output_dir))
+        if can_rerun:
+            personas = await _merged_personas(db)
+
     return templates.TemplateResponse(
         request,
         "_stream_progress.html",
@@ -1601,6 +1612,8 @@ async def stream_progress(
             "pipeline_failure": pipeline_failure,
             "candidate_count": len(candidates),
             "clip_count": len(clips),
+            "can_rerun": can_rerun,
+            "personas": personas,
         },
     )
 
@@ -1934,6 +1947,26 @@ async def stream_detail(
     )
 
 
+_NON_REFETCHABLE_PLATFORMS = ("upload", "live", "live_ended")
+
+
+def _rerun_available(stream_row: object, output_dir: Path) -> bool:
+    """Whether POST /streams/{id}/rerun can start this stream again.
+
+    A URL source can always be downloaded again. An upload or a live
+    capture exists only on the disk of the instance that took it, so a
+    restart or redeploy loses it; then the only way forward is to add the
+    video again.
+    """
+    vod_url = getattr(stream_row, "vod_url", "")
+    platform = getattr(stream_row, "platform", "")
+    if vod_url and platform not in _NON_REFETCHABLE_PLATFORMS:
+        return True
+    stream_dir = output_dir / str(getattr(stream_row, "id", ""))
+    source = str(getattr(stream_row, "source_video_path", "") or "")
+    return (stream_dir / "stream.json").exists() and bool(source) and Path(source).exists()
+
+
 @router.post(
     "/streams/{stream_id}/rerun",
     dependencies=[Depends(require_full_scope), Depends(require_active_tenant)],
@@ -2001,8 +2034,9 @@ async def streams_rerun(
         # re-download. The bot-gate is usually transient, so a retry typically
         # lands. Uploads / live have no re-fetchable source, so those still
         # need to be re-added.
-        refetchable = bool(stream_row.vod_url) and stream_row.platform not in (
-            "upload", "live", "live_ended",
+        refetchable = (
+            bool(stream_row.vod_url)
+            and stream_row.platform not in _NON_REFETCHABLE_PLATFORMS
         )
         if not refetchable:
             raise HTTPException(

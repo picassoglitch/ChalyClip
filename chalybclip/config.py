@@ -167,6 +167,11 @@ class DiarizationConfig(BaseModel):
     setups that DO have pyannote+HF_TOKEN get the feature for free;
     setups that don't see the same skip-with-reason they saw before.
 
+    Off by default since the Chalyb rebrand: clips come from keyword
+    triggers and the viral detector, which read the transcript, not the
+    speakers. With no speaker labels a brand kit's phrases fire on
+    whoever says them. Set `enabled: true` to bring it back.
+
     `match_threshold` is the cosine-sim cutoff for matching a new VOD's
     speaker embedding against the tenant's persistent `speakers` table.
     Lower values are more permissive (more likely to merge two recordings
@@ -174,7 +179,7 @@ class DiarizationConfig(BaseModel):
     matches.
     """
 
-    enabled: bool = True
+    enabled: bool = False
     model: str = Field(default="pyannote/speaker-diarization-3.1")
     device: str = Field(default="cuda")
     worker_timeout_s: float = Field(

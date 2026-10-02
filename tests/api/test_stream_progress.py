@@ -510,3 +510,99 @@ async def test_progress_isolates_events_per_stream(
     assert r.status_code == 200
     # str_pB's transcribe should still show as pending, not done.
     assert "Pipeline complete" not in r.text
+
+
+async def test_progress_failed_upload_with_source_offers_direct_rerun(
+    client: httpx.AsyncClient,
+    db: Database,
+    tenants: dict[str, dict[str, str]],
+    monkeypatch: object,
+    tmp_path: object,
+) -> None:
+    """Córrelo posts the re-run itself when the upload is still on disk."""
+    from pathlib import Path
+
+    from chalybclip.db import PersonasRepo
+
+    tenant_id = tenants["alice"]["id"]
+    out = Path(str(tmp_path)) / "out"
+    source = out / "str_rb1" / "source" / "video.mp4"
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b"")
+    (out / "str_rb1" / "stream.json").write_text("{}", encoding="utf-8")
+    with bound_tenant(tenant_id):
+        await StreamsRepo(db).upsert(
+            StreamRow(
+                id="str_rb1",
+                tenant_id=tenant_id,
+                vod_url="upload://str_rb1.mp4",
+                platform="upload",
+                title="Test",
+                channel=None,
+                duration_s=120.0,
+                source_video_path=str(source),
+                source_audio_path=str(source.with_name("audio.wav")),
+                status="ingested",
+                created_at=_now(),
+            )
+        )
+        await PersonasRepo(db).create(
+            persona_id="p1",
+            name="P",
+            primary_language="es",
+            target_languages=["es"],
+            voice_prompt="v",
+        )
+    await _emit_step_event(
+        db,
+        tenant_id=tenant_id,
+        stream_id="str_rb1",
+        event_type="pipeline.step.failed",
+        step="transcribe",
+        error="AssemblyAI upload failed (401)",
+    )
+    monkeypatch.setattr(  # type: ignore[attr-defined]
+        "chalybclip.settings.get_settings",
+        lambda: type("S", (), {"default_output_dir": str(out)})(),
+    )
+    await client.post("/dashboard/login", data={"token": tenants["alice"]["token"]})
+    r = await client.get("/dashboard/streams/str_rb1/progress")
+    assert r.status_code == 200
+    body = r.text
+    assert 'action="/dashboard/streams/str_rb1/rerun"' in body
+    assert 'href="#rerun"' not in body
+    assert "Súbelo de nuevo" not in body
+
+
+async def test_progress_failed_upload_without_source_asks_to_reupload(
+    client: httpx.AsyncClient,
+    db: Database,
+    tenants: dict[str, dict[str, str]],
+    monkeypatch: object,
+    tmp_path: object,
+) -> None:
+    """An upload lost to a restart can't re-run: no Córrelo form, a
+    pointer to add the video again instead."""
+    from pathlib import Path
+
+    tenant_id = tenants["alice"]["id"]
+    await _seed_stream(db, tenant_id=tenant_id, stream_id="str_rb2")
+    await _emit_step_event(
+        db,
+        tenant_id=tenant_id,
+        stream_id="str_rb2",
+        event_type="pipeline.step.failed",
+        step="transcribe",
+        error="AssemblyAI upload failed (401)",
+    )
+    monkeypatch.setattr(  # type: ignore[attr-defined]
+        "chalybclip.settings.get_settings",
+        lambda: type("S", (), {"default_output_dir": str(Path(str(tmp_path)) / "out")})(),
+    )
+    await client.post("/dashboard/login", data={"token": tenants["alice"]["token"]})
+    r = await client.get("/dashboard/streams/str_rb2/progress")
+    assert r.status_code == 200
+    body = r.text
+    assert "/rerun" not in body
+    assert "Súbelo de nuevo" in body
+    assert 'href="/dashboard/start"' in body
