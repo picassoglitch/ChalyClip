@@ -565,8 +565,10 @@ async def test_progress_failed_upload_with_source_offers_direct_rerun(
         "chalybclip.settings.get_settings",
         lambda: type("S", (), {"default_output_dir": str(out)})(),
     )
-    await client.post("/dashboard/login", data={"token": tenants["alice"]["token"]})
-    r = await client.get("/dashboard/streams/str_rb1/progress")
+    r = await client.get(
+        "/dashboard/streams/str_rb1/progress",
+        headers=auth(tenants["alice"]["token"]),
+    )
     assert r.status_code == 200
     body = r.text
     assert 'action="/dashboard/streams/str_rb1/rerun"' in body
@@ -599,8 +601,10 @@ async def test_progress_failed_upload_without_source_asks_to_reupload(
         "chalybclip.settings.get_settings",
         lambda: type("S", (), {"default_output_dir": str(Path(str(tmp_path)) / "out")})(),
     )
-    await client.post("/dashboard/login", data={"token": tenants["alice"]["token"]})
-    r = await client.get("/dashboard/streams/str_rb2/progress")
+    r = await client.get(
+        "/dashboard/streams/str_rb2/progress",
+        headers=auth(tenants["alice"]["token"]),
+    )
     assert r.status_code == 200
     body = r.text
     assert "/rerun" not in body
