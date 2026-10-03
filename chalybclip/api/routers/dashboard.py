@@ -18,12 +18,10 @@ from fastapi import (
     APIRouter,
     BackgroundTasks,
     Depends,
-    File,
     Form,
     HTTPException,
     Request,
     Response,
-    UploadFile,
 )
 from fastapi.responses import (
     FileResponse,
@@ -53,8 +51,11 @@ from chalybclip.db import (
 )
 from chalybclip.db.models import CustomTriggerPhrases
 from chalybclip.errors import ChalybClipError
+from chalybclip.integrations.chalyb.admission import AdmissionRefused
+from chalybclip.jobs.usage import admit_job, cancel_admission, readmit_job
 from chalybclip.settings import resolve_db_target
 
+from .._admission import parse_boost, refusal_http
 from .._pipeline import PipelineKickoff
 from ..deps import get_db, require_full_scope, tenant_binder
 from ..status_gate import require_active_tenant
@@ -66,6 +67,7 @@ templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 # Same registry as the landing page; pages opt in by calling
 # `{{ t('nav.publish') }}` etc.
 from ..i18n import install_globals as _install_i18n  # noqa: E402
+
 _install_i18n(templates)
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -1072,6 +1074,7 @@ async def streams_create(
     background_tasks: BackgroundTasks,
     vod_url: str = Form(...),
     persona_id: str = Form(...),
+    boost: str | None = Form(None),
     tenant_id: str = Depends(tenant_binder),
     db: Database = Depends(get_db),
 ) -> Response:
@@ -1080,12 +1083,30 @@ async def streams_create(
     from chalybclip.settings import get_settings
 
     output_dir = Path(get_settings().default_output_dir)
+    # Consumption contract: admit before the inline download; re-admit
+    # with the real duration once ingest knows it.
     try:
-        stream = await ingest_vod(
-            vod_url=vod_url, tenant_id=tenant_id, output_dir=output_dir
+        admission = await admit_job(
+            db, tenant_id=tenant_id, stream_id="", boost=parse_boost(boost)
         )
-    except ChalybClipError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    except AdmissionRefused as e:
+        raise refusal_http(e) from e
+    try:
+        try:
+            stream = await ingest_vod(
+                vod_url=vod_url, tenant_id=tenant_id, output_dir=output_dir
+            )
+        except ChalybClipError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        admission = await readmit_job(
+            db, job_id=admission.job_id, stream_id=stream.id,
+            source_minutes=float(stream.duration_s or 0) / 60.0,
+        ) or admission
+    except AdmissionRefused as e:
+        raise refusal_http(e) from e
+    except BaseException:
+        await cancel_admission(db, admission)
+        raise
 
     row = await StreamsRepo(db).upsert(stream_to_row(stream))
     await EventsRepo(db).emit(type="stream.created", payload={"stream_id": row.id})
@@ -1096,7 +1117,7 @@ async def streams_create(
             stream=stream,
             persona_id=persona_id,
             output_dir=output_dir,
-        ),
+        ).with_admission(admission),
         background_tasks=background_tasks,
     )
     return RedirectResponse(url=f"/dashboard/streams/{row.id}", status_code=303)
@@ -1109,37 +1130,38 @@ async def streams_create(
 async def streams_upload(
     request: Request,
     background_tasks: BackgroundTasks,
-    file: UploadFile = File(...),
-    persona_id: str = Form(...),
     tenant_id: str = Depends(tenant_binder),
     db: Database = Depends(get_db),
 ) -> Response:
     """Ingest an operator-uploaded video file — mirrors the URL-job flow.
 
-    Previously this endpoint blocked the request on:
-      1. Receiving the upload bytes (unavoidable; HTTP request body)
-      2. ingest_uploaded() — file move + audio extract + ffprobe
-         (~30-60 s for a 1-hour video on Railway CPU)
-      3. Stream row upsert + event emit
-      4. Pipeline dispatch
-    …then redirected. For a 500 MB upload the operator stared at a
-    spinner for minutes before they could see the live progress page.
+    Multipart fields: `file`, `persona_id`, optional `boost` (the "Boost"
+    checkbox). The body is read by hand (see `api/_admission.py`):
 
-    Now (matches /dashboard/url-jobs):
-      1. Receive bytes (unavoidable)
-      2. Mint stream_id, insert placeholder StreamRow (status="pending",
-         duration_s=0, canonical paths the runner will write to)
-      3. Emit stream.created
-      4. Schedule `upload_pipeline_runner` as a background task —
-         audio extract + transcribe + detect + cut all happen there
-      5. 303 to /dashboard/streams/{id} immediately
+      1. Admit with the declared size (Content-Length) BEFORE reading a
+         byte; a refusal answers 413 / 402 / 429 with the user's message.
+      2. Receive bytes, cut off once past the tier's max_upload_mb.
+      3. ffprobe the file and re-admit with the real size + minutes.
+      4. Mint stream_id, insert placeholder StreamRow (status="pending",
+         duration_s=0, canonical paths the runner will write to), emit
+         stream.created.
+      5. Schedule `upload_pipeline_runner` as a background task (audio
+         extract + transcribe + detect + cut; metered + settled there).
+      6. 303 to /dashboard/streams/{id} immediately.
 
     The live progress page reads the same event surface every other
     source uses (stream.download.* + stream.audio_extracted +
     pipeline.step.* + clip.cut.substep).
     """
-    from chalybclip.api._pipeline import upload_pipeline_runner
-    from chalybclip.api.routers.streams import _stash_upload_to_tmp
+    from chalybclip.api import _pipeline as pipeline_mod
+    from chalybclip.api._admission import (
+        declared_body_bytes,
+        effective_cap,
+        probe_minutes,
+        read_capped_form,
+        too_large_http,
+    )
+    from chalybclip.api.routers.streams import _global_upload_cap, _stash_upload_to_tmp
     from chalybclip.db.models import StreamRow
     from chalybclip.ids import new_id
     from chalybclip.ingest import is_ffmpeg_available
@@ -1156,11 +1178,49 @@ async def streams_upload(
         )
 
     output_dir = Path(get_settings().default_output_dir)
-    tmp_path = await _stash_upload_to_tmp(file, output_dir)
-
-    # Mint stream_id up-front so the placeholder row + eventual
-    # stream.json + the redirect URL all agree.
+    # Mint stream_id up-front so the admission, placeholder row, eventual
+    # stream.json and the redirect URL all agree.
     stream_id = new_id("str")
+    declared = declared_body_bytes(request)
+    query_boost = parse_boost(request.query_params.get("boost"))
+    try:
+        admission = await admit_job(
+            db, tenant_id=tenant_id, stream_id=stream_id, upload_bytes=declared,
+            boost=query_boost,
+        )
+    except AdmissionRefused as e:
+        raise refusal_http(e) from e
+
+    tmp_path: Path | None = None
+    try:
+        cap = effective_cap(admission.max_upload_bytes, _global_upload_cap())
+        if cap is not None and declared > cap + 64 * 1024:
+            raise too_large_http()
+        file, fields = await read_capped_form(request, max_bytes=cap)
+        persona_id = (fields.get("persona_id") or "").strip()
+        if not persona_id:
+            raise HTTPException(status_code=422, detail="persona_id is required")
+        boost = parse_boost(fields.get("boost"))
+        if boost is None:
+            boost = query_boost
+        tmp_path = await _stash_upload_to_tmp(file, output_dir, max_bytes=cap)
+        # Check twice: real size + probed minutes, same job id.
+        admission = await readmit_job(
+            db, job_id=admission.job_id,
+            upload_bytes=tmp_path.stat().st_size,
+            source_minutes=await probe_minutes(tmp_path),
+            boost=boost,
+        ) or admission
+    except AdmissionRefused as e:
+        if tmp_path is not None:
+            tmp_path.unlink(missing_ok=True)
+        raise refusal_http(e) from e
+    except BaseException:
+        if tmp_path is not None:
+            tmp_path.unlink(missing_ok=True)
+        await cancel_admission(db, admission)
+        raise
+
     stream_dir = output_dir / stream_id
     source_dir = stream_dir / "source"
     placeholder_video = source_dir / "video.mp4"
@@ -1197,9 +1257,9 @@ async def streams_upload(
 
     # Hand off to the background runner. Audio extract + transcribe +
     # detect + cut all happen there; the operator hits the progress
-    # page instantly.
+    # page instantly. Looked up through the module so tests can stub it.
     background_tasks.add_task(
-        upload_pipeline_runner,
+        pipeline_mod.upload_pipeline_runner,
         tenant_id=tenant_id,
         stream_id=stream_id,
         persona_id=persona_id,
@@ -1207,8 +1267,12 @@ async def streams_upload(
         output_dir=output_dir,
         title=file.filename,
         # Remote dispatcher → the worker does the ingest + cut (the file is
-        # parked in the bucket first); in-process → runs right here.
+        # parked in the bucket first); boost lane → the boost job does;
+        # in-process → runs right here.
         dispatcher=request.app.state.job_dispatcher,
+        usage_job_id=admission.job_id,
+        reservation_id=admission.reservation_id,
+        lane=admission.lane,
     )
     return RedirectResponse(
         url=f"/dashboard/streams/{stream_id}", status_code=303,
@@ -1306,6 +1370,7 @@ async def url_job_create(
     request: Request,
     background_tasks: BackgroundTasks,
     vod_url: str = Form(...),
+    boost: str | None = Form(None),
     tenant_id: str = Depends(tenant_binder),
     db: Database = Depends(get_db),
 ) -> Response:
@@ -1355,6 +1420,15 @@ async def url_job_create(
     source_dir = stream_dir / "source"
     placeholder_video = source_dir / "video.mp4"
     placeholder_audio = source_dir / "audio.wav"
+
+    # Consumption contract: admit before anything downloads. The length
+    # isn't known yet; the runner re-admits with it right after ingest.
+    try:
+        admission = await admit_job(
+            db, tenant_id=tenant_id, stream_id=stream_id, boost=parse_boost(boost)
+        )
+    except AdmissionRefused as e:
+        raise refusal_http(e) from e
 
     # Insert a placeholder StreamRow so the redirect target page renders
     # immediately (with "Downloading…" progress) instead of 404'ing while
@@ -1415,7 +1489,7 @@ async def url_job_create(
             stream=stub,
             persona_id=persona.id,
             output_dir=output_dir,
-        ),
+        ).with_admission(admission),
         background_tasks=background_tasks,
     )
 
@@ -1980,6 +2054,7 @@ async def streams_rerun(
     stream_id: str,
     background_tasks: BackgroundTasks,
     persona_id: str = Form(...),
+    boost: str | None = Form(None),
     tenant_id: str = Depends(tenant_binder),
     db: Database = Depends(get_db),
 ) -> Response:
@@ -2077,6 +2152,16 @@ async def streams_rerun(
     if persona_row is not None and persona_row.primary_language:
         persona_language = persona_row.primary_language
 
+    # Consumption contract: a rerun is a new run — admit it.
+    try:
+        admission = await admit_job(
+            db, tenant_id=tenant_id, stream_id=stream_id,
+            source_minutes=float(stream.duration_s or stream_row.duration_s or 0) / 60.0,
+            boost=parse_boost(boost),
+        )
+    except AdmissionRefused as e:
+        raise refusal_http(e) from e
+
     dispatcher = request.app.state.job_dispatcher
     await dispatcher.dispatch_pipeline(
         PipelineKickoff(
@@ -2085,7 +2170,7 @@ async def streams_rerun(
             persona_id=persona_id,
             output_dir=output_dir,
             language=persona_language,
-        ),
+        ).with_admission(admission),
         background_tasks=background_tasks,
     )
     await EventsRepo(db).emit(
@@ -2109,9 +2194,9 @@ async def clip_detail(
         platform_choices,
         platform_target_choices,
         preset_choices,
+        resolve_brand_kit_for_candidate,
         style_choices,
         zones_for_platform,
-        resolve_brand_kit_for_candidate,
     )
     from chalybclip.clip import (
         clip_breakdown,
@@ -3472,6 +3557,8 @@ async def clip_generate_hooks(
     from chalybclip.variants import generate_hooks
     from chalybclip.variants.personas import (
         get_persona as get_yaml_persona,
+    )
+    from chalybclip.variants.personas import (
         load_personas as load_yaml_personas,
     )
 
@@ -3843,7 +3930,8 @@ async def clip_render_status(
     # retry button.
     if clip.render_state == "rendering" and clip.render_started_at:
         try:
-            from datetime import UTC, datetime as _dt
+            from datetime import UTC
+            from datetime import datetime as _dt
             started = _dt.fromisoformat(clip.render_started_at)
             if started.tzinfo is None:
                 started = started.replace(tzinfo=UTC)
@@ -4107,7 +4195,8 @@ async def clip_download(
         is_zombie = False
         if clip.render_started_at:
             try:
-                from datetime import UTC, datetime as _dt
+                from datetime import UTC
+                from datetime import datetime as _dt
                 started = _dt.fromisoformat(clip.render_started_at)
                 if started.tzinfo is None:
                     started = started.replace(tzinfo=UTC)

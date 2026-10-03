@@ -178,6 +178,9 @@ class StreamRow(BaseModel):
     is_live: bool = False
     live_started_at: str | None = None
     live_ended_at: str | None = None
+    # Bytes this stream's artifacts occupy, measured at the end of a
+    # successful run. Summed per tenant for admission's storage_mb_after.
+    storage_bytes: int = 0
 
 
 class LiveStreamKeyRow(BaseModel):

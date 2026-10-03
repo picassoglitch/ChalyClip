@@ -218,6 +218,9 @@ def create_worker_app(*, runner: PipelineRunner | None = None) -> FastAPI:
         language = (payload or {}).get("language") or None
         source_object_key = (payload or {}).get("source_object_key") or None
         title = (payload or {}).get("title") or None
+        usage_job_id = (payload or {}).get("usage_job_id") or None
+        reservation_id = (payload or {}).get("reservation_id") or None
+        lane = str((payload or {}).get("lane") or "standard")
         stream_raw = (payload or {}).get("stream") or {}
         if not tenant_id or not persona_id or not stream_raw:
             raise HTTPException(
@@ -256,6 +259,9 @@ def create_worker_app(*, runner: PipelineRunner | None = None) -> FastAPI:
             language=language,
             source_object_key=source_object_key,
             title=title,
+            usage_job_id=usage_job_id,
+            reservation_id=reservation_id,
+            lane=lane,
         )
 
         job_id = ledger.new_id(stream.id)

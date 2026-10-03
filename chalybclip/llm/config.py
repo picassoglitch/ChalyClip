@@ -15,6 +15,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from chalybclip.errors import ChalybClipError
 
+from .prices import CONSERVATIVE_RATES, TokenRates, lookup_rates
+
 Quality = Literal["standard", "premium"]
 
 
@@ -87,10 +89,15 @@ class CircuitBreakerConfig(BaseModel):
 
 
 class ModelPricing(BaseModel):
-    """USD per 1 M tokens. Used to compute `cost_usd_micros`."""
+    """USD per 1 M tokens. Used to compute `cost_usd_micros`.
+
+    Cache rates are optional: unset, they derive from the input rate with
+    Anthropic's multipliers (read 0.1x, 5-minute write 1.25x)."""
 
     input_per_mtok_usd: float = 0.0
     output_per_mtok_usd: float = 0.0
+    cache_read_per_mtok_usd: float | None = None
+    cache_write_per_mtok_usd: float | None = None
 
 
 class LLMConfig(BaseModel):
@@ -116,6 +123,34 @@ class LLMConfig(BaseModel):
     def pricing_for(self, provider: str, model: str) -> ModelPricing:
         """Lookup pricing or fall back to zero (so cost stays computable)."""
         return self.pricing.get(provider, {}).get(model, ModelPricing())
+
+    def rates_for(self, provider: str, model: str) -> tuple[TokenRates, bool]:
+        """Resolve the rates a call is billed at → `(rates, known)`.
+
+        Order: this config's `pricing:` entry (explicit override), then the
+        committed table in `prices.py`. A model neither knows is priced at
+        the conservative (highest) rate when its provider is a paid API
+        (`kind: anthropic`) and `known=False` so the caller can log it; a
+        self-hosted openai_compatible runtime genuinely costs nothing.
+        """
+        override = self.pricing.get(provider, {}).get(model)
+        if override is not None:
+            return (
+                TokenRates(
+                    input=override.input_per_mtok_usd,
+                    output=override.output_per_mtok_usd,
+                    cache_read=override.cache_read_per_mtok_usd,
+                    cache_write=override.cache_write_per_mtok_usd,
+                ),
+                True,
+            )
+        committed = lookup_rates(provider, model)
+        if committed is not None:
+            return committed, True
+        cfg = self.providers.get(provider)
+        if (cfg is not None and cfg.kind == "anthropic") or provider == "anthropic":
+            return CONSERVATIVE_RATES, False
+        return TokenRates(input=0.0, output=0.0), True
 
 
 _DEFAULT_PATH = Path("config/llm.yaml")

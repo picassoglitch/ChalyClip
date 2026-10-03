@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -471,6 +471,40 @@ class Settings(BaseSettings):
     max_upload_bytes: int = Field(
         default=5 * 1024 * 1024 * 1024,
         validation_alias="CHALYBCLIP_MAX_UPLOAD_BYTES",
+    )
+
+    # ------------------------------------------------------------------
+    # Consumption contract (chalyb docs/engines/consumption-contract.md):
+    # admission, boost lane, durable usage delivery.
+    # ------------------------------------------------------------------
+    # Boost lane — the one-shot Cloud Run Job (8 vCPU / 32 GiB) a run is
+    # sent to when /usage/admit answers lane=boost. Unset → boost-lane runs
+    # fall back to the standard worker (logged; the boost fee is dropped by
+    # re-admitting with boost=false). Project/region default to the
+    # metadata server's, so on Cloud Run only the job name is required.
+    boost_job_name: str | None = Field(
+        default=None, validation_alias="CHALYBCLIP_BOOST_JOB_NAME"
+    )
+    boost_gcp_project: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("GOOGLE_CLOUD_PROJECT", "CHALYBCLIP_BOOST_GCP_PROJECT"),
+    )
+    boost_gcp_region: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("CLOUD_RUN_REGION", "CHALYBCLIP_BOOST_GCP_REGION"),
+    )
+    # How often the web box drains the usage outbox to Chalyb /usage. Runs
+    # also drain at job end, so this mostly catches retries + stragglers.
+    usage_outbox_interval_s: float = Field(
+        default=30.0, validation_alias="CHALYBCLIP_USAGE_OUTBOX_INTERVAL_S"
+    )
+    # Reservation TTL sent with /usage/admit, and the heartbeat cadence
+    # that pushes it out while a long run is still going.
+    usage_reservation_ttl_s: int = Field(
+        default=10800, validation_alias="CHALYBCLIP_USAGE_RESERVATION_TTL_S"
+    )
+    usage_heartbeat_interval_s: float = Field(
+        default=1800.0, validation_alias="CHALYBCLIP_USAGE_HEARTBEAT_INTERVAL_S"
     )
 
     # Slice O.9 — admin tenant allowlist. Comma-separated tenant IDs that
