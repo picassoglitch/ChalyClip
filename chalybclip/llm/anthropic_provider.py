@@ -130,6 +130,16 @@ class AnthropicProvider(LLMProvider):
 
 def _parse_message(message: anthropic.types.Message, *, model: str) -> ProviderResult:
     """Pull the tool_use input out of Claude's response."""
+    usage = message.usage
+    result = ProviderResult(
+        output={},
+        input_tokens=int(getattr(usage, "input_tokens", 0) or 0),
+        output_tokens=int(getattr(usage, "output_tokens", 0) or 0),
+        cache_read_tokens=int(getattr(usage, "cache_read_input_tokens", 0) or 0),
+        cache_write_tokens=int(getattr(usage, "cache_creation_input_tokens", 0) or 0),
+        model=model,
+    )
+
     structured: dict[str, Any] | None = None
     for block in message.content:
         if getattr(block, "type", None) == "tool_use":
@@ -137,12 +147,8 @@ def _parse_message(message: anthropic.types.Message, *, model: str) -> ProviderR
             break
 
     if structured is None:
-        raise RetryableLLMError("anthropic returned no tool_use block")
+        # The call was still billed — hand the usage to the router so the
+        # retry it triggers doesn't hide this attempt's tokens.
+        raise RetryableLLMError("anthropic returned no tool_use block", usage=result)
 
-    usage = message.usage
-    return ProviderResult(
-        output=structured,
-        input_tokens=int(getattr(usage, "input_tokens", 0) or 0),
-        output_tokens=int(getattr(usage, "output_tokens", 0) or 0),
-        model=model,
-    )
+    return result.model_copy(update={"output": structured})

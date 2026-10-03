@@ -4,7 +4,8 @@ balance-sync stops being invisible.
 Pins: success clears the status, an HTTP-rejected report records a
 failure with a token hint on 401/403, a missing admin token records a
 config failure, and a network error records a failure — all WITHOUT
-the reporter ever raising (it's a fire-and-forget background path).
+the reporter ever raising. Retries are the outbox's: a transient failure
+leaves the row pending with backoff and the NEXT drain pass resends it.
 """
 
 from __future__ import annotations
@@ -16,16 +17,15 @@ import pytest
 import respx
 
 from chalybclip.db import Database, TenantsRepo, apply_migrations
-from chalybclip.integrations.chalyb import reporter as reporter_mod
+from chalybclip.db.usage_repos import UsageOutboxRepo
+from chalybclip.integrations.chalyb.outbox import drain_outbox
 from chalybclip.integrations.chalyb.reporter import report_llm_usage
 from chalybclip.settings import get_settings
 
 
-@pytest.fixture(autouse=True)
-def _zero_retry_delays(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Keep the retry schedule (attempt count) but drop the sleeps so
-    transient-failure tests don't wait out real backoff."""
-    monkeypatch.setattr(reporter_mod, "_RETRY_DELAYS_S", (0.0, 0.0))
+def _later(hours: int = 2) -> _dt.datetime:
+    """A drain clock past any backoff the previous pass scheduled."""
+    return _dt.datetime.now(_dt.UTC) + _dt.timedelta(hours=hours)
 
 
 def _now() -> str:
@@ -140,8 +140,8 @@ async def test_network_error_records_failure_without_raising(
 @respx.mock
 async def test_timeout_retries_then_succeeds(db: Database, chalyb_env) -> None:
     """The prod incident: a transient timeout while the host is saturated.
-    The report must retry instead of dropping the event (Chalyb would
-    never deduct it) and leave the chip green after the retry lands."""
+    The event must stay queued instead of being dropped, and the next
+    drain pass delivers it and turns the chip green."""
     tid = await _tenant_linked(db)
     route = respx.post(_URL).mock(side_effect=[
         httpx.ReadTimeout("slow"),
@@ -153,7 +153,11 @@ async def test_timeout_retries_then_succeeds(db: Database, chalyb_env) -> None:
         db, tenant_id=tid, llm_call_id="lc6",
         input_tokens=1_000, output_tokens=0, occurred_at_iso=_now(),
     )
+    row = await UsageOutboxRepo(db).get("lc6")
+    assert row is not None and row.status == "pending" and row.attempts == 1
+    await drain_outbox(db, now=_later())
     assert route.call_count == 2
+    assert (await UsageOutboxRepo(db).get("lc6")).status == "sent"
     t = await TenantsRepo(db).get(tid)
     assert t.last_usage_report_ok == 1
     assert t.last_usage_report_error is None
@@ -170,7 +174,12 @@ async def test_all_attempts_time_out_records_failure(
         db, tenant_id=tid, llm_call_id="lc7",
         input_tokens=1_000, output_tokens=0, occurred_at_iso=_now(),
     )
-    assert route.call_count == 3  # 1 + the 2 zeroed retry delays
+    await drain_outbox(db, now=_later(2))
+    await drain_outbox(db, now=_later(4))
+    assert route.call_count == 3
+    row = await UsageOutboxRepo(db).get("lc7")
+    # Never dropped: still pending, backing off.
+    assert row.status == "pending" and row.attempts == 3
     t = await TenantsRepo(db).get(tid)
     assert t.last_usage_report_ok == 0
     assert "timeout" in (t.last_usage_report_error or "")
@@ -178,27 +187,34 @@ async def test_all_attempts_time_out_records_failure(
 
 @respx.mock
 async def test_5xx_is_retried(db: Database, chalyb_env) -> None:
-    """Server errors are transient → retried until the schedule runs out."""
+    """Server errors are transient → kept pending, resent by the next pass."""
     tid = await _tenant_linked(db)
     route = respx.post(_URL).mock(return_value=httpx.Response(503, text="down"))
     await report_llm_usage(
         db, tenant_id=tid, llm_call_id="lc8",
         input_tokens=1_000, output_tokens=0, occurred_at_iso=_now(),
     )
-    assert route.call_count == 3
+    # Not due yet — the backoff holds it.
+    await drain_outbox(db)
+    assert route.call_count == 1
+    await drain_outbox(db, now=_later())
+    assert route.call_count == 2
+    assert (await UsageOutboxRepo(db).get("lc8")).status == "pending"
     assert "503" in ((await TenantsRepo(db).get(tid)).last_usage_report_error or "")
 
 
 @respx.mock
 async def test_4xx_rejection_is_not_retried(db: Database, chalyb_env) -> None:
-    """Payload/config rejections are permanent → one attempt only."""
+    """Payload/config rejections are permanent → one attempt, row dead."""
     tid = await _tenant_linked(db)
     route = respx.post(_URL).mock(return_value=httpx.Response(422, text="bad kind"))
     await report_llm_usage(
         db, tenant_id=tid, llm_call_id="lc9",
         input_tokens=1_000, output_tokens=0, occurred_at_iso=_now(),
     )
+    await drain_outbox(db, now=_later())
     assert route.call_count == 1
+    assert (await UsageOutboxRepo(db).get("lc9")).status == "dead"
     assert "422" in ((await TenantsRepo(db).get(tid)).last_usage_report_error or "")
 
 

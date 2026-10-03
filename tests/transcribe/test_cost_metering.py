@@ -118,25 +118,32 @@ def _make_stream(tmp_path: Path, tenant_id: str) -> Stream:
 
 
 def test_cost_micros_base_only() -> None:
-    """1 hour without diarization = $0.15 = 150_000 micros."""
+    """1 hour on Universal Pro without diarization = $0.21 = 210_000 micros."""
     assert assemblyai.cost_micros_for(
         duration_s=3600.0, speaker_labels=False,
-    ) == 150_000
+    ) == 210_000
 
 
 def test_cost_micros_with_diarization() -> None:
-    """1 hour with diarization = $0.17 = 170_000 micros."""
+    """1 hour on Universal Pro with diarization = $0.23 = 230_000 micros."""
     assert assemblyai.cost_micros_for(
         duration_s=3600.0, speaker_labels=True,
+    ) == 230_000
+
+
+def test_cost_micros_universal_2_ladder() -> None:
+    """A ladder that starts at Universal-2 bills its $0.15/hr."""
+    assert assemblyai.cost_micros_for(
+        duration_s=3600.0, speaker_labels=True, speech_model="universal-2",
     ) == 170_000
 
 
 def test_cost_micros_short_audio() -> None:
-    """12 seconds with diarization = ~566 micros (sanity)."""
+    """12 seconds with diarization = ~767 micros (sanity)."""
     cost = assemblyai.cost_micros_for(
         duration_s=12.0, speaker_labels=True,
     )
-    assert 500 <= cost <= 700
+    assert 700 <= cost <= 850
 
 
 def test_cost_micros_clamps_negative_duration() -> None:
@@ -165,7 +172,7 @@ async def test_transcribe_records_cost_when_provider_has_rate(
     row = rows[0]
     assert row.purpose == "transcribe"
     assert row.provider == "assemblyai-universal-3-pro"
-    assert row.cost_usd_micros == 170_000  # base + diarization
+    assert row.cost_usd_micros == 230_000  # Universal Pro + diarization
     assert row.status == "ok"
 
 
@@ -257,3 +264,10 @@ async def test_transcribe_refuses_when_budget_exceeded(
         rows = await LLMCallsRepo(db).list_for_tenant(limit=10)
     assert len(rows) == 1
     assert rows[0].purpose == "caption"
+
+
+def test_default_ladder_is_universal_2_at_its_rate() -> None:
+    """Default model is Universal-2 ($0.15/hr), and no Pro-only prompt is sent."""
+    p = assemblyai.AssemblyAIProvider(api_key="k", speaker_labels=False)  # prod setting
+    assert p._speech_models == ["universal-2"]
+    assert p.cost_for_duration_micros(3600.0) == 150_000

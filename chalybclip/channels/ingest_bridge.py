@@ -84,74 +84,104 @@ def make_channel_ingest_callback(
         language: str | None,
     ) -> None:
         from chalybclip.ingest import detect_platform, ingest_vod
+        from chalybclip.integrations.chalyb.admission import AdmissionRefused
+        from chalybclip.jobs.usage import admit_job, cancel_admission, readmit_job
 
-        with bound_tenant(tenant_id):
-            # Idempotency on (tenant, vod_url): if this VOD was already
-            # ingested, reuse its stream id so ingest_vod cache-hits (no
-            # re-download) and the upsert is a no-op. Without this, every
-            # re-detection mints a fresh ULID and re-downloads the whole
-            # VOD into a duplicate stream row — which is what a lost
-            # seen-set or a retried pipeline failure was producing.
-            existing = await StreamsRepo(db).find_by_vod_url(vod_url)
-            if existing is None:
-                # New VOD: write a "pending" placeholder + emit the detected
-                # event UP FRONT so the stream shows on the dashboard's
-                # Streams list the moment it's pulled, not only once the
-                # (potentially slow) download finishes. ingest_vod is
-                # idempotent on this stream_id; reconcile_metadata below
-                # backfills the placeholder with real metadata + flips it to
-                # "ingested" when the download lands.
-                stream_id = new_id("str")
-                await StreamsRepo(db).upsert(
-                    _pending_placeholder(
-                        stream_id=stream_id,
+        # Consumption contract: an auto-detected VOD is the user's run too —
+        # ask the hub before downloading it, re-admit with the real length
+        # after. A refusal raises, so the poller counts the VOD failed and
+        # retries / parks it on its own schedule (balance topped up, caps
+        # renewed) instead of silently dropping it.
+        try:
+            admission = await admit_job(db, tenant_id=tenant_id, stream_id="")
+        except AdmissionRefused as e:
+            _log.info(
+                "channel.vod_refused", tenant_id=tenant_id, video_id=video_id,
+                reason=e.reason,
+            )
+            raise
+        try:
+            with bound_tenant(tenant_id):
+                # Idempotency on (tenant, vod_url): if this VOD was already
+                # ingested, reuse its stream id so ingest_vod cache-hits (no
+                # re-download) and the upsert is a no-op. Without this, every
+                # re-detection mints a fresh ULID and re-downloads the whole
+                # VOD into a duplicate stream row — which is what a lost
+                # seen-set or a retried pipeline failure was producing.
+                existing = await StreamsRepo(db).find_by_vod_url(vod_url)
+                if existing is None:
+                    # New VOD: write a "pending" placeholder + emit the detected
+                    # event UP FRONT so the stream shows on the dashboard's
+                    # Streams list the moment it's pulled, not only once the
+                    # (potentially slow) download finishes. ingest_vod is
+                    # idempotent on this stream_id; reconcile_metadata below
+                    # backfills the placeholder with real metadata + flips it to
+                    # "ingested" when the download lands.
+                    stream_id = new_id("str")
+                    await StreamsRepo(db).upsert(
+                        _pending_placeholder(
+                            stream_id=stream_id,
+                            tenant_id=tenant_id,
+                            vod_url=vod_url,
+                            platform=detect_platform(vod_url),
+                            output_dir=output_dir,
+                        )
+                    )
+                    await EventsRepo(db).emit(
+                        type="channel.vod_detected",
+                        payload={
+                            "stream_id": stream_id,
+                            "video_id": video_id,
+                            "vod_url": vod_url,
+                        },
+                    )
+                else:
+                    stream_id = existing.id
+                try:
+                    stream = await ingest_vod(
                         tenant_id=tenant_id,
                         vod_url=vod_url,
-                        platform=detect_platform(vod_url),
                         output_dir=output_dir,
+                        stream_id=stream_id,
+                        cookies_from_browser=cookies_from_browser,
+                        cookies_file=cookies_file,
+                        db=db,
                     )
+                except Exception:
+                    # A detected VOD whose download fails (e.g. "video not
+                    # available") flips the placeholder from "pending" to "failed"
+                    # instead of hanging at "pending" forever on the Streams list.
+                    # Re-raise so the channel poller still counts the VOD failed
+                    # and applies its own retry/park.
+                    with contextlib.suppress(Exception):
+                        await StreamsRepo(db).set_status(
+                            stream_id, status="failed", only_if="pending"
+                        )
+                    raise
+                # Backfill the real metadata (title / channel / duration) onto the
+                # placeholder and flip "pending" -> "ingested". A plain upsert is
+                # INSERT-OR-IGNORE, so it would NOT update the pre-inserted row —
+                # reconcile_metadata is the same path the URL-job pipeline uses.
+                await StreamsRepo(db).reconcile_metadata(
+                    stream_id,
+                    title=stream.title,
+                    channel=stream.channel,
+                    duration_s=stream.duration_s,
                 )
-                await EventsRepo(db).emit(
-                    type="channel.vod_detected",
-                    payload={
-                        "stream_id": stream_id,
-                        "video_id": video_id,
-                        "vod_url": vod_url,
-                    },
-                )
-            else:
-                stream_id = existing.id
-            try:
-                stream = await ingest_vod(
-                    tenant_id=tenant_id,
-                    vod_url=vod_url,
-                    output_dir=output_dir,
-                    stream_id=stream_id,
-                    cookies_from_browser=cookies_from_browser,
-                    cookies_file=cookies_file,
-                    db=db,
-                )
-            except Exception:
-                # A detected VOD whose download fails (e.g. "video not
-                # available") flips the placeholder from "pending" to "failed"
-                # instead of hanging at "pending" forever on the Streams list.
-                # Re-raise so the channel poller still counts the VOD failed
-                # and applies its own retry/park.
-                with contextlib.suppress(Exception):
-                    await StreamsRepo(db).set_status(
-                        stream_id, status="failed", only_if="pending"
-                    )
-                raise
-            # Backfill the real metadata (title / channel / duration) onto the
-            # placeholder and flip "pending" -> "ingested". A plain upsert is
-            # INSERT-OR-IGNORE, so it would NOT update the pre-inserted row —
-            # reconcile_metadata is the same path the URL-job pipeline uses.
-            await StreamsRepo(db).reconcile_metadata(
-                stream_id,
-                title=stream.title,
-                channel=stream.channel,
-                duration_s=stream.duration_s,
+
+            admission = await readmit_job(
+                db, job_id=admission.job_id, stream_id=stream.id,
+                source_minutes=float(stream.duration_s or 0) / 60.0,
+            ) or admission
+        except AdmissionRefused as e:
+            _log.info(
+                "channel.vod_refused", tenant_id=tenant_id, video_id=video_id,
+                reason=e.reason,
             )
+            raise
+        except BaseException:
+            await cancel_admission(db, admission)
+            raise
 
         kickoff = PipelineKickoff(
             tenant_id=tenant_id,
@@ -159,7 +189,7 @@ def make_channel_ingest_callback(
             persona_id=persona_id,
             output_dir=output_dir,
             language=language,
-        )
+        ).with_admission(admission)
         # Decouple ingest from pipeline outcome. A successful download +
         # stream row IS the ingest as far as the poller's dedup is
         # concerned; the pipeline runs with its own retry/resume (step
@@ -172,6 +202,7 @@ def make_channel_ingest_callback(
         try:
             await dispatcher.dispatch_pipeline(kickoff)
         except Exception as e:  # pipeline failure is not an ingest failure
+            await cancel_admission(db, admission)
             _log.warning(
                 "channel.pipeline_dispatch_failed",
                 tenant_id=tenant_id,

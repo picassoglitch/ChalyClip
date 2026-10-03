@@ -22,6 +22,9 @@ class StreamCreateRequest(BaseModel):
     vod_url: str = Field(min_length=1)
     persona_id: str = Field(min_length=1)
     language: str | None = None
+    # Boost lane: true = ask for the dedicated machine (charged a boost fee
+    # unless VIP), false = never, null = the tier's default.
+    boost: bool | None = None
 
 
 class StreamResponse(BaseModel):
