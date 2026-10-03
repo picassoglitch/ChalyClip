@@ -212,6 +212,121 @@ async def _charge_run_base_fee(
         )
 
 
+async def _hand_upload_to_worker(
+    *,
+    dispatcher: object,
+    tenant_id: str,
+    stream_id: str,
+    persona_id: str,
+    tmp_path: "Path",
+    output_dir: "Path",
+    title: str | None,
+    language: str | None,
+) -> bool:
+    """Park the raw upload in the bucket and dispatch it to the remote
+    worker. Returns False — caller runs in-process — when there is no
+    remote dispatcher or no bucket, or the bucket upload fails."""
+    from chalybclip.ingest import Stream
+    from chalybclip.integrations.storage import (
+        build_artifact_store,
+        upload_source_key,
+    )
+    from chalybclip.jobs.modal import ModalJobDispatcher
+    from chalybclip.settings import get_settings
+
+    if not isinstance(dispatcher, ModalJobDispatcher):
+        return False
+    store = build_artifact_store(get_settings())
+    if store is None:
+        return False
+
+    key = upload_source_key(tenant_id, stream_id, tmp_path.suffix)
+    try:
+        await store.upload(local_path=tmp_path, key=key)
+    except Exception as e:  # noqa: BLE001 — degrade to the in-process path
+        _log.warning(
+            "upload.park_failed stream=%s error=%s — running in-process",
+            stream_id, e,
+        )
+        return False
+    tmp_path.unlink(missing_ok=True)
+
+    source_dir = output_dir / stream_id / "source"
+    stub = Stream(
+        id=stream_id,
+        tenant_id=tenant_id,
+        vod_url=f"upload://{title or tmp_path.name}",
+        platform="upload",
+        title=title,
+        duration_s=0.0,
+        source_video_path=source_dir / "video.mp4",
+        source_audio_path=source_dir / "audio.wav",
+    )
+    await dispatcher.dispatch_pipeline(
+        PipelineKickoff(
+            tenant_id=tenant_id,
+            stream=stub,
+            persona_id=persona_id,
+            output_dir=output_dir,
+            language=language,
+            source_object_key=key,
+            title=title,
+        )
+    )
+    _log.info("upload.handed_to_worker stream=%s", stream_id)
+    return True
+
+
+async def remote_upload_runner(kickoff: PipelineKickoff) -> None:
+    """Worker side of a parked upload: download the raw file from the
+    bucket, drop the bucket copy, then run the normal upload pipeline here.
+
+    A missing object (bucket hiccup, already consumed by a duplicate run)
+    surfaces as `pipeline.failed` so the dashboard doesn't spin."""
+    from pathlib import PurePosixPath
+
+    from chalybclip.errors import IngestError
+    from chalybclip.integrations.storage import build_artifact_store
+    from chalybclip.settings import get_settings
+
+    key = kickoff.source_object_key
+    if not key:
+        raise IngestError("remote_upload_runner needs kickoff.source_object_key")
+    settings = get_settings()
+    stream_id = kickoff.stream.id
+    store = build_artifact_store(settings)
+    suffix = PurePosixPath(key).suffix or ".mp4"
+    dest = kickoff.output_dir / "_incoming" / f"{stream_id}{suffix}"
+    got = (
+        await store.download(key=key, dest=dest) if store is not None else None
+    )
+    if got is None:
+        error = IngestError(
+            f"uploaded source missing from object storage (key={key})"
+        )
+        await _emit_top_level_failure(
+            db_path=resolve_db_target(settings),
+            tenant_id=kickoff.tenant_id,
+            stream_id=stream_id,
+            error=error,
+        )
+        raise error
+    # The worker now holds the only copy it needs; ingest moves it into
+    # the stream dir. Don't leave raw user video sitting in the bucket.
+    if store is not None:
+        await store.delete(key=key)
+
+    await upload_pipeline_runner(
+        tenant_id=kickoff.tenant_id,
+        stream_id=stream_id,
+        persona_id=kickoff.persona_id,
+        tmp_path=got,
+        output_dir=kickoff.output_dir,
+        title=kickoff.title,
+        language=kickoff.language,
+    )
+
+
 async def _emit_top_level_failure(
     *,
     db_path: str,
@@ -258,8 +373,16 @@ async def upload_pipeline_runner(
     output_dir: "Path",
     title: str | None,
     language: str | None = None,
+    dispatcher: object | None = None,
 ) -> None:
     """Run the full pipeline for an uploaded file in the background.
+
+    With a remote `dispatcher` (the Cloud Run / Modal worker) and object
+    storage configured, this box only parks the raw file in the bucket and
+    hands the stream to the worker (see `_hand_upload_to_worker`); the
+    worker then runs THIS function locally via `remote_upload_runner`.
+    The web service is small and CPU-throttled outside requests, so running
+    ingest + cut here starved the run (one 50s clip took ~5 min to cut).
 
     The HTTP upload endpoint stashes the request body to a tempfile
     inline (unavoidable — the bytes have to arrive before we can
@@ -292,6 +415,18 @@ async def upload_pipeline_runner(
 
     settings = get_settings()
     db_path = resolve_db_target(settings)
+
+    if dispatcher is not None and await _hand_upload_to_worker(
+        dispatcher=dispatcher,
+        tenant_id=tenant_id,
+        stream_id=stream_id,
+        persona_id=persona_id,
+        tmp_path=tmp_path,
+        output_dir=output_dir,
+        title=title,
+        language=language,
+    ):
+        return
 
     try:
         # Phase 1 — finish ingest (move file + extract audio + persist
@@ -680,5 +815,6 @@ __all__ = [
     "default_pipeline_runner",
     "live_pipeline_runner",
     "maybe_autoclip_after_live_end",
+    "remote_upload_runner",
     "upload_pipeline_runner",
 ]

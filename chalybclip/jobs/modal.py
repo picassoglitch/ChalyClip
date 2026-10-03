@@ -16,7 +16,9 @@ in-process), while the Modal run keeps going and keeps writing step
 events; the recovery sweeper's event-silence rules take over from there.
 
 Sources that exist only on this box (`upload://`, `live://` pseudo-URLs)
-can't run remotely — they route to the wrapped in-process fallback.
+can't run remotely — they route to the wrapped in-process fallback. The
+exception is an upload parked in the bucket (`source_object_key`), which
+the worker downloads and ingests itself.
 Concurrency for remote runs is bounded on the Modal side
 (`max_containers`), not by queueing here.
 """
@@ -119,9 +121,13 @@ class ModalJobDispatcher(JobDispatcher):
         vod_url = str(getattr(kickoff.stream, "vod_url", "") or "")
 
         # upload:// and live:// sources exist only on this box's disk —
-        # the worker can't ingest them. Run those in-process (they're the
-        # minority; URL VODs carry the measured CPU load).
-        if not vod_url.startswith(("http://", "https://")):
+        # the worker can't ingest them. Run those in-process, unless the
+        # upload was parked in the bucket (`source_object_key`): then the
+        # worker downloads it and runs the whole thing remotely.
+        remote_ok = vod_url.startswith(("http://", "https://")) or bool(
+            kickoff.source_object_key
+        )
+        if not remote_ok:
             if self._fallback is not None:
                 _log.info(
                     "jobs.modal.fallback_local",
@@ -174,6 +180,9 @@ class ModalJobDispatcher(JobDispatcher):
                 "language": kickoff.language,
                 "stream": kickoff.stream.model_dump(mode="json"),
             }
+            if kickoff.source_object_key:
+                payload["source_object_key"] = kickoff.source_object_key
+                payload["title"] = kickoff.title
             _log.info(
                 "jobs.modal.dispatch",
                 stream_id=stream_id,
@@ -213,6 +222,18 @@ class ModalJobDispatcher(JobDispatcher):
                 error=str(e),
             )
         except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404 and "/jobs/" in str(e.request.url):
+                # The poll landed on a worker instance that doesn't hold
+                # this job (the job ledger is per-instance and Cloud Run can
+                # scale out). The run itself is fine and writes its own
+                # step / failure events to the shared DB — same as a poll
+                # deadline: stop tracking, don't mark it failed.
+                _log.warning(
+                    "jobs.modal.poll_lost",
+                    stream_id=stream_id,
+                    status=404,
+                )
+                return
             body = (e.response.text or "")[:300]
             _log.error(
                 "jobs.modal.dispatch_failed",

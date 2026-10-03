@@ -275,3 +275,27 @@ async def test_prefixed_database_url_reaches_settings(
         # scrub it and the settings cache so later tests see a clean env.
         os.environ.pop("DATABASE_URL", None)
         get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_parked_upload_fields_reach_the_kickoff(worker_env: None) -> None:
+    ran: list[PipelineKickoff] = []
+
+    async def runner(kickoff: PipelineKickoff) -> None:
+        ran.append(kickoff)
+
+    app = create_worker_app(runner=runner)
+    body = _kickoff_body()
+    body["stream"]["vod_url"] = "upload://clip.mp4"
+    body["stream"]["platform"] = "upload"
+    body["source_object_key"] = "uploads/ten_w/str_w1/source.mp4"
+    body["title"] = "clip.mp4"
+    async with _client(app) as client:
+        resp = await client.post("/", json=body)
+        assert resp.status_code == 303
+        for _ in range(50):
+            if ran:
+                break
+            await asyncio.sleep(0.01)
+    assert ran[0].source_object_key == "uploads/ten_w/str_w1/source.mp4"
+    assert ran[0].title == "clip.mp4"

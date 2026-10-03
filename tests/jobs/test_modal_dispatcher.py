@@ -299,3 +299,56 @@ async def test_poll_deadline_does_not_mark_run_failed(
 
     assert errors == []
     assert "str_TEST" not in active_stream_ids()
+
+
+async def test_parked_upload_runs_remotely_with_object_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An upload:// stream whose file was parked in the bucket goes to the
+    worker (not the fallback) and the payload carries the object key."""
+    seen: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(json.loads(request.content))
+        return httpx.Response(200, json={"status": "done"})
+
+    fallback = _FallbackProbe()
+    d = _dispatcher(fallback=fallback)
+    _patch_client(monkeypatch, handler)
+    _no_failure_emit(d)
+
+    kickoff = PipelineKickoff(
+        tenant_id="ten_TEST",
+        stream=cast("Any", _FakeStream(vod_url="upload://clip.mp4")),
+        persona_id="per_TEST",
+        output_dir=Path("./out"),
+        source_object_key="uploads/ten_TEST/str_TEST/source.mp4",
+        title="clip.mp4",
+    )
+    await d.dispatch_pipeline(kickoff)
+    await d.drain()
+
+    assert fallback.calls == []
+    assert seen[0]["source_object_key"] == "uploads/ten_TEST/str_TEST/source.mp4"
+    assert seen[0]["title"] == "clip.mp4"
+
+
+async def test_poll_404_is_lost_tracking_not_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A poll that lands on a worker instance without the job must not mark
+    a healthy run failed."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            return httpx.Response(303, headers={"location": "/jobs/j1?t=bear"})
+        return httpx.Response(404, json={"detail": "unknown job"})
+
+    d = _dispatcher()
+    _patch_client(monkeypatch, handler)
+    errors = _no_failure_emit(d)
+
+    await d.dispatch_pipeline(_make_kickoff())
+    await d.drain()
+    assert errors == []
+    assert "str_TEST" not in active_stream_ids()

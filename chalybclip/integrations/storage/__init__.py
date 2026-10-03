@@ -268,6 +268,7 @@ from .keys import (  # noqa: E402 — re-export the key builders
     clip_media_key,
     clip_render_key,
     clip_thumbnail_key,
+    upload_source_key,
 )
 
 __all__ = [
@@ -281,4 +282,5 @@ __all__ = [
     "clip_media_key",
     "clip_render_key",
     "clip_thumbnail_key",
+    "upload_source_key",
 ]

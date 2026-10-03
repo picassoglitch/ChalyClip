@@ -1206,6 +1206,9 @@ async def streams_upload(
         tmp_path=tmp_path,
         output_dir=output_dir,
         title=file.filename,
+        # Remote dispatcher → the worker does the ingest + cut (the file is
+        # parked in the bucket first); in-process → runs right here.
+        dispatcher=request.app.state.job_dispatcher,
     )
     return RedirectResponse(
         url=f"/dashboard/streams/{stream_id}", status_code=303,

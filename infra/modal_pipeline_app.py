@@ -201,7 +201,10 @@ async def run_pipeline(payload: dict) -> dict:
     os.chdir("/root")
     _materialize_cookies_file()
 
-    from chalybclip.api._pipeline import default_pipeline_runner
+    from chalybclip.api._pipeline import (
+        default_pipeline_runner,
+        remote_upload_runner,
+    )
     from chalybclip.ingest import Stream
     from chalybclip.jobs import PipelineKickoff
     from chalybclip.settings import get_settings
@@ -227,6 +230,8 @@ async def run_pipeline(payload: dict) -> dict:
         persona_id=persona_id,
         output_dir=output_dir,
         language=language,
+        source_object_key=(payload or {}).get("source_object_key") or None,
+        title=(payload or {}).get("title") or None,
     )
 
     started_at = time.time()
@@ -238,7 +243,10 @@ async def run_pipeline(payload: dict) -> dict:
         # The same runner the web box uses in-process: step events,
         # pipeline.failed surfacing, source reclaim, base-fee charge and
         # balance refresh all behave identically.
-        await default_pipeline_runner(kickoff)
+        if kickoff.source_object_key:
+            await remote_upload_runner(kickoff)
+        else:
+            await default_pipeline_runner(kickoff)
     except Exception as e:
         # The runner already emitted pipeline.failed to the shared DB —
         # return a terminal body (HTTP 200) so the dispatcher logs it

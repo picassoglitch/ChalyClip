@@ -142,9 +142,15 @@ def create_worker_app(*, runner: PipelineRunner | None = None) -> FastAPI:
     run_slots = asyncio.Semaphore(max_jobs)
 
     async def _default_runner(kickoff: PipelineKickoff) -> None:
-        from chalybclip.api._pipeline import default_pipeline_runner
+        from chalybclip.api._pipeline import (
+            default_pipeline_runner,
+            remote_upload_runner,
+        )
 
-        await default_pipeline_runner(kickoff)
+        if kickoff.source_object_key:
+            await remote_upload_runner(kickoff)
+        else:
+            await default_pipeline_runner(kickoff)
 
     run = runner or _default_runner
 
@@ -210,6 +216,8 @@ def create_worker_app(*, runner: PipelineRunner | None = None) -> FastAPI:
         tenant_id = str((payload or {}).get("tenant_id") or "").strip()
         persona_id = str((payload or {}).get("persona_id") or "").strip()
         language = (payload or {}).get("language") or None
+        source_object_key = (payload or {}).get("source_object_key") or None
+        title = (payload or {}).get("title") or None
         stream_raw = (payload or {}).get("stream") or {}
         if not tenant_id or not persona_id or not stream_raw:
             raise HTTPException(
@@ -246,6 +254,8 @@ def create_worker_app(*, runner: PipelineRunner | None = None) -> FastAPI:
             persona_id=persona_id,
             output_dir=output_dir,
             language=language,
+            source_object_key=source_object_key,
+            title=title,
         )
 
         job_id = ledger.new_id(stream.id)

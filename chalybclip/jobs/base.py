@@ -30,6 +30,11 @@ class PipelineKickoff:
     persona_id: str
     output_dir: Path
     language: str | None = None
+    # Dashboard uploads only: bucket key of the raw uploaded file. Lets a
+    # remote worker run an `upload://` stream — it downloads the object and
+    # does the ingest itself instead of reading the web box's disk.
+    source_object_key: str | None = None
+    title: str | None = None
 
 
 # The "actual runner" type — a coroutine that does the real work.
