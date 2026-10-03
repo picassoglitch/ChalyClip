@@ -238,3 +238,15 @@ async def test_unknown_paid_model_logs_error_and_bills_high(
         1_000 * CONSERVATIVE_RATES.input + 1_000 * CONSERVATIVE_RATES.output
     )
     assert rows[0].cost_usd_micros > 0
+
+
+def test_cache_read_rates_follow_anthropic_list_prices():
+    """Cache reads aren't a flat 0.1x: Opus 5.5 reads at $0.20, Fable 5.1 at $0.25."""
+    from chalybclip.llm.prices import lookup_rates
+
+    assert lookup_rates("anthropic", "claude-opus-5-5").cache_read_rate == 0.20
+    assert lookup_rates("anthropic", "claude-fable-5-1").cache_read_rate == 0.25
+    assert lookup_rates("anthropic", "claude-fable-5").cache_read_rate == 1.00
+    assert lookup_rates("anthropic", "claude-sonnet-5-5").cache_read_rate == 0.20
+    assert lookup_rates("anthropic", "claude-haiku-4-5").cache_read_rate == 0.10
+    assert lookup_rates("anthropic", "claude-opus-5-5").cache_write_rate == 5.00

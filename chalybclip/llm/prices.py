@@ -8,9 +8,11 @@ it ships with every build and can't be shadowed by a local YAML: the YAML
 `pricing:` block still wins per model (tests, deliberate overrides), this
 fills every gap.
 
-USD per 1M tokens, Anthropic first-party list prices (2026-09). Cache
-pricing follows Anthropic's multipliers on the input rate unless an entry
-overrides it: cache read = 0.1x, 5-minute cache write = 1.25x.
+USD per 1M tokens, Anthropic first-party list prices (checked 2026-10-03
+against Anthropic's model table). Cache pricing follows Anthropic's
+multipliers on the input rate unless an entry overrides it: cache read =
+0.1x, 5-minute cache write = 1.25x. Overrides: Opus 5.5 reads at $0.20
+(0.05x), Fable 5.1 / Mythos 5.1 at $0.25 (0.025x).
 
 Lookup matches the exact id first, then the longest family prefix, so a
 dated snapshot (`claude-haiku-4-5-20251001`) prices as its family.
@@ -60,8 +62,11 @@ ANTHROPIC_RATES: dict[str, TokenRates] = {
     "claude-opus-4-7": TokenRates(input=5.00, output=25.00),
     "claude-opus-4-8": TokenRates(input=5.00, output=25.00),
     "claude-opus-5": TokenRates(input=5.00, output=25.00),
-    "claude-opus-5-5": TokenRates(input=4.00, output=20.00),
-    "claude-fable-5": TokenRates(input=10.00, output=50.00),  # 5, 5.1
+    "claude-opus-5-5": TokenRates(input=4.00, output=20.00, cache_read=0.20),
+    "claude-fable-5": TokenRates(input=10.00, output=50.00),  # 5: reads at 0.1x = $1
+    "claude-fable-5-1": TokenRates(input=10.00, output=50.00, cache_read=0.25),
+    "claude-mythos-5": TokenRates(input=10.00, output=50.00),
+    "claude-mythos-5-1": TokenRates(input=10.00, output=50.00, cache_read=0.25),
 }
 
 # What an unknown model of a PAID provider is charged at: the most
