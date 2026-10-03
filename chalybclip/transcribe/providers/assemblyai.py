@@ -125,12 +125,10 @@ class AssemblyAIProvider:
         #          no prompt (max accuracy on a monolingual creator).
         self._language_mode = (language_mode or "auto").strip().lower()
         self._speaker_labels = speaker_labels
-        # Model ladder — U3-Pro first (best ES/EN + native code-
-        # switching), U2 second (99-language fallback). Operators
-        # can override via CHALYBCLIP_ASSEMBLYAI_SPEECH_MODELS.
-        self._speech_models = list(
-            speech_models or ["universal-3-pro", "universal-2"]
-        )
+        # Model ladder — Universal-2 by default (cheapest; it's only
+        # the transcript). Operators can put universal-3-pro first via
+        # CHALYBCLIP_ASSEMBLYAI_SPEECH_MODELS for native code-switching.
+        self._speech_models = list(speech_models or ["universal-2"])
         self._polling_interval_s = polling_interval_s
         self._timeout_s = request_timeout_s
 
@@ -310,8 +308,10 @@ class AssemblyAIProvider:
             # Code-switching prompt — instructs U3-Pro to preserve each
             # phrase in its original language. Without this AAI sometimes
             # "helpfully" translates English filler into Spanish (or
-            # vice versa) in mixed audio.
-            payload["prompt"] = _CODE_SWITCHING_PROMPT
+            # vice versa) in mixed audio. Prompting is a Universal Pro
+            # feature, so it's only sent when a Pro model is in the ladder.
+            if any(m.startswith("universal-3") for m in self._speech_models):
+                payload["prompt"] = _CODE_SWITCHING_PROMPT
         else:
             # Locked language. NEVER send language_detection alongside —
             # the API rejects the combo. Prompt is also dropped because

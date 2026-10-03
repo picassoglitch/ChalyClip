@@ -264,3 +264,10 @@ async def test_transcribe_refuses_when_budget_exceeded(
         rows = await LLMCallsRepo(db).list_for_tenant(limit=10)
     assert len(rows) == 1
     assert rows[0].purpose == "caption"
+
+
+def test_default_ladder_is_universal_2_at_its_rate() -> None:
+    """Default model is Universal-2 ($0.15/hr), and no Pro-only prompt is sent."""
+    p = assemblyai.AssemblyAIProvider(api_key="k", speaker_labels=False)  # prod setting
+    assert p._speech_models == ["universal-2"]
+    assert p.cost_for_duration_micros(3600.0) == 150_000

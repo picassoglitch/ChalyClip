@@ -133,11 +133,11 @@ class Settings(BaseSettings):
     #     channels). Per-stream overrides through the existing
     #     `language` field on the pipeline call.
     #
-    # `assemblyai_speech_models` — model ladder. The first model is
-    # the quality target (`universal-3-pro` — best ES/EN accuracy +
-    # native code-switching). The second is the 99-language fallback
-    # (`universal-2`) for the rare case U3-Pro misses on an exotic
-    # accent. AAI walks the ladder in order.
+    # `assemblyai_speech_models` — model ladder, walked in order.
+    # Default `universal-2` ($0.15/hr vs Universal Pro's $0.21): it's
+    # only the transcript, and transcription is most of a run's cost
+    # (owner, 2026-10-03). Set ["universal-3-pro", "universal-2"] to go
+    # back to Pro first for its native ES/EN code-switching.
     #
     # `assemblyai_speaker_labels` — per-video diarization labels
     # (A / B / C). The pipeline reads these instead of running
@@ -146,7 +146,7 @@ class Settings(BaseSettings):
     # ~$0.02/hr diarization upcharge for labels nothing reads.
     assemblyai_language_mode: str = "auto"
     assemblyai_speech_models: list[str] = Field(
-        default_factory=lambda: ["universal-3-pro", "universal-2"]
+        default_factory=lambda: ["universal-2"]
     )
     assemblyai_speaker_labels: bool = False
     # Slice O.44 — Modal Whisper provider. Wired when
