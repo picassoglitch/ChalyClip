@@ -662,7 +662,11 @@ class PersonasRepo:
             "primary_language = excluded.primary_language, "
             "target_languages_json = excluded.target_languages_json, "
             "voice_prompt = excluded.voice_prompt, "
-            "routing_tags_json = excluded.routing_tags_json",
+            "routing_tags_json = excluded.routing_tags_json "
+            # personas.id is a GLOBAL primary key: without this guard a
+            # tenant upserting a shared YAML persona id ('default',
+            # 'aldo_villanueva') overwrote ANOTHER tenant's row.
+            "WHERE personas.tenant_id = excluded.tenant_id",
             (
                 persona_id,
                 tenant_id,
@@ -1298,6 +1302,25 @@ class EventsRepo:
                 (tenant_id, type, limit),
             )
         return [_event_from_row(r) for r in await cur.fetchall()]
+
+    async def list_for_stream(self, stream_id: str, *, limit: int = 2000) -> list[Event]:
+        """Events whose payload names this `stream_id`, newest first.
+
+        `list_for_tenant(limit=N)` + a Python filter silently drops a
+        stream's events once the tenant has more than N newer ones (busy
+        tenants), which made finished runs look unstarted. Pre-filter in
+        SQL on the serialized payload, then confirm exactly in Python.
+        """
+        tenant_id = current_tenant_id()
+        conn = await self._db.connect()
+        needle = "%" + json.dumps({"stream_id": stream_id})[1:-1] + "%"
+        cur = await conn.execute(
+            "SELECT id, tenant_id, type, payload_json, ts FROM events "
+            "WHERE tenant_id = ? AND payload_json LIKE ? ORDER BY ts DESC LIMIT ?",
+            (tenant_id, needle, limit),
+        )
+        events = [_event_from_row(r) for r in await cur.fetchall()]
+        return [e for e in events if e.payload.get("stream_id") == stream_id]
 
 
 def _event_from_row(row: aiosqlite.Row) -> Event:

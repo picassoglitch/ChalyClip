@@ -146,7 +146,12 @@ def _step(name: str, *, db: Database | None = None, **fields: Any) -> Iterator[_
         # Append every contextvar (stream_id, tenant_id, persona_id) into the
         # error message so the CLI / log readers see it without inspection.
         cv = structlog.contextvars.get_contextvars()
-        if cv:
+        from chalybclip.integrations.chalyb.admission import AdmissionRefused
+
+        # AdmissionRefused(reason) takes a refusal CODE, not a message:
+        # re-wrapping it turned the message into the reason, which then
+        # resolved to the generic "unknown refusal" copy for the user.
+        if cv and not isinstance(e, AdmissionRefused):
             ctx_str = " ".join(f"{k}={v}" for k, v in cv.items())
             raise type(e)(f"{e} [{ctx_str}]") from e
         raise

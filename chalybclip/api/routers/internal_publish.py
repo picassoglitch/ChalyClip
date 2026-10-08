@@ -64,7 +64,8 @@ def require_hub_service(request: Request) -> str:
     if scheme.lower() != "bearer" or not provided:
         raise HTTPException(status_code=401, detail="missing bearer service token")
     for token, name in tokens.items():
-        if hmac.compare_digest(token, provided):
+        # bytes, not str: compare_digest raises TypeError on non-ASCII str.
+        if hmac.compare_digest(token.encode("utf-8"), provided.encode("utf-8")):
             return name
     raise HTTPException(status_code=401, detail="unknown service token")
 

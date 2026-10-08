@@ -143,10 +143,10 @@ async def balance_chip(request: Request) -> Response:
         return HTMLResponse(
             '<a href="/dashboard/_balance/refresh" '
             'class="nc-chip nc-chip--muted" id="nc-balance-chip" '
-            'title="Token balance unavailable. Click to retry." '
+            'title="No pudimos cargar tu saldo. Haz clic para reintentar." '
             'style="text-decoration:none;">'
             '<i class="ti ti-coin" aria-hidden="true"></i>'
-            '<span>— tokens · retry</span></a>',
+            '<span>— tokens · reintentar</span></a>',
             status_code=200,
         )
 
@@ -359,8 +359,10 @@ async def refresh_balance(
     from chalybclip.integrations.chalyb.balance import fetch_balance_now
 
     ok = await fetch_balance_now(db, tenant_id=tenant_id)
-    if not ok:
-        # Tell the user what's actually wrong instead of silently bouncing.
+    if not ok and getattr(request.state, "is_admin", False):
+        # Tell the operator what's actually wrong instead of silently
+        # bouncing. Creators can't open the diag page (it 404s for
+        # non-admins), so they just go back to where they were.
         return RedirectResponse(url="/dashboard/_diag/chalyb", status_code=303)
     # Bounce back to wherever the user clicked from. Falls back to streams
     # list if no Referer (direct hit, curl, etc). Validate against the
@@ -369,8 +371,15 @@ async def refresh_balance(
     # able to redirect the user back to itself for phishing. Mirrors
     # the safe_redirect pattern used by /connected-accounts/create
     # (lines 5432-5437 below).
-    referer = request.headers.get("referer") or ""
-    safe_target = referer if referer.startswith("/dashboard/") else "/dashboard/streams"
+    # Browsers send an ABSOLUTE Referer, so the old startswith("/dashboard/")
+    # check never matched. Accept it only when it points at this same host.
+    from urllib.parse import urlparse
+
+    referer = urlparse(request.headers.get("referer") or "")
+    same_host = not referer.netloc or referer.hostname == request.url.hostname
+    safe_target = "/dashboard/streams"
+    if same_host and referer.path.startswith("/dashboard/") and "_balance/" not in referer.path:
+        safe_target = referer.path + (f"?{referer.query}" if referer.query else "")
     return RedirectResponse(url=safe_target, status_code=303)
 
 
@@ -1333,18 +1342,26 @@ async def start_page(
         or (getattr(s, "cookies_from_browser", "") or "").strip()
     )
 
+    # The tenant's real RTMP key for the live panel (None until they generate
+    # one). Only looked up when raw RTMP ingest is configured at all.
+    live_stream_key: str | None = None
+    if live_configured:
+        from chalybclip.db import LiveStreamKeysRepo
+
+        active_key = await LiveStreamKeysRepo(db).get_active_for_tenant()
+        live_stream_key = active_key.key_value if active_key else None
+
     return templates.TemplateResponse(
         request,
         "start_page.html",
         {
+            "live_stream_key": live_stream_key,
             "personas": personas,
             "default_persona": default_persona,
             "ffmpeg_ok": is_ffmpeg_available(),
             "live_configured": live_configured,
             "cookies_configured": cookies_configured,
             # Real RTMP server URL for the live ingest panel's "Server" row.
-            # The per-tenant stream key is still TODO(ingest) — the template
-            # shows a masked placeholder until that endpoint is wired.
             "live_rtmp_base_url": (getattr(s, "live_rtmp_base_url", "") or "").strip(),
         },
     )
@@ -1533,7 +1550,7 @@ async def stream_progress(
     # Pull every step event we've written for any stream in this tenant
     # (the events table is per-tenant; we filter by stream_id in the
     # payload). The volume is small — six steps × N streams.
-    all_events = await EventsRepo(db).list_for_tenant(limit=500)
+    all_events = await EventsRepo(db).list_for_stream(stream_id)
     step_events = [
         e
         for e in all_events
@@ -1643,6 +1660,19 @@ async def stream_progress(
         for e in all_events
         if e.type == "pipeline.failed" and e.payload.get("stream_id") == stream_id
     ]
+    # A pipeline.failed from a PREVIOUS attempt must not override a newer
+    # one: after a "Córrelo" re-run (or a recovery re-dispatch) the old
+    # failure used to show instantly and stop the polling.
+    _restart_ts = [
+        e.ts
+        for e in all_events
+        if e.type in ("stream.rerun_requested", "stream.recovery_dispatched")
+    ]
+    if _restart_ts:
+        _last_restart = max(_restart_ts)
+        pipeline_failed_events = [
+            e for e in pipeline_failed_events if e.ts >= _last_restart
+        ]
     pipeline_failure: dict[str, object] | None = None
     if pipeline_failed_events:
         latest = max(pipeline_failed_events, key=lambda e: e.ts)
@@ -1657,6 +1687,7 @@ async def stream_progress(
             if s["status"] == "pending":
                 s["status"] = "failed"
                 s["error"] = pipeline_failure["error"]
+                s["error_type"] = pipeline_failure["error_type"]
                 break
 
     is_running = any(s["status"] == "running" for s in steps) or (
@@ -3984,7 +4015,10 @@ async def clip_render_status(
     )
 
 
-@router.post("/clips/{clip_id}/render-retry")
+@router.post(
+    "/clips/{clip_id}/render-retry",
+    dependencies=[Depends(require_full_scope)],
+)
 async def clip_render_retry(
     request: Request,
     clip_id: str,
@@ -4912,10 +4946,15 @@ async def stream_delete(
     stream = await repo.get(stream_id)
     if stream is None:
         raise HTTPException(status_code=404, detail="stream not found")
-    if stream.status == "running":
+    # No stream ever carries status 'running' — in-flight runs are tracked
+    # in the active-run registry —
+    # so the old `status == "running"` guard never fired.
+    from chalybclip.jobs.active import active_stream_ids
+
+    if stream.status == "running" or stream_id in active_stream_ids():
         raise HTTPException(
             status_code=409,
-            detail="stream is currently running — wait for it to finish or fail before deleting",
+            detail="Este stream se está procesando. Espera a que termine o falle antes de borrarlo.",
         )
 
     # A scheduled Zernio post fetches our signed media URL only when its
@@ -5156,6 +5195,10 @@ async def llm_settings_view(
     request: Request,
     tenant_id: str = Depends(tenant_binder),
 ) -> Response:
+    # Operator-only (provider/model routing). The nav hides the link, but
+    # the page itself must refuse non-admins too — 404 like its siblings.
+    if not getattr(request.state, "is_admin", False):
+        raise HTTPException(status_code=404, detail="not found")
     from chalybclip.llm.config import load_llm_config
 
     cfg = load_llm_config()

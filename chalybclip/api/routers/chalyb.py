@@ -602,8 +602,13 @@ async def sso_finalize(
         value=session_raw_token,
         max_age=_COOKIE_MAX_AGE_SECONDS,
         # localhost: secure=False so the cookie sticks over plain HTTP in dev.
-        # Override to True via reverse proxy in prod (or flip to env-driven).
-        secure=request.url.scheme == "https",
+        # Behind Cloud Run / Railway TLS terminates at the proxy and uvicorn
+        # sees scheme=http (it only trusts X-Forwarded-Proto from 127.0.0.1),
+        # so honor the proxy header too — otherwise prod cookies lose Secure.
+        secure=(
+            request.url.scheme == "https"
+            or request.headers.get("x-forwarded-proto", "").split(",")[0].strip() == "https"
+        ),
         httponly=True,
         samesite="lax",
         path="/",
