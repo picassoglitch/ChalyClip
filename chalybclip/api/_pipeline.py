@@ -357,9 +357,13 @@ async def remote_upload_runner(kickoff: PipelineKickoff) -> None:
     store = build_artifact_store(settings)
     suffix = PurePosixPath(key).suffix or ".mp4"
     dest = kickoff.output_dir / "_incoming" / f"{stream_id}{suffix}"
-    got = (
-        await store.download(key=key, dest=dest) if store is not None else None
-    )
+    try:
+        got = (
+            await store.download(key=key, dest=dest) if store is not None else None
+        )
+    except Exception as e:  # surfaced as pipeline.failed below
+        _log.warning("upload.fetch_failed stream=%s error=%s", stream_id, e)
+        got = None
     if got is None:
         error = IngestError(
             f"uploaded source missing from object storage (key={key})"
@@ -374,7 +378,10 @@ async def remote_upload_runner(kickoff: PipelineKickoff) -> None:
     # The worker now holds the only copy it needs; ingest moves it into
     # the stream dir. Don't leave raw user video sitting in the bucket.
     if store is not None:
-        await store.delete(key=key)
+        try:
+            await store.delete(key=key)
+        except Exception as e:  # a leftover object is not fatal
+            _log.warning("upload.source_delete_failed stream=%s error=%s", stream_id, e)
 
     await upload_pipeline_runner(
         tenant_id=kickoff.tenant_id,
@@ -413,18 +420,23 @@ async def _emit_top_level_failure(
     # gone by the time we get here. Open a fresh one just for this write.
     db = Database(db_path)
     await db.connect()
-    with bound_tenant(tenant_id):
-        await emit(
-            db,
-            "pipeline.failed",
-            {
-                "stream_id": stream_id,
-                "error_type": type(error).__name__,
-                # Keep the message short — the full traceback is in the
-                # Railway log. The UI only needs enough text to display.
-                "error": str(error)[:500],
-            },
-        )
+    try:
+        with bound_tenant(tenant_id):
+            await emit(
+                db,
+                "pipeline.failed",
+                {
+                    "stream_id": stream_id,
+                    "error_type": type(error).__name__,
+                    # Keep the message short — the full traceback is in the
+                    # Railway log. The UI only needs enough text to display.
+                    "error": str(error)[:500],
+                },
+            )
+    finally:
+        # On Postgres connect() opens an asyncpg pool; without this every
+        # failed run leaked one pooled connection.
+        await db.close()
 
 
 async def upload_pipeline_runner(
@@ -482,20 +494,38 @@ async def upload_pipeline_runner(
     settings = get_settings()
     db_path = resolve_db_target(settings)
 
-    if dispatcher is not None and await _hand_upload_to_worker(
-        dispatcher=dispatcher,
-        tenant_id=tenant_id,
-        stream_id=stream_id,
-        persona_id=persona_id,
-        tmp_path=tmp_path,
-        output_dir=output_dir,
-        title=title,
-        language=language,
-        usage_job_id=usage_job_id,
-        reservation_id=reservation_id,
-        lane=lane,
-    ):
-        return
+    if dispatcher is not None:
+        try:
+            handed_off = await _hand_upload_to_worker(
+                dispatcher=dispatcher,
+                tenant_id=tenant_id,
+                stream_id=stream_id,
+                persona_id=persona_id,
+                tmp_path=tmp_path,
+                output_dir=output_dir,
+                title=title,
+                language=language,
+                usage_job_id=usage_job_id,
+                reservation_id=reservation_id,
+                lane=lane,
+            )
+        except Exception as e:
+            # The dispatch itself blew up (e.g. a refused boost re-admission)
+            # after the row was created as 'pending'. Without an event the
+            # progress card spins forever — surface it like any other failure.
+            try:
+                await _emit_top_level_failure(
+                    db_path=db_path, tenant_id=tenant_id,
+                    stream_id=stream_id, error=e,
+                )
+            except Exception:
+                _log.exception(
+                    "upload handoff pipeline.failed write failed for stream=%s",
+                    stream_id,
+                )
+            raise
+        if handed_off:
+            return
 
     from chalybclip.jobs.usage import metered_run
 
@@ -801,6 +831,20 @@ async def live_pipeline_runner(
                 "live pipeline.failed event write failed for stream=%s",
                 stream_id,
             )
+        # The autoclip claim set the row to 'processing'; only success
+        # resets it, so a failed run used to sit in 'processing' forever.
+        try:
+            from chalybclip.db import Database
+            from chalybclip.db.repos import _streams_repo_set_status
+
+            fdb = Database(db_path)
+            await fdb.connect()
+            try:
+                await _streams_repo_set_status(fdb, stream_id=stream_id, status="failed")
+            finally:
+                await fdb.close()
+        except Exception:  # best-effort status only
+            _log.warning("live: could not mark stream failed for %s", stream_id)
         raise
 
     # Run succeeded — flip the stream to a terminal status. The autoclip

@@ -128,7 +128,8 @@ def _verify_signed_params(
 
     msg = f"{resource_id}|{tenant}|{int(exp)}".encode()
     expected = hmac.new(secret.encode(), msg, hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(expected, sig):
+    # bytes, not str: compare_digest raises TypeError (→ 500) on non-ASCII.
+    if not hmac.compare_digest(expected.encode("utf-8"), sig.encode("utf-8")):
         raise HTTPException(status_code=403, detail="signature mismatch")
 
 

@@ -129,9 +129,11 @@ def verify_sso_token(
     except ValueError:
         raise SsoTokenError("malformed token") from None
 
-    expected_sig = hmac.new(
-        secret.encode("utf-8"), payload_b64.encode("ascii"), sha256
-    ).digest()
+    try:
+        payload_bytes = payload_b64.encode("ascii")
+    except UnicodeEncodeError:
+        raise SsoTokenError("malformed token") from None
+    expected_sig = hmac.new(secret.encode("utf-8"), payload_bytes, sha256).digest()
     try:
         actual_sig = _b64url_decode(sig_b64)
     except Exception as e:  # noqa: BLE001 — base64 lib raises a few different kinds

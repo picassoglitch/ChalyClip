@@ -112,6 +112,11 @@ async def test_retry_one_429_maps_to_rate_limit_message(
     zernio_env: None, client: httpx.AsyncClient, alice: dict[str, str]
 ) -> None:
     with respx.mock() as mock:
+        # pf3 has no local row → ownership comes from this tenant's
+        # failed list (the list the retry buttons are rendered from).
+        mock.get(f"{_ZBASE}/posts").mock(
+            return_value=httpx.Response(200, json={"posts": [_failed_post("pf3")]})
+        )
         mock.post(f"{_ZBASE}/posts/pf3/retry").mock(
             return_value=httpx.Response(429, json={"error": "rate limited"})
         )
@@ -177,3 +182,47 @@ async def test_retry_all_isolates_per_post_failures(
     assert body["retried"] == 1
     outcomes = {r["post_id"]: r["ok"] for r in body["results"]}
     assert outcomes == {"pb1": True, "pb2": False}
+
+
+# ---- ownership (the Zernio key is company-wide) ----
+
+
+@pytest.mark.asyncio
+async def test_retry_one_refuses_another_tenants_post(
+    zernio_env: None,
+    client: httpx.AsyncClient,
+    db: Database,
+    alice: dict[str, str],
+    tenants: dict[str, dict[str, str]],
+) -> None:
+    await ZernioPublishesRepo(db).record(
+        post_id="pf_bob", tenant_id=tenants["bob"]["id"], clip_id="clp_b",
+        platforms=["tiktok"], content="x", status="failed",
+    )
+    with respx.mock(assert_all_called=False) as mock:
+        retry = mock.post(f"{_ZBASE}/posts/pf_bob/retry").mock(
+            return_value=httpx.Response(200, json={"post": {"_id": "pf_bob"}})
+        )
+        resp = await client.post(
+            "/dashboard/publish/zernio/retry/pf_bob", headers=auth(alice["token"]),
+        )
+    assert resp.status_code == 404
+    assert not retry.called
+
+
+@pytest.mark.asyncio
+async def test_retry_one_refuses_unknown_post_not_in_my_failed_list(
+    zernio_env: None, client: httpx.AsyncClient, alice: dict[str, str]
+) -> None:
+    with respx.mock(assert_all_called=False) as mock:
+        mock.get(f"{_ZBASE}/posts").mock(
+            return_value=httpx.Response(200, json={"posts": [_failed_post("pf_mine")]})
+        )
+        retry = mock.post(f"{_ZBASE}/posts/pf_other/retry").mock(
+            return_value=httpx.Response(200, json={"post": {"_id": "pf_other"}})
+        )
+        resp = await client.post(
+            "/dashboard/publish/zernio/retry/pf_other", headers=auth(alice["token"]),
+        )
+    assert resp.status_code == 404
+    assert not retry.called
