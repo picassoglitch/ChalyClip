@@ -94,6 +94,14 @@ REFUSAL_MESSAGES: dict[str, tuple[int, str]] = {
         409,
         "Este trabajo ya se cerró. Vuelve a lanzarlo para procesarlo de nuevo.",
     ),
+    # The hub doesn't know this Chalyb user (POST /usage/admit → 404
+    # "unknown user_id": account deleted, or a tenant linked to the wrong
+    # hub). Retrying won't help, so don't say "try again in a few minutes".
+    "unknown_user": (
+        403,
+        "No encontramos tu cuenta de Chalyb. Vuelve a entrar desde chalyb.com "
+        "e inténtalo de nuevo.",
+    ),
     "hub_unavailable": (
         503,
         "No pudimos verificar tu saldo con Chalyb en este momento. Inténtalo "
@@ -236,14 +244,13 @@ async def admit(
         )
         raise AdmissionRefused("hub_unavailable", detail={"error": error})
     if resp.status_code >= 400:
-        # 401/403/404/422: our request or config is wrong — still fail
-        # closed, loudly, so the operator sees it.
+        reason = _reason_for_4xx(resp)
         _log.error(
-            "admission refused: hub rejected the request HTTP %d · tenant=%s body=%s",
-            resp.status_code, tenant_id, (resp.text or "")[:300],
+            "admission refused: hub rejected the request HTTP %d (%s) · tenant=%s body=%s",
+            resp.status_code, reason, tenant_id, (resp.text or "")[:300],
         )
         raise AdmissionRefused(
-            "hub_unavailable", detail={"error": f"HTTP {resp.status_code}"}
+            reason, detail={"error": f"HTTP {resp.status_code}", "hub": _json_or_empty(resp)}
         )
     try:
         data = resp.json()
@@ -272,6 +279,31 @@ async def admit(
         body["est_tokens"],
     )
     return result
+
+
+def _json_or_empty(resp: httpx.Response) -> dict[str, Any]:
+    try:
+        data = resp.json()
+    except Exception:  # noqa: BLE001
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _reason_for_4xx(resp: httpx.Response) -> str:
+    """Which refusal a hub 4xx is. The hub answers real refusals with 200 +
+    allowed=false (handled by the caller); a 4xx carrying a known `reason`
+    is honoured the same way. 404 "unknown user_id" is the user's account,
+    not the hub being down. Everything else (401/403 bearer, 404 unknown
+    engine, 400 a request we built wrong) is our config: still fail closed
+    as hub_unavailable, logged at ERROR by the caller."""
+    data = _json_or_empty(resp)
+    reason = data.get("reason")
+    if isinstance(reason, str) and reason in REFUSAL_MESSAGES:
+        return reason
+    error = data.get("error")
+    if resp.status_code == 404 and isinstance(error, str) and error == "unknown user_id":
+        return "unknown_user"
+    return "hub_unavailable"
 
 
 async def heartbeat(
