@@ -36,8 +36,38 @@ SUPPORTED_LOCALES: tuple[str, ...] = ("en", "es")
 DEFAULT_LOCALE = "es"
 
 
+LOCALE_COOKIE = "chalybclip_lang"
+LOCALE_QUERY_PARAM = "lang"
+
+
+def _supported(value: str | None) -> str | None:
+    v = (value or "").strip().lower().split("-", 1)[0]
+    return v if v in SUPPORTED_LOCALES else None
+
+
+def explicit_locale(request: Request) -> str | None:
+    """An explicit language choice: `?lang=es|en` (e.g. forwarded by the
+    hub's launch link) beats the `chalybclip_lang` cookie a previous
+    `?lang=` stored. None when the user never chose."""
+    return _supported(request.query_params.get(LOCALE_QUERY_PARAM)) or _supported(
+        request.cookies.get(LOCALE_COOKIE)
+    )
+
+
 def detect_locale(request: Request) -> str:
-    """Return 'en' or 'es' based on the request's Accept-Language header."""
+    """Return 'en' or 'es' for this request.
+
+    Order: explicit choice (`?lang=` / cookie) → the dashboard is
+    Spanish (most dashboard pages are hard-coded Spanish, so following an
+    English Accept-Language there produced a half-English, half-Spanish UI
+    for hub users whose browser is set to English) → the public pages
+    (landing, SSO error) follow Accept-Language.
+    """
+    chosen = explicit_locale(request)
+    if chosen:
+        return chosen
+    if request.url.path.startswith("/dashboard"):
+        return DEFAULT_LOCALE
     raw = request.headers.get("accept-language", "")
     if not raw:
         return DEFAULT_LOCALE
@@ -472,6 +502,22 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "newClip.drive.manage": "Manage Drive watches",
         "newClip.drive.unavailable": "Coming soon",
         "newClip.drive.note": "In the meantime, use Paste URL or Upload to bring in a VOD.",
+        "newClip.url.invalidEmpty": "Paste your VOD link.",
+        "newClip.url.invalidHost": "Only kick.com, twitch.tv, youtube.com or youtu.be links work.",
+        "newClip.url.starting": "Starting…",
+        "newClip.url.cookiesUser": "Some Kick videos and age-restricted YouTube videos can't be downloaded yet. If yours fails, download it and use Upload.",
+        "newClip.upload.uploading": "Uploading…",
+        "newClip.boost.label": "Boost",
+        "newClip.boost.help": "dedicated machine, faster (charges an extra token fee, except VIP)",
+        "newClip.live.viaChalyobs": "Live streaming runs through ChalyOBS: connect it and every broadcast turns into clips when it ends.",
+        "newClip.live.noKey": "You don't have a stream key yet.",
+        "nav.live": "Live",
+        "tier.free": "Free",
+        "tier.pro": "Pro",
+        "tier.all_access": "VIP",
+        "tier.free.tooltip": "Free plan · your clips carry the chalybclip.com watermark. Upgrade to export without it.",
+        "tier.paid.tooltip": "{tier} plan · you export without a watermark",
+        "account.tooltip": "Your account",
 
         # ============================================================
         # SITE SETTINGS (admin — operator-editable landing values)
@@ -891,10 +937,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         # ============================================================
         # NAV
         # ============================================================
-        "nav.clips": "Streams",
+        "nav.clips": "Mis transmisiones",
         "nav.inbox": "Clips",
         "nav.personas": "Personas",
-        "nav.brand_kits": "Brand kits",
+        "nav.brand_kits": "Firma visual",
         "nav.publish": "Publicar",
         "nav.sources": "Canales",
         "nav.llm_spend": "Gasto LLM",
@@ -948,6 +994,22 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "newClip.drive.manage": "Gestionar carpetas de Drive",
         "newClip.drive.unavailable": "Próximamente",
         "newClip.drive.note": "Mientras tanto, usa Pegar URL o Subir para traer un VOD.",
+        "newClip.url.invalidEmpty": "Pega el enlace de tu VOD.",
+        "newClip.url.invalidHost": "Solo funcionan enlaces de kick.com, twitch.tv, youtube.com o youtu.be.",
+        "newClip.url.starting": "Empezando…",
+        "newClip.url.cookiesUser": "Algunos videos de Kick y de YouTube con restricción de edad todavía no se pueden descargar. Si el tuyo falla, descárgalo y usa Subir.",
+        "newClip.upload.uploading": "Subiendo…",
+        "newClip.boost.label": "Boost",
+        "newClip.boost.help": "máquina dedicada, más rápido (cobra una tarifa extra en tokens salvo VIP)",
+        "newClip.live.viaChalyobs": "La transmisión en vivo se hace desde ChalyOBS: conéctalo y cada transmisión se convierte en clips al terminar.",
+        "newClip.live.noKey": "Todavía no tienes clave de transmisión.",
+        "nav.live": "En vivo",
+        "tier.free": "Gratis",
+        "tier.pro": "Pro",
+        "tier.all_access": "VIP",
+        "tier.free.tooltip": "Plan gratis · tus clips salen con la marca de chalybclip.com. Mejora tu plan y exporta sin marca.",
+        "tier.paid.tooltip": "Plan {tier} · exportas sin marca",
+        "account.tooltip": "Tu cuenta",
 
         # ============================================================
         # SITE SETTINGS (admin — valores del landing editables por el operador)
@@ -1035,6 +1097,8 @@ __all__ = [
     "DEFAULT_LOCALE",
     "TRANSLATIONS",
     "detect_locale",
+    "explicit_locale",
+    "LOCALE_COOKIE",
     "t",
     "install_globals",
 ]

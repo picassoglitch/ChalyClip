@@ -60,7 +60,7 @@
             /dashboard/inbox "Clips" surface was removed; clips are reached
             by drilling into a stream. -#}
         {{ side_link("/dashboard/streams", t("nav.clips"), "movie") }}
-        {{ side_link("/dashboard/live", "Live", "broadcast", prefix="/dashboard/live") }}
+        {{ side_link("/dashboard/live", t("nav.live"), "broadcast", prefix="/dashboard/live") }}
         {{ side_link("/dashboard/personas", t("nav.personas"), "user") }}
         {{ side_link("/dashboard/brand-kits", t("nav.brand_kits"), "palette") }}
         {{ side_link("/dashboard/publish/zernio", t("nav.publish"), "send") }}
@@ -91,14 +91,20 @@
          Free → amber "watermark" tooltip; pro+ → lime "clean export". #}
       {%- set _tier = (request.state.tenant_tier if request and request.state else None) -%}
       {% if _tier %}
+      {#- Human label for the canonical tier enum (free / pro / all_access →
+          Gratis / Pro / VIP). Never render the raw enum. Unknown values fall
+          back to a title-cased, underscore-free form. -#}
+      {%- set _tier_key = 'tier.' ~ _tier -%}
+      {%- set _tier_label = t(_tier_key) -%}
+      {%- if _tier_label == _tier_key -%}{%- set _tier_label = _tier|replace('_', ' ')|title -%}{%- endif -%}
       <span class="nc-chip nc-chip--{% if _tier == 'free' %}warn{% else %}success{% endif %}"
-            title="{% if _tier == 'free' %}Plan gratis · tus clips salen con la marca de chalybclip.com. Mejora tu plan y exporta sin marca.{% else %}Plan {{ _tier|capitalize }} · exportas sin marca{% endif %}">
+            title="{% if _tier == 'free' %}{{ t('tier.free.tooltip') }}{% else %}{{ t('tier.paid.tooltip')|replace('{tier}', _tier_label) }}{% endif %}">
         <i class="ti ti-{% if _tier == 'free' %}flame{% else %}crown{% endif %}" aria-hidden="true"></i>
-        <span>{{ _tier|capitalize }}</span>
+        <span>{{ _tier_label }}</span>
       </span>
       {% endif %}
       {% if tenant_id %}
-      <span class="nc-chip nc-chip--muted" title="Tu cuenta">
+      <span class="nc-chip nc-chip--muted" title="{{ t('account.tooltip') }}">
         <i class="ti ti-user" aria-hidden="true"></i>
         <span>{{ tenant_id }}</span>
       </span>
