@@ -30,6 +30,7 @@ from chalybclip.jobs import InProcessJobDispatcher, JobDispatcher, get_dispatche
 from ._pipeline import PipelineKickoff, PipelineRunner, default_pipeline_runner
 from .auth import BearerAuthMiddleware
 from .hub_api import install_hub_error_handlers
+from .hub_media import router as hub_media_router
 from .lifespan import background_drains_lifespan
 from .routers import chalyb as chalyb_router
 from .routers import clips as clips_router
@@ -283,5 +284,6 @@ def create_app(
     app.include_router(hub_router.router)
     app.include_router(hub_editor_router.router)
     app.include_router(hub_publish_router.router)
+    app.include_router(hub_media_router)
 
     return app

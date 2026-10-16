@@ -67,6 +67,9 @@ _PUBLIC_PREFIXES: tuple[str, ...] = (
     # callbacks can't carry our cookie; each handler verifies its own
     # HMAC signature (see routers/zernio_webhooks.py).
     "/api/webhooks/",
+    # Hub media links (<video>/<img> src): each URL carries its own HMAC
+    # signature bound to tenant + resource + expiry (api/hub_media.py).
+    "/api/hub/media/",
 )
 _COOKIE_NAME = "chalybclip_token"
 
