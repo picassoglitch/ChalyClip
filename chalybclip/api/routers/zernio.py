@@ -1900,7 +1900,12 @@ async def _emit_degenerate_skip(
 
 
 async def maybe_autopublish_on_approve(
-    *, request: Request, db: Database, tenant_id: str, clip_id: str
+    *,
+    request: Request,
+    db: Database,
+    tenant_id: str,
+    clip_id: str,
+    raise_errors: bool = False,
 ) -> str | None:
     """Best-effort auto-publish of a just-approved clip. Returns the Zernio
     post_id on success, or None when it didn't fire (disabled, wrong mode,
@@ -1982,6 +1987,10 @@ async def maybe_autopublish_on_approve(
         log.warning(
             "autopublish.failed", tenant_id=tenant_id, clip_id=clip_id, error=str(e)
         )
+        if raise_errors:
+            # The background approve job (api/_autopublish_job.py) records
+            # the failure where Publicar's failed list shows it.
+            raise
         return None
 
 
@@ -3118,20 +3127,23 @@ async def zernio_failed_json(
 ) -> Response:
     """Failed posts for this tenant, each with its per-platform error +
     Spanish hint. Powers the clickable FAILED counter list."""
+    from chalybclip.api._autopublish_job import failed_placeholders
     from chalybclip.integrations.zernio.errors import summarize_failed_platforms
 
+    # Auto-publish-on-approve jobs that failed before reaching Zernio.
+    local_failed = await failed_placeholders(db, tenant_id)
     tenant = await TenantsRepo(db).get(tenant_id)
     profile_id = tenant.zernio_profile_id if tenant else None
     settings = get_settings()
     if not profile_id or not settings.zernio_api_key:
-        return JSONResponse({"ok": True, "failed": []})
+        return JSONResponse({"ok": True, "failed": local_failed})
     client = _build_client()
     try:
         rows = await client.list_failed(profile_id=profile_id)
     except ZernioError as e:
         _log.warning("zernio.failed.list_failed tenant=%s err=%s", tenant_id, e)
-        return JSONResponse({"ok": False, "failed": []}, status_code=502)
-    failed = [
+        return JSONResponse({"ok": False, "failed": local_failed}, status_code=502)
+    failed = local_failed + [
         {
             "post_id": p.get("_id") or p.get("id"),
             "content": (p.get("content") or "")[:80],
@@ -3145,6 +3157,7 @@ async def zernio_failed_json(
 
 @router.post("/retry/{post_id}")
 async def zernio_retry_one(
+    request: Request,
     post_id: str,
     tenant_id: str = Depends(tenant_binder),
     _: None = Depends(require_full_scope),
@@ -3152,6 +3165,14 @@ async def zernio_retry_one(
     db: Database = Depends(get_db),
 ) -> Response:
     """Reintentar one failed post (POST /posts/{id}/retry)."""
+    from chalybclip.api._autopublish_job import is_placeholder, retry_autopublish
+
+    if is_placeholder(post_id):
+        # An auto-publish-on-approve job that failed before Zernio: re-run it.
+        out = await retry_autopublish(
+            request=request, db=db, tenant_id=tenant_id, placeholder=post_id
+        )
+        return JSONResponse(out, status_code=200 if out["ok"] else 409)
     client = _build_client()
     try:
         result = await client.retry_post(post_id)

@@ -51,8 +51,10 @@
     html, body {
       margin: 0;
       padding: 0;
-      width: 1080px;
-      height: 1920px;
+      /* The viewport is the export size: 1080x1920 (9:16), 1920x1080
+         (16:9) or 1080x1080 (1:1), see chalybclip.clip.formats. */
+      width: 100vw;
+      height: 100vh;
       background: #000;
       overflow: hidden;
     }
@@ -98,8 +100,8 @@
        container resolves cqw=10.8px / cqh=19.2px in every overlay. */
     .nc-preview {
       position: relative;
-      width: 1080px;
-      height: 1920px;
+      width: 100vw;
+      height: 100vh;
       max-width: none;
       margin: 0;
       background: #000;
@@ -212,7 +214,10 @@
        data-preview-mode="{{ _preview_mode }}"
        data-fit-mode="{{ _fit_mode }}"
        data-zone-profile="{{ _zone_profile }}"
-       {%- if face_zone %} data-face-zone="{{ face_zone }}"{%- endif %}
+       {%- set _format = ov.get('format') if ov.get('format') in ('horizontal', 'square') else 'vertical' %}
+       data-format="{{ _format }}"
+       {#- face_zone comes from the 9:16 crop; it means nothing on 16:9 / 1:1. #}
+       {%- if face_zone and _format == 'vertical' %} data-face-zone="{{ face_zone }}"{%- endif %}
        data-render-mode="export"
        style="--pv-highlight: {{ _captions.get('highlight_color') or '#ffd84a' }};
               --pv-banner-color: {{ _banner.get('color') or '#53FC18' }};

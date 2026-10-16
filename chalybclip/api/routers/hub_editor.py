@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
@@ -39,11 +40,19 @@ from fastapi import BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 
+from chalybclip.api._autopublish_job import clip_publish_state
 from chalybclip.api.deps import get_db
 from chalybclip.api.hub_api import HubError, hub_router, hub_tenant
 from chalybclip.api.hub_media import media_kind, media_path
 from chalybclip.api.routers import dashboard as dash
-from chalybclip.db import ClipsRepo, Database, StreamsRepo
+from chalybclip.clip.ai_text import localize, localize_viral_why
+from chalybclip.clip.formats import (
+    FORMATS,
+    available_formats,
+    clip_format,
+    ensure_format_base,
+)
+from chalybclip.db import ClipsRepo, Database, EventsRepo, StreamsRepo
 
 router = hub_router(tags=["hub-editor"])
 
@@ -281,6 +290,87 @@ def _export_qualities(request: Request) -> list[str]:
     return sorted(dash._TIER_RESOLUTIONS.get(tier, {"1080"}), key=_QUALITIES.index)
 
 
+def _locale(lang: str | None) -> str:
+    """The AI text language: English only when asked; Spanish otherwise."""
+    return "en" if (lang or "").lower().startswith("en") else "es"
+
+
+def _localize_verdict(pub: dict[str, Any], loc: str) -> dict[str, Any]:
+    out = dict(pub)
+    for key in ("reasons", "warnings", "blocking"):
+        out[key] = [localize(x, loc) for x in pub.get(key) or []]
+    out["recommended_action"] = localize(pub.get("recommended_action") or "", loc)
+    return out
+
+
+def _localize_scores(scores: dict[str, Any] | None, loc: str) -> dict[str, Any] | None:
+    if not scores:
+        return scores
+    out = dict(scores)
+    out["viral_why"] = localize_viral_why(scores.get("viral_why") or "", loc)
+    for key in ("hook_why", "readability_why", "dead_air_why"):
+        out[key] = localize(scores.get(key) or "", loc)
+    return out
+
+
+def _localize_decisions(dec: dict[str, Any] | None, loc: str) -> dict[str, Any] | None:
+    if not dec:
+        return dec
+    out = dict(dec)
+    for key, value in dec.items():
+        if key.endswith("_reason") and isinstance(value, str):
+            out[key] = localize(value, loc)
+    out["intel_lines"] = [localize(x, loc) for x in dec.get("intel_lines") or []]
+    return out
+
+
+_TRIM_WORDS_MAX = 3000
+
+
+async def _trim_info(db: Database, clip: Any, stream: Any) -> dict[str, Any]:
+    """What the editor's trim bar needs: where the bounds may go (stream
+    seconds, same rule `manual_trim` enforces), the length limits, and the
+    word timings inside that window so handles can snap to words."""
+    from chalybclip.clip.trim import MANUAL_TRIM_MIN_S, manual_trim_window
+    from chalybclip.config import ClipConfig
+    from chalybclip.db import TranscriptsRepo
+
+    has_source = bool(stream) and Path(stream.source_video_path).is_file()
+    lo, hi = manual_trim_window(
+        clip,
+        source_available=has_source,
+        stream_duration_s=stream.duration_s if stream else None,
+    )
+    words: list[list[float]] = []
+    tx = await TranscriptsRepo(db).get(clip.stream_id)
+    if tx is not None:
+        try:
+            segs = json.loads(tx.segments_json or "[]")
+        except ValueError:
+            segs = []
+        for seg in segs if isinstance(segs, list) else []:
+            for w in (seg.get("words") or []) if isinstance(seg, dict) else []:
+                ts, te = w.get("ts", w.get("start")), w.get("end_ts", w.get("end"))
+                if (
+                    isinstance(ts, int | float)
+                    and isinstance(te, int | float)
+                    and lo <= float(ts)
+                    and float(te) <= hi
+                ):
+                    words.append([round(float(ts), 3), round(float(te), 3)])
+                if len(words) >= _TRIM_WORDS_MAX:
+                    break
+    return {
+        "window": [lo, hi],
+        "start_s": float(clip.start_s),
+        "end_s": float(clip.end_s),
+        "min_s": MANUAL_TRIM_MIN_S,
+        "max_s": float(ClipConfig().max_clip_duration_s),
+        "source_available": has_source,
+        "words": words,
+    }
+
+
 # ---- GET editor ---------------------------------------------------------
 
 
@@ -288,6 +378,7 @@ def _export_qualities(request: Request) -> list[str]:
 async def hub_clip_editor(
     request: Request,
     clip_id: str,
+    lang: str = "es",
     tenant_id: str = hub_tenant(),
     db: Database = Depends(get_db),
 ) -> dict[str, Any]:
@@ -298,6 +389,7 @@ async def hub_clip_editor(
     ctx: dict[str, Any] = getattr(page, "context", None) or {}
     clip = ctx["clip"]
     bk = ctx.get("brand_kit")
+    loc = _locale(lang)
     stream = await StreamsRepo(db).get(clip.stream_id)
     pub = ctx["publishability"]
     outcomes = [
@@ -337,6 +429,11 @@ async def hub_clip_editor(
                 if clip.thumbnail_frame_path
                 else None
             ),
+            # Base video per format, for the preview (made on first load).
+            "formats": {
+                f: media_path("fmt", clip.id, tenant_id=tenant_id, params={"f": f})
+                for f in ("horizontal", "square")
+            },
         },
         "can_finalize": clip.status in ("cut", "ready_for_review", "approved"),
         "can_reject": clip.status != "rejected",
@@ -344,12 +441,25 @@ async def hub_clip_editor(
         "form": editor_form(clip, ctx.get("inherited_overlay"), bk, ctx["caption_style"]),
         "default_handle": _default_handle(bk),
         "caption_style": _jsonable(ctx["caption_style"]),
-        "publishability": _jsonable(pub),
-        "intel_lines": _intel_lines(ctx),
-        "director_lines": _jsonable(ctx.get("director_lines") or []),
-        "ai_scores": _jsonable(ctx.get("ai_scores")),
+        "publishability": _localize_verdict(_jsonable(pub), loc),
+        "intel_lines": [localize(x, loc) for x in _intel_lines(ctx)],
+        "director_lines": [
+            {**d, "text": localize(d.get("text", ""), loc)}
+            for d in _jsonable(ctx.get("director_lines") or [])
+        ],
+        "ai_scores": _localize_scores(_jsonable(ctx.get("ai_scores")), loc),
         "breakdown": _jsonable(ctx["breakdown"]),
-        "ai_decisions": _jsonable(ctx.get("ai_decisions")),
+        "ai_decisions": _localize_decisions(_jsonable(ctx.get("ai_decisions")), loc),
+        "trim": await _trim_info(db, clip, stream),
+        "formats": {
+            "current": clip_format(clip),
+            "available": await available_formats(
+                clip=clip,
+                tenant_id=tenant_id,
+                source_video=Path(stream.source_video_path) if stream else None,
+            ),
+        },
+        "publish_state": await clip_publish_state(db, tenant_id, clip.id),
         "auto_corrections": _jsonable(ctx.get("auto_corrections")),
         "candidate_trigger": _jsonable(ctx.get("candidate_trigger")),
         "face_zone": ctx.get("face_zone"),
@@ -400,13 +510,53 @@ class OverlayIn(BaseModel):
     target_platform: str = Field(default="", max_length=16)
     comments_show: bool = False
     comments_fake_likes: int = Field(default=0, ge=0, le=999_999)
+    # Output format (chalybclip.clip.formats). Not a dashboard form field:
+    # merged into overlay_config after the shared handler saved the rest.
+    format: str = Field(default="", max_length=16)
 
     def form_kwargs(self) -> dict[str, Any]:
         """As the HTML form submitted them: checkboxes are "1" or absent."""
         out: dict[str, Any] = {}
-        for name, value in self.model_dump().items():
+        for name, value in self.model_dump(exclude={"format"}).items():
             out[name] = ("1" if value else "") if isinstance(value, bool) else value
         return out
+
+
+async def _check_format(db: Database, clip: Any, tenant_id: str, fmt: str) -> str | None:
+    """The format to store (None = leave as is). 409 when this clip can't
+    produce it (no full-frame cut and no source video)."""
+    if not fmt:
+        return None
+    if fmt not in FORMATS:
+        raise HubError("bad_request", "Formato no válido.", reason="bad_format")
+    if fmt == "vertical":
+        return fmt
+    stream = await StreamsRepo(db).get(clip.stream_id)
+    avail = await available_formats(
+        clip=clip,
+        tenant_id=tenant_id,
+        source_video=Path(stream.source_video_path) if stream else None,
+    )
+    if fmt not in avail:
+        raise HubError(
+            "conflict",
+            "Este clip solo se puede exportar en vertical: ya no tenemos el video completo.",
+            reason="format_unavailable",
+        )
+    return fmt
+
+
+async def _store_format(db: Database, clip_id: str, fmt: str | None) -> None:
+    if fmt is None:
+        return
+    clip = await ClipsRepo(db).get(clip_id)
+    if clip is None:
+        return
+    cfg = dict(clip.overlay_config or {})
+    if cfg.get("format") == fmt:
+        return
+    cfg["format"] = fmt
+    await ClipsRepo(db).set_overlay_config(clip_id, overlay_config=cfg)
 
 
 @router.put("/clips/{clip_id}/overlay")
@@ -419,8 +569,11 @@ async def hub_clip_overlay_save(
 ) -> dict[str, Any]:
     """Guardar borrador: save the overlay (+ brand-kit mirror), drop cached
     renders so the next download matches."""
-    await _require_clip(db, clip_id)
+    before = await _require_clip(db, clip_id)
+    fmt = await _check_format(db, before, tenant_id, body.format)
     await dash.clip_overlay_save(request, clip_id, **body.form_kwargs(), tenant_id=tenant_id, db=db)
+    # The dashboard save wrote a fresh overlay (no `format`): put it back.
+    await _store_format(db, clip_id, fmt or clip_format(before))
     clip = await _require_clip(db, clip_id)
     return {"ok": True, "status": clip.status, "overlay": clip.overlay_config}
 
@@ -434,9 +587,11 @@ async def hub_clip_finalize(
     tenant_id: str = hub_tenant(),
     db: Database = Depends(get_db),
 ) -> dict[str, Any]:
-    """Aprobar y seguir: save + approve + background 1080 pre-render +
-    auto-publish hook, then point at the next clip waiting for review."""
+    """Aprobar y seguir: save + approve, then (in the background, after the
+    response) the 1080 pre-render and the auto-publish job; points at the
+    next clip waiting for review."""
     clip = await _require_clip(db, clip_id)
+    fmt = await _check_format(db, clip, tenant_id, body.format)
     resp = await dash.clip_overlay_finalize(
         request,
         background_tasks,
@@ -445,6 +600,9 @@ async def hub_clip_finalize(
         tenant_id=tenant_id,
         db=db,
     )
+    # Before the response goes out, so the background pre-render (which
+    # runs after it) renders the chosen format.
+    await _store_format(db, clip_id, fmt or clip_format(clip))
     parts, _query = _redirect_target(resp)
     next_id = parts[2] if len(parts) >= 3 and parts[1] == "clips" else None
     fresh = await _require_clip(db, clip_id)
@@ -485,6 +643,38 @@ async def hub_clip_revert_trim(
     if outcome not in ("reverted", "noop"):
         outcome = "error"
     return {"ok": outcome != "error", "outcome": outcome}
+
+
+class TrimIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    start_s: float
+    end_s: float
+
+
+@router.post("/clips/{clip_id}/trim")
+async def hub_clip_trim(
+    request: Request,
+    clip_id: str,
+    body: TrimIn,
+    tenant_id: str = hub_tenant(),
+    db: Database = Depends(get_db),
+) -> dict[str, Any]:
+    """Recortar a mano (stream seconds). Validated and applied by
+    `clip.trim.manual_trim` (bounds, 5 s minimum, ClipConfig maximum);
+    Deshacer (revert-trim) restores the cut afterwards."""
+    from chalybclip.clip.trim import TrimRejectedError, manual_trim
+
+    clip = await _require_clip(db, clip_id)
+    if clip.status == "published":
+        raise HubError("conflict", "Este clip ya se publicó.", reason="clip_published")
+    try:
+        out = await manual_trim(db, clip_id=clip_id, start_s=body.start_s, end_s=body.end_s)
+    except TrimRejectedError as e:
+        raise HubError("bad_request", str(e), reason=e.reason) from None
+    await ClipsRepo(db).reset_render_state(clip_id)
+    await EventsRepo(db).emit(type="clip.trimmed", payload={"clip_id": clip_id, **out})
+    return {"ok": True, **out}
 
 
 # ---- AI hooks + brand-kit prefs -----------------------------------------
@@ -558,10 +748,20 @@ async def hub_clip_waveform(
 
 @router.get("/clips/{clip_id}/intelligence")
 async def hub_clip_intelligence(
-    clip_id: str, tenant_id: str = hub_tenant(), db: Database = Depends(get_db)
-) -> Response:
+    clip_id: str,
+    lang: str = "es",
+    tenant_id: str = hub_tenant(),
+    db: Database = Depends(get_db),
+) -> dict[str, Any]:
     await _require_clip(db, clip_id)
-    return await dash.clip_intelligence(clip_id, tenant_id=tenant_id, db=db)
+    data = _json_body(await dash.clip_intelligence(clip_id, tenant_id=tenant_id, db=db))
+    loc = _locale(lang)
+    data["markers"] = [
+        {**m, "label": localize(str(m.get("label") or ""), loc)}
+        for m in data.get("markers") or []
+        if isinstance(m, dict)
+    ]
+    return data
 
 
 @router.get("/clips/{clip_id}/growth")
@@ -702,6 +902,32 @@ async def _render_media(
         filename=name,
         headers={"Content-Disposition": f'attachment; filename="{name}"'},
     )
+
+
+@media_kind("fmt")
+async def _format_media(
+    request: Request, db: Database, tenant_id: str, clip_id: str, params: dict[str, str]
+) -> Response:
+    """The base video of a non-vertical format at the clip's current bounds
+    (the editor preview plays it). Made on first request."""
+    from chalybclip.api._video_response import video_file_response
+
+    fmt = params.get("f", "")
+    if fmt not in ("horizontal", "square"):
+        raise HTTPException(status_code=404, detail="not found")
+    clip = await ClipsRepo(db).get(clip_id)
+    if clip is None:
+        raise HTTPException(status_code=404, detail="not found")
+    stream = await StreamsRepo(db).get(clip.stream_id)
+    base = await ensure_format_base(
+        clip=clip,
+        fmt=fmt,
+        tenant_id=tenant_id,
+        source_video=Path(stream.source_video_path) if stream else None,
+    )
+    if base is None:
+        raise HTTPException(status_code=404, detail="not found")
+    return video_file_response(request, base, filename=None)
 
 
 __all__ = ["PLATFORM_COLORS", "OverlayIn", "editor_form", "router"]

@@ -396,6 +396,11 @@ def _cut_one_sync(
             brand_kit=kit,
             framing_verdict=framing_verdict,
         )
+        # Keep the full-frame cut: horizontal / square formats derive
+        # from it after the source VOD is gone (chalybclip.clip.formats).
+        from .formats import save_master
+
+        save_master(intermediate, clip_dir)
     finally:
         if intermediate.exists():
             intermediate.unlink()
