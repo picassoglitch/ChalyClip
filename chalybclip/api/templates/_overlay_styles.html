@@ -30,6 +30,11 @@
    layout at 520px and 1080px.
    ============================================================ #}
 <style>
+  /* One overlay unit: 1% of the frame width on 9:16 (exactly the cqw the
+     rules below were tuned with), height-relative on 16:9 and 1:1 so the
+     overlays keep their size against the picture height in every format
+     (chalybclip.clip.formats). The ASS caption burn uses the same unit. */
+  .nc-preview { --u: min(1cqw, calc(0.5625 * 1cqh)); }
   /* ---------- Title hook ---------- */
   .nc-pv-title {
     position: absolute;
@@ -41,16 +46,16 @@
     color: #000;
     font-family: "Inter", sans-serif;
     font-weight: 800;
-    /* 17/520*100 = 3.269cqw */
-    font-size: 3.269cqw;
+    /* 17/520*100 = calc(3.269 * var(--u)) */
+    font-size: calc(3.269 * var(--u));
     line-height: 1.22;
-    /* 10/924*100 = 1.082cqh ; 14/520*100 = 2.692cqw */
-    padding: 1.082cqh 2.692cqw;
-    /* 12/520*100 = 2.308cqw */
-    border-radius: 2.308cqw;
+    /* 10/924*100 = 1.082cqh ; 14/520*100 = calc(2.692 * var(--u)) */
+    padding: 1.082cqh calc(2.692 * var(--u));
+    /* 12/520*100 = calc(2.308 * var(--u)) */
+    border-radius: calc(2.308 * var(--u));
     text-align: center;
     box-shadow:
-      0 0.325cqh 1.923cqw rgba(0, 0, 0, 0.55),
+      0 0.325cqh calc(1.923 * var(--u)) rgba(0, 0, 0, 0.55),
       0 0.108cqh 0 rgba(0, 0, 0, 0.18) inset;
     display: -webkit-box;
     -webkit-line-clamp: 2;
@@ -90,8 +95,8 @@
     animation: nc-face-aware-flash 1.4s ease-out 1;
   }
   @keyframes nc-face-aware-flash {
-    0%   { box-shadow: 0 0 0 0.385cqw rgba(200, 255, 92, 0.85), 0 0.325cqh 1.923cqw rgba(0,0,0,0.55); }
-    100% { box-shadow: 0 0.325cqh 1.923cqw rgba(0,0,0,0.55); }
+    0%   { box-shadow: 0 0 0 calc(0.385 * var(--u)) rgba(200, 255, 92, 0.85), 0 0.325cqh calc(1.923 * var(--u)) rgba(0,0,0,0.55); }
+    100% { box-shadow: 0 0.325cqh calc(1.923 * var(--u)) rgba(0,0,0,0.55); }
   }
 
   /* ---------- Top hook (secondary, above main hook) ---------- */
@@ -103,13 +108,13 @@
     text-align: center;
     font-family: "Inter", sans-serif;
     font-weight: 800;
-    /* 11/520*100 = 2.115cqw */
-    font-size: 2.115cqw;
+    /* 11/520*100 = calc(2.115 * var(--u)) */
+    font-size: calc(2.115 * var(--u));
     letter-spacing: 0.02em;
     line-height: 1.15;
-    padding: 0.433cqh 1.923cqw;
+    padding: 0.433cqh calc(1.923 * var(--u));
     border-radius: 999px;
-    box-shadow: 0 0.216cqh 1.154cqw rgba(0, 0, 0, 0.35);
+    box-shadow: 0 0.216cqh calc(1.154 * var(--u)) rgba(0, 0, 0, 0.35);
     pointer-events: none;
     white-space: nowrap;
     overflow: hidden;
@@ -120,17 +125,17 @@
   .nc-pv-top-hook--white_rounded {
     background: rgba(255, 255, 255, 0.72);
     color: #000;
-    backdrop-filter: blur(0.769cqw);
+    backdrop-filter: blur(calc(0.769 * var(--u)));
   }
   .nc-pv-top-hook--black_solid {
     background: rgba(0, 0, 0, 0.62);
     color: rgba(255, 255, 255, 0.92);
-    backdrop-filter: blur(0.769cqw);
+    backdrop-filter: blur(calc(0.769 * var(--u)));
   }
   .nc-pv-top-hook--subtle {
     background: rgba(255, 255, 255, 0.55);
     color: #111;
-    backdrop-filter: blur(1.154cqw);
+    backdrop-filter: blur(calc(1.154 * var(--u)));
   }
 
   /* ---------- Banner (base + variants) ---------- */
@@ -155,8 +160,8 @@
        legacy bottom:0 sat IN the unsafe zone and got clipped
        by every platform on upload. Editor preview now shows
        the banner where it'll actually publish. */
-    left: 7.4cqw;
-    right: 7.4cqw;
+    left: calc(7.4 * var(--u));
+    right: calc(7.4 * var(--u));
     bottom: 21.875cqh;
     /* 38/924*100 = 4.113cqh */
     height: 4.113cqh;
@@ -184,10 +189,10 @@
     background: #e62b20;
     color: #fff;
     font-weight: 800;
-    font-size: 1.731cqw;
+    font-size: calc(1.731 * var(--u));
     letter-spacing: 0.04em;
-    padding: 0.216cqh 1.154cqw;
-    border-radius: 0.577cqw;
+    padding: 0.216cqh calc(1.154 * var(--u));
+    border-radius: calc(0.577 * var(--u));
     margin-left: 0;
   }
 
@@ -204,8 +209,8 @@
        it ACTUALLY publishes. */
     bottom: 28.125cqh;
     transform: none;
-    left: 7.4cqw;
-    right: 7.4cqw;
+    left: calc(7.4 * var(--u));
+    right: calc(7.4 * var(--u));
     background: #000;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
@@ -216,11 +221,11 @@
        the KICK logo doesn't take flex space (position:absolute), so a
        long username like KICK.COM/ALDOV1LLANUEVA bled left and
        crashed into the green wordmark. padding-left clears the logo
-       (1.538cqw offset + 26.923cqw width + 2.3cqw gap = 30.769cqw);
+       (calc(1.538 * var(--u)) offset + calc(26.923 * var(--u)) width + calc(2.3 * var(--u)) gap = calc(30.769 * var(--u)));
        justify-content:flex-start pins the URL at that boundary so it
        grows rightward only. Short URLs sit just past the logo, long
        ones extend toward the right edge of the banner. */
-    padding: 0 1.538cqw 0 30.769cqw;
+    padding: 0 calc(1.538 * var(--u)) 0 calc(30.769 * var(--u));
     /* 6.25cqh from export ≈ 120px on 1920 — taller bar
        so the KICK wordmark has breathing room. */
     height: 6.25cqh;
@@ -238,10 +243,10 @@
   }
   .nc-pv-banner--kick_repost_page .nc-pv-banner__platform {
     position: absolute;
-    left: 1.538cqw;
+    left: calc(1.538 * var(--u));
     top: 50%;
     transform: translateY(-62%);
-    width: 26.923cqw;
+    width: calc(26.923 * var(--u));
     height: 4.762cqh;
     color: transparent;
     font-size: 0;
@@ -255,22 +260,22 @@
     background-size: contain;
     image-rendering: auto;
     filter:
-      drop-shadow(0.385cqw 0 0 #000)
-      drop-shadow(-0.385cqw 0 0 #000)
+      drop-shadow(calc(0.385 * var(--u)) 0 0 #000)
+      drop-shadow(calc(-0.385 * var(--u)) 0 0 #000)
       drop-shadow(0 0.216cqh 0 #000)
       drop-shadow(0 -0.216cqh 0 #000)
-      drop-shadow(0 0.325cqh 0.769cqw rgba(0, 0, 0, 0.55));
+      drop-shadow(0 0.325cqh calc(0.769 * var(--u)) rgba(0, 0, 0, 0.55));
   }
   .nc-pv-banner--kick_repost_page .nc-pv-banner__url {
     position: relative;
     color: #fff;
     font-family: "Inter Tight", "Inter", sans-serif;
-    font-size: 2.115cqw;
+    font-size: calc(2.115 * var(--u));
     font-weight: 900;
-    letter-spacing: 0.038cqw;
+    letter-spacing: calc(0.038 * var(--u));
     line-height: 1;
     text-transform: uppercase;
-    text-shadow: 0 0.108cqh 0.192cqw rgba(0, 0, 0, 0.9);
+    text-shadow: 0 0.108cqh calc(0.192 * var(--u)) rgba(0, 0, 0, 0.9);
     flex: none;
     overflow: visible;
     white-space: nowrap;
@@ -298,18 +303,18 @@
   .nc-pv-banner--kick_green_block .nc-pv-banner__platform {
     background: var(--pv-banner-color, #53FC18);
     color: #000;
-    padding: 0 3.077cqw;
+    padding: 0 calc(3.077 * var(--u));
     height: 100%;
     display: inline-flex;
     align-items: center;
     font-weight: 900;
-    font-size: 3.077cqw;
+    font-size: calc(3.077 * var(--u));
     letter-spacing: 0.02em;
   }
   .nc-pv-banner--kick_green_block .nc-pv-banner__url {
-    padding: 0 2.308cqw;
+    padding: 0 calc(2.308 * var(--u));
     color: #fff;
-    font-size: 2.308cqw;
+    font-size: calc(2.308 * var(--u));
     font-weight: 700;
     flex: 1;
     text-align: center;
@@ -328,9 +333,9 @@
   .nc-pv-banner--kick_minimal_url .nc-pv-banner__url {
     background: rgba(0, 0, 0, 0.55);
     color: #fff;
-    padding: 0.433cqh 1.538cqw;
-    font-size: 1.923cqw;
-    border-radius: 0.769cqw;
+    padding: 0.433cqh calc(1.538 * var(--u));
+    font-size: calc(1.923 * var(--u));
+    border-radius: calc(0.769 * var(--u));
   }
 
   /* platform_band variant — branded source-credit band for the NON-kick
@@ -345,16 +350,16 @@
     color: #fff;
     /* Clear the absolutely-positioned glyph on the left so the centered
        URL never crashes into it. */
-    padding: 0 1.538cqw 0 11cqw;
+    padding: 0 calc(1.538 * var(--u)) 0 calc(11 * var(--u));
     justify-content: center;
   }
   .nc-pv-banner--platform_band .nc-pv-banner__platform {
     /* Hide the platform NAME text; the glyph carries the identity. */
     position: absolute;
-    left: 2.2cqw;
+    left: calc(2.2 * var(--u));
     top: 50%;
     transform: translateY(-50%);
-    width: 6cqw;
+    width: calc(6 * var(--u));
     height: 62%;
     color: transparent;
     font-size: 0;
@@ -362,7 +367,7 @@
     background-repeat: no-repeat;
     background-position: left center;
     background-size: contain;
-    filter: drop-shadow(0 0.216cqh 0.385cqw rgba(0, 0, 0, 0.5));
+    filter: drop-shadow(0 0.216cqh calc(0.385 * var(--u)) rgba(0, 0, 0, 0.5));
   }
   .nc-pv-banner--platform_band[data-platform="youtube"] .nc-pv-banner__platform {
     background-image: url("/static/glyph-youtube.png");
@@ -377,12 +382,12 @@
   .nc-pv-banner--platform_band .nc-pv-banner__url {
     color: #fff;
     font-weight: 800;
-    font-size: 2.115cqw;
+    font-size: calc(2.115 * var(--u));
     letter-spacing: 0.02em;
     opacity: 1;
     text-align: center;
     white-space: nowrap;
-    text-shadow: 0 0.108cqh 0.192cqw rgba(0, 0, 0, 0.6);
+    text-shadow: 0 0.108cqh calc(0.192 * var(--u)) rgba(0, 0, 0, 0.6);
   }
   .nc-pv-banner--platform_band .nc-pv-banner__live-pill { display: none !important; }
 
@@ -397,13 +402,13 @@
     text-transform: uppercase;
     letter-spacing: 0.02em;
     color: #fff;
-    -webkit-text-stroke: 0.481cqw #000;
+    -webkit-text-stroke: calc(0.481 * var(--u)) #000;
     paint-order: stroke fill;
     text-shadow:
-      0 0.325cqh 1.538cqw rgba(0, 0, 0, 0.85),
+      0 0.325cqh calc(1.538 * var(--u)) rgba(0, 0, 0, 0.85),
       0 0.108cqh 0 rgba(0, 0, 0, 0.6);
-    /* 22/520*100 = 4.231cqw base × operator-set scale. */
-    font-size: calc(4.231cqw * var(--pv-caption-scale, 1));
+    /* 22/520*100 = calc(4.231 * var(--u)) base × operator-set scale. */
+    font-size: calc(calc(4.231 * var(--u)) * var(--pv-caption-scale, 1));
     line-height: 1.05;
     pointer-events: none;
     z-index: 3;
@@ -430,7 +435,7 @@
   .nc-pv-caption__word[data-emphasis="shout"].is-active {
     font-size: 1.35em;
     color: #ff3b30;
-    -webkit-text-stroke-width: 0.673cqw;
+    -webkit-text-stroke-width: calc(0.673 * var(--u));
     transform: scale(1.25);
   }
   .nc-pv-caption__word[data-emphasis="reaction"].is-active {
@@ -455,7 +460,7 @@
   }
   .nc-pv-caption[data-animation="typewriter"] .nc-pv-caption__word.is-active {
     animation: none;
-    border-right: 0.385cqw solid var(--pv-highlight, #FFD700);
+    border-right: calc(0.385 * var(--u)) solid var(--pv-highlight, #FFD700);
   }
   .nc-pv-caption[data-animation="fade"] .nc-pv-caption__word.is-active {
     animation: nc-caption-fade 0.25s ease-in;
@@ -478,11 +483,11 @@
     pointer-events: none;
     font-family: "Archivo Black", "Inter", sans-serif;
     font-weight: 900;
-    font-size: 3.2cqw;
+    font-size: calc(3.2 * var(--u));
     line-height: 1;
     letter-spacing: 0.04em;
     color: rgba(200, 255, 92, 0.78);
-    text-shadow: 0.385cqw 0.216cqh 0 rgba(0, 0, 0, 0.55);
+    text-shadow: calc(0.385 * var(--u)) 0.216cqh 0 rgba(0, 0, 0, 0.55);
     user-select: none;
   }
   /* Hide watermark in modes that don't burn it (editor "raw"
@@ -492,4 +497,20 @@
   .nc-preview[data-watermark="off"] .nc-pv-watermark {
     display: none !important;
   }
+  /* ---------- 16:9 and 1:1 layouts (chalybclip.clip.formats) ----------
+     No phone UI covers these frames, so the banner drops near the bottom
+     edge, and on 16:9 the boxes stay centered instead of spanning the
+     whole width. 9:16 is untouched. */
+  .nc-preview[data-format="horizontal"] .nc-pv-title { left: 20%; right: 20%; top: 8%; }
+  .nc-preview[data-format="horizontal"] .nc-pv-top-hook { left: 26%; right: 26%; top: 3%; }
+  .nc-preview[data-format="horizontal"] .nc-pv-banner,
+  .nc-preview[data-format="horizontal"] .nc-pv-banner--kick_repost_page {
+    left: 22%; right: 22%; bottom: 6cqh;
+  }
+  .nc-preview[data-format="horizontal"] .nc-pv-banner--kick_minimal_url { bottom: 3cqh; }
+  .nc-preview[data-format="square"] .nc-pv-title { top: 14%; }
+  .nc-preview[data-format="square"] .nc-pv-top-hook { top: 7%; }
+  .nc-preview[data-format="square"] .nc-pv-banner,
+  .nc-preview[data-format="square"] .nc-pv-banner--kick_repost_page { bottom: 10cqh; }
+  .nc-preview[data-format="square"] .nc-pv-banner--kick_minimal_url { bottom: 3cqh; }
 </style>

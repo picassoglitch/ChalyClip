@@ -3294,22 +3294,23 @@ async def clip_overlay_finalize(
         },
     )
 
-    # Auto-publish ("Piloto automático"): if the tenant turned it on with
-    # mode=on_approve, the approve we just did auto-enqueues the clip to
-    # Zernio with its burned-in render. Best-effort — never blocks approval
-    # (the helper swallows its own errors). Routed through the Zernio publish
-    # core, NOT the retired publish_jobs worker.
+    # Auto-publish ("Piloto automático", mode=on_approve) runs as a
+    # background job queued AFTER the 1080 pre-render above, so approve
+    # returns at once and the publish finds the render already warm. The
+    # job records a pending row the editor shows, and a failure lands in
+    # Publicar's failed list with Reintentar (api/_autopublish_job.py).
+    # Best-effort — never blocks approval.
     try:
-        from chalybclip.api.routers.zernio import maybe_autopublish_on_approve
+        from chalybclip.api._autopublish_job import enqueue_autopublish
 
-        await maybe_autopublish_on_approve(
-            request=request, db=db, tenant_id=tenant_id, clip_id=clip_id
+        await enqueue_autopublish(
+            background_tasks, request=request, db=db, tenant_id=tenant_id, clip_id=clip_id
         )
     except Exception as e:  # auto-publish must never block the approve flow
         from structlog import get_logger
 
         get_logger(__name__).warning(
-            "clip.finalize.autopublish_hook_failed", clip_id=clip_id, reason=str(e)
+            "clip.finalize.autopublish_enqueue_failed", clip_id=clip_id, reason=str(e)
         )
 
     # Slice N.2 — Approve & continue. After finalize, walk to the
