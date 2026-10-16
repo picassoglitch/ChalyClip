@@ -147,6 +147,9 @@ def _code_for_status(status_code: int, reason: str | None) -> str:
         return "needs_plan" if (reason or "").startswith("paywall") else "no_credits"
     if status_code == 422:
         return "bad_request"
+    if status_code == 423:
+        # status_gate.require_active_tenant: the tenant is paused/cancelled.
+        return "forbidden"
     for code, st in HUB_ERROR_CODES.items():
         if st == status_code and code not in ("needs_plan",):
             return code

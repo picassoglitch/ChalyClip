@@ -267,6 +267,9 @@ def test_http_exception_mapping() -> None:
     assert from_http_exception(HTTPException(404, detail="x")).code == "not_found"
     assert from_http_exception(HTTPException(409, detail="x")).code == "conflict"
     assert from_http_exception(HTTPException(422, detail="x")).code == "bad_request"
+    paused = HTTPException(423, detail={"reason": "tenant_paused", "message": "en pausa"})
+    e = from_http_exception(paused)
+    assert (e.code, e.status_code, e.reason) == ("forbidden", 423, "tenant_paused")
     inactive = HTTPException(403, detail={"reason": "tenant_inactive", "message": "pausada"})
     e = from_http_exception(inactive)
     assert (e.code, e.reason) == ("forbidden", "tenant_inactive")
