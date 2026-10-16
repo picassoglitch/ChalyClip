@@ -31,6 +31,7 @@ from ._pipeline import PipelineKickoff, PipelineRunner, default_pipeline_runner
 from .auth import BearerAuthMiddleware
 from .hub_api import install_hub_error_handlers
 from .hub_media import router as hub_media_router
+from .hub_redirect import HubRedirectMiddleware
 from .lifespan import background_drains_lifespan
 from .routers import chalyb as chalyb_router
 from .routers import clips as clips_router
@@ -143,6 +144,9 @@ def create_app(
     # /api/hub/v1 answers errors in the hub's shared format; other paths
     # keep FastAPI's defaults (see hub_api.install_hub_error_handlers).
     install_hub_error_handlers(app)
+    # Cutover: user pages → their hub screens when CHALYBCLIP_HUB_REDIRECT=1
+    # (default off). Outermost, so it answers before auth.
+    app.add_middleware(HubRedirectMiddleware)
 
     # Static assets — serves /static/chalybclip-theme.css and any future
     # CSS / JS / icon bundles. The auth middleware whitelists `/static/`
