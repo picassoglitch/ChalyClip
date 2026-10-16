@@ -189,8 +189,10 @@ async def render_clip_in_background(
     # Hub-initiated renders (/api/hub/v1, Bearer launch token) carry no
     # operator cookie. Without a credential the auth-gated /render page
     # bounces the recorder and the render fails, so mint the same signed
-    # render query background auto-publish uses. 1800s TTL: see the note in
-    # zernio._publish_clip. Best-effort — no signing secret, no change.
+    # render query background auto-publish uses. 900s: the most the /render
+    # signature check accepts (auth._verify_render_signature max_ttl_s), and
+    # the page is opened once at the start of the render. Best-effort — no
+    # signing secret, no change.
     if not auth_cookie_value and not auth_query:
         import contextlib
 
@@ -198,7 +200,7 @@ async def render_clip_in_background(
             from chalybclip.api.routers.internal import sign_render_query
 
             auth_query = sign_render_query(
-                clip_id=clip_id, tenant_id=tenant_id, ttl_seconds=1800
+                clip_id=clip_id, tenant_id=tenant_id, ttl_seconds=900
             )
 
     db = Database(db_path)

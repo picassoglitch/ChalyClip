@@ -654,6 +654,16 @@ async def test_runner_signs_render_page_without_cookie(
     assert len(seen) == 2
     q = str(seen[0]["auth_query"])
     assert "tenant=ten_x" in q and "sig=" in q and "exp=" in q
+    # The /render page's own check (auth._verify_render_signature, 900s
+    # ceiling) must accept what the runner minted.
+    from urllib.parse import parse_qs
+
+    from chalybclip.api.routers.internal import _verify_signed_params
+
+    p = {k: v[0] for k, v in parse_qs(q).items()}
+    _verify_signed_params(
+        resource_id="clp_x", tenant=p["tenant"], exp=int(p["exp"]), sig=p["sig"], max_ttl_s=900
+    )
     assert seen[1]["auth_query"] == ""
     assert seen[1]["auth_cookie_value"] == "operator_cookie"
 
