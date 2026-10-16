@@ -608,16 +608,17 @@ async def test_old_runs_are_never_announced(
     assert r.json() == {"first": False}
 
 
-async def test_persona_id_taken_by_another_account_is_409(
+async def test_two_accounts_can_use_the_same_persona_id(
     client: httpx.AsyncClient, tenants: dict[str, dict[str, str]]
 ) -> None:
-    """personas.id is a global primary key: an id another tenant already
-    uses must answer 409, not 500."""
+    """Persona ids are per account (migration 060)."""
     alice, bob = tenants["alice"]["id"], tenants["bob"]["id"]
     p = {"id": "shared", "name": "X", "primary_language": "es", "voice_prompt": "v"}
-    assert (await client.post("/api/hub/v1/personas", json=p, headers=hdr(alice))).status_code == 200
-    r = await client.post("/api/hub/v1/personas", json=p, headers=hdr(bob))
-    _err(r, 409, "conflict", "exists")
+    for t in (alice, bob):
+        r = await client.post("/api/hub/v1/personas", json=p, headers=hdr(t))
+        assert r.status_code == 200, r.text
+        assert r.json()["persona"]["id"] == "shared"
+    _err(await client.post("/api/hub/v1/personas", json=p, headers=hdr(alice)), 409, "conflict", "exists")
 
 
 async def test_progress_marks_one_failed_step(

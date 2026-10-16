@@ -211,45 +211,9 @@
     </div>
   </div>
 
-  {#- Slice O.1 — ChalyClip credit toggle.
-
-      Only PAID tenants can disable the bottom-right "chalybclip.com"
-      watermark; free tenants see an info chip explaining the watermark
-      and a link toward upgrade. The toggle posts the
-      `show_chalybclip_credit` form value the brand-kit save handler
-      already accepts in its update branch. -#}
+  {#- The "chalybclip.com" stamp toggle was removed: no handler ever read
+      it (Aldo, 2026-10-15). The stamp itself is unchanged. -#}
   {%- set _tier = (request.state.tenant_tier if request and request.state else 'free') -%}
-  <div class="nc-panel">
-    <div class="nc-panel__header">
-      <i class="ti ti-license" aria-hidden="true" style="color: var(--nc-lime, #c8ff5c);"></i>
-      <span class="nc-panel__title">Marca ChalyClip</span>
-      <small>— el sello "chalybclip.com" abajo a la derecha de tus clips</small>
-    </div>
-    <div class="nc-panel__body">
-      {% if _tier == 'free' %}
-      <div class="nc-empty" style="margin: 0; padding: 12px 14px; text-align: left;">
-        <strong style="color: var(--nc-lime, #c8ff5c);">Plan gratis</strong>
-        <span style="color: var(--nc-text-muted);">
-          — el sello <code>chalybclip.com</code> se queda en todos tus clips.
-          Pásate a un plan Pro para quitarlo.
-        </span>
-      </div>
-      {# Hidden input so the form submission still carries the value
-         (always 1 on free tier — the server enforces this anyway). #}
-      <input type="hidden" name="show_chalybclip_credit" value="1">
-      {% else %}
-      <label class="nc-checkbox">
-        <input type="checkbox" name="show_chalybclip_credit" value="1"
-               {% if not kit or kit.show_chalybclip_credit %}checked{% endif %}>
-        <span>Mostrar el sello "chalybclip.com" en tus clips
-          <small style="display:block;color:var(--nc-text-muted);">
-            Activado por defecto — un pequeño gracias por usar la herramienta. Apágalo para un clip totalmente limpio.
-          </small>
-        </span>
-      </label>
-      {% endif %}
-    </div>
-  </div>
 
   {#- ChalyClip end-card outro toggle (migration 050).
 

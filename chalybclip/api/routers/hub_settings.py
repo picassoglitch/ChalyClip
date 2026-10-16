@@ -328,9 +328,8 @@ async def hub_personas_create(
             routing_tags=_clean_list(body.routing_tags),
         )
     except IntegrityViolation:
-        # Persona ids are unique across the whole engine (personas.id is the
-        # primary key), so another account may already use this one.
-        raise HubError("conflict", "Ese identificador ya está en uso.", reason="exists") from None
+        # Two saves racing on the same id in this account.
+        raise HubError("conflict", "Ya existe una persona con ese id.", reason="exists") from None
     return {"persona": _persona_json(await repo.get(body.id))}
 
 
