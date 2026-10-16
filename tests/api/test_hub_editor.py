@@ -25,7 +25,7 @@ from typing import Any
 import httpx
 import pytest
 
-from chalybclip.db import BrandKitsRepo, ClipsRepo, Database, StreamsRepo
+from chalybclip.db import BrandKitsRepo, ClipsRepo, Database, StreamsRepo, ZernioPublishesRepo
 from chalybclip.db.models import ClipRow, StreamRow
 from chalybclip.integrations.chalyb.sso import sign_sso_token
 from chalybclip.settings import get_settings
@@ -757,7 +757,9 @@ async def test_manual_trim_validates_and_undoes(
     r = await client.post(url, json={"start_s": "x", "end_s": 3}, headers=h)
     _err(r, 422, "bad_request")
     # Bob can't trim Alice's clip.
-    _err(await client.post(url, json={"start_s": 1, "end_s": 8}, headers=_hub(bob)), 404, "not_found")
+    _err(
+        await client.post(url, json={"start_s": 1, "end_s": 8}, headers=_hub(bob)), 404, "not_found"
+    )
     assert cuts == []
 
     r = await client.post(url, json={"start_s": 1.5, "end_s": 8.0}, headers=h)
@@ -905,14 +907,13 @@ async def test_ai_text_is_spanish_unless_english_is_asked(
     h = _hub(alice)
     es = (await client.get("/api/hub/v1/clips/clp_h1/editor", headers=h)).json()
     en = (await client.get("/api/hub/v1/clips/clp_h1/editor?lang=en", headers=h)).json()
-    assert es["ai_decisions"]["caption_position_reason"] != en["ai_decisions"][
-        "caption_position_reason"
-    ]
+    assert (
+        es["ai_decisions"]["caption_position_reason"]
+        != en["ai_decisions"]["caption_position_reason"]
+    )
     assert "Standard short-form placement" in en["ai_decisions"]["caption_position_reason"]
     assert es["ai_decisions"]["caption_position_reason"].startswith("Posición normal")
-    assert es["publishability"]["recommended_action"] != en["publishability"][
-        "recommended_action"
-    ]
+    assert es["publishability"]["recommended_action"] != en["publishability"]["recommended_action"]
     assert all("words/sec" not in v for v in es["ai_scores"].values() if isinstance(v, str))
 
 
@@ -927,7 +928,7 @@ async def test_approve_returns_at_once_and_autopublish_failure_lands_in_failed(
     """Auto-publish on approve runs after the response, recorded as a
     pending row; a failure turns it into a failed row Publicar lists and
     Reintentar re-runs."""
-    from chalybclip.db import AutopublishSettingsRepo, ZernioPublishesRepo
+    from chalybclip.db import AutopublishSettingsRepo
 
     monkeypatch.setenv("CHALYBCLIP_ZERNIO_API_KEY", "zk_test")
     get_settings.cache_clear()
@@ -937,8 +938,11 @@ async def test_approve_returns_at_once_and_autopublish_failure_lands_in_failed(
 
     calls: list[str] = []
 
+    seen_requests: list[Any] = []
+
     async def _boom(**kw: Any) -> str | None:
         calls.append(kw["clip_id"])
+        seen_requests.append(kw["request"])
         if kw.get("raise_errors"):
             raise RuntimeError("zernio down")
         return None
@@ -947,14 +951,43 @@ async def test_approve_returns_at_once_and_autopublish_failure_lands_in_failed(
     monkeypatch.setattr("chalybclip.api.routers.zernio.maybe_autopublish_on_approve", _boom)
     alice = tenants["alice"]["id"]
     await _seed(db, alice, tmp_path)
+    await _seed(db, alice, tmp_path, clip_id="clp_h2")
     await AutopublishSettingsRepo(db).upsert(
-        alice, enabled=True, mode="on_approve", targets=None, post_mode="now", daily_cap=0
+        alice,
+        enabled=True,
+        mode="on_approve",
+        targets="tiktok,youtube",
+        post_mode="now",
+        daily_cap=0,
     )
-    h = _hub(alice)
+    # Below VIP (Piloto automático is a top-tier perk): no job, no row.
+    r = await client.post(
+        "/api/hub/v1/clips/clp_h2/finalize", json=_overlay_body(), headers=_hub(alice, tier="pro")
+    )
+    assert r.status_code == 200, r.text
+    assert calls == []
+    with bound_tenant(alice):
+        assert await ZernioPublishesRepo(db).exists_for_clip(alice, "clp_h2") is False
+        conn = await db.connect()
+        cur = await conn.execute("SELECT COUNT(*) FROM zernio_publishes")
+        assert (await cur.fetchone())[0] == 0
+
+    h = _hub(alice, tier="vip")
     r = await client.post("/api/hub/v1/clips/clp_h1/finalize", json=_overlay_body(), headers=h)
     assert r.status_code == 200, r.text
     assert r.json()["status"] == "approved"
     assert calls == ["clp_h1"]  # ran as the background job
+    # The job never sees the approving session's cookie.
+    assert "cookie" not in {k.lower() for k in seen_requests[0].headers}
+
+    with bound_tenant(alice):
+        repo = ZernioPublishesRepo(db)
+        # A failed job isn't a post: Auto-programar still sees the clip as
+        # unposted, history/reprocess don't list it, stats count it failed.
+        assert await repo.exists_for_clip(alice, "clp_h1") is False
+        assert await repo.list_for_tenant(limit=50) == []
+        assert await repo.list_for_tenant(limit=50, status="failed") == []
+        assert (await repo.count_status_groups()).get("failed") == 1
 
     body = (await client.get("/api/hub/v1/clips/clp_h1/editor", headers=h)).json()
     assert body["publish_state"]["auto"] == "failed"
@@ -963,17 +996,31 @@ async def test_approve_returns_at_once_and_autopublish_failure_lands_in_failed(
 
     failed = await failed_placeholders(db, alice)
     assert len(failed) == 1 and failed[0]["clip_id"] == "clp_h1"
+    # The real targets, not a generic "auto".
+    assert [p["platform"] for p in failed[0]["platforms"]] == ["tiktok", "youtube"]
     placeholder = failed[0]["post_id"]
     # The other tenant doesn't see it.
     assert await failed_placeholders(db, tenants["bob"]["id"]) == []
 
+    # Reprocesar is for posts; a job placeholder is refused (409) there.
+    from chalybclip.api.routers.zernio import zernio_reprocess_one
+
+    resp = await zernio_reprocess_one(
+        request=None,  # type: ignore[arg-type]
+        post_id=failed[0]["post_id"],
+        tenant_id=alice,
+        db=db,
+    )
+    assert resp.status_code == 409
+
     # Publicar's Reintentar (dashboard route) re-runs it.
     client.cookies.clear()
+    from starlette.requests import Request as _Request
+
     from chalybclip.api._autopublish_job import retry_autopublish
 
-    class _Req:  # the job only hands it through
-        cookies: dict[str, str] = {}
-        headers: dict[str, str] = {}
+    def _Req() -> _Request:  # noqa: N802 — a bare request, as a route would get
+        return _Request({"type": "http", "headers": [(b"cookie", b"chalybclip_token=x")]})
 
     out = await retry_autopublish(
         request=_Req(),  # type: ignore[arg-type]

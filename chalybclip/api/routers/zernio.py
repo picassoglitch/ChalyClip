@@ -3392,6 +3392,14 @@ async def zernio_reprocess_one(
     db: Database = Depends(get_db),
 ) -> Response:
     """Reprocesar un post fallido (re-render + URL nueva + re-agendar)."""
+    from chalybclip.api._autopublish_job import is_placeholder
+
+    if is_placeholder(post_id):
+        # An auto-publish job, not a post: Reintentar re-runs it.
+        return JSONResponse(
+            {"ok": False, "error": "Usa Reintentar para la publicación automática."},
+            status_code=409,
+        )
     row = await ZernioPublishesRepo(db).get_by_post_id(post_id)
     if row is None or row.tenant_id != tenant_id:
         return JSONResponse(

@@ -3891,10 +3891,13 @@ class ZernioPublishesRepo:
         self, limit: int = 25, *, status: str | None = None
     ) -> list[ZernioPublishRow]:
         """Newest-first publish history for the bound tenant; `status`
-        narrows to one state (e.g. 'draft' for the Borradores panel)."""
+        narrows to one state (e.g. 'draft' for the Borradores panel).
+
+        Auto-publish job placeholders (`autopub-…`, api/_autopublish_job.py)
+        are not posts: they never show here (history, reprocess-failed)."""
         tenant_id = current_tenant_id()
         conn = await self._db.connect()
-        where = "tenant_id = ?"
+        where = "tenant_id = ? AND post_id NOT LIKE 'autopub-%'"
         params: list[object] = [tenant_id]
         if status is not None:
             where += " AND status = ?"
@@ -3970,7 +3973,11 @@ class ZernioPublishesRepo:
             "SELECT CASE WHEN post_id LIKE 'manual\\_%' ESCAPE '\\' "
             "THEN 'published' ELSE COALESCE(status, '') END AS s, "
             "COUNT(*) AS n "
-            "FROM zernio_publishes WHERE tenant_id = ? GROUP BY s",
+            "FROM zernio_publishes WHERE tenant_id = ? "
+            # Job placeholders count only once they failed (they're in the
+            # failed list); a running job is not a scheduled post.
+            "AND (post_id NOT LIKE 'autopub-%' OR status = 'failed') "
+            "GROUP BY s",
             (tenant_id,),
         )
         return {
@@ -4029,7 +4036,10 @@ class ZernioPublishesRepo:
         cur = await conn.execute(
             "SELECT 1 FROM zernio_publishes "
             "WHERE tenant_id = ? AND clip_id = ? "
-            "AND COALESCE(status, '') NOT IN ('cancelled', 'deleted') LIMIT 1",
+            "AND COALESCE(status, '') NOT IN ('cancelled', 'deleted') "
+            # An auto-publish job placeholder isn't a post: a failed or
+            # pending job must not make Auto-programar skip the clip.
+            "AND post_id NOT LIKE 'autopub-%' LIMIT 1",
             (tenant_id, clip_id),
         )
         return await cur.fetchone() is not None
