@@ -386,11 +386,14 @@ def test_clip_render_banner_is_inside_safe_zone() -> None:
         "(banner top edge y=1380 on 1920 canvas)"
     )
     # Left/right margins for the safe-zone (80px on a 1080 canvas = 7.4cqw).
-    assert "left: 7.4cqw" in css, (
+    # Widths are in the format-aware overlay unit --u, which IS 1cqw on 9:16
+    # (chalybclip.clip.formats), so 7.4 units = 7.4cqw on the vertical export.
+    assert "--u: min(1cqw, calc(0.5625 * 1cqh))" in css
+    assert "left: calc(7.4 * var(--u))" in css, (
         "banner must have at least 80px left margin (7.4cqw) so the "
         "Kick logo never touches the canvas edge"
     )
-    assert "right: 7.4cqw" in css, (
+    assert "right: calc(7.4 * var(--u))" in css, (
         "banner must have at least 80px right margin (7.4cqw) so the "
         "URL handle never touches the canvas edge"
     )

@@ -291,6 +291,7 @@ def build_recording_store(settings: Settings) -> RecordingStore | None:
 
 from .keys import (  # noqa: E402 — re-export the key builders
     clip_key_family,
+    clip_landscape_key,
     clip_media_key,
     clip_render_key,
     clip_thumbnail_key,
@@ -305,6 +306,7 @@ __all__ = [
     "build_artifact_store",
     "build_recording_store",
     "clip_key_family",
+    "clip_landscape_key",
     "clip_media_key",
     "clip_render_key",
     "clip_thumbnail_key",

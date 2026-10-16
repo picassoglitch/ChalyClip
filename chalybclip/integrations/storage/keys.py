@@ -29,6 +29,12 @@ def clip_render_key(tenant_id: str, clip_id: str, *, resolution: str = "1080") -
     return f"clips/{tenant_id}/{clip_id}/clip_render_{resolution}.mp4"
 
 
+def clip_landscape_key(tenant_id: str, clip_id: str) -> str:
+    """Key for the full-frame cut (`clip_landscape.mp4`) the horizontal and
+    square formats are derived from (chalybclip.clip.formats)."""
+    return f"clips/{tenant_id}/{clip_id}/clip_landscape.mp4"
+
+
 def upload_source_key(tenant_id: str, stream_id: str, suffix: str = ".mp4") -> str:
     """Key for a raw dashboard upload parked in the bucket so the worker
     (which can't see the web box's disk) can ingest it. Transient: the
@@ -42,11 +48,13 @@ def clip_key_family(tenant_id: str, clip_id: str) -> list[str]:
         clip_media_key(tenant_id, clip_id),
         clip_thumbnail_key(tenant_id, clip_id),
         clip_render_key(tenant_id, clip_id),
+        clip_landscape_key(tenant_id, clip_id),
     ]
 
 
 __all__ = [
     "clip_key_family",
+    "clip_landscape_key",
     "clip_media_key",
     "clip_render_key",
     "clip_thumbnail_key",
