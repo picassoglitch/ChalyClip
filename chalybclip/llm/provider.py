@@ -29,9 +29,18 @@ class RetryableLLMError(LLMError):
     raise plain `LLMError` and skip straight to the next provider in the chain.
     """
 
-    def __init__(self, message: str, *, status_code: int | None = None):
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        usage: ProviderResult | None = None,
+    ):
         super().__init__(message)
         self.status_code = status_code
+        # Tokens the failed attempt still consumed (e.g. a response with no
+        # tool_use block). The router bills them like any other attempt.
+        self.usage = usage
 
 
 class ProviderResult(BaseModel):
@@ -40,6 +49,11 @@ class ProviderResult(BaseModel):
     output: dict[str, Any]
     input_tokens: int = 0
     output_tokens: int = 0
+    # Prompt-cache split (Anthropic `usage.cache_read_input_tokens` /
+    # `cache_creation_input_tokens`). `input_tokens` is the UNCACHED input
+    # only, so the four counts add up to everything billed.
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
     model: str
 
 

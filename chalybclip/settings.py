@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -133,11 +133,11 @@ class Settings(BaseSettings):
     #     channels). Per-stream overrides through the existing
     #     `language` field on the pipeline call.
     #
-    # `assemblyai_speech_models` — model ladder. The first model is
-    # the quality target (`universal-3-pro` — best ES/EN accuracy +
-    # native code-switching). The second is the 99-language fallback
-    # (`universal-2`) for the rare case U3-Pro misses on an exotic
-    # accent. AAI walks the ladder in order.
+    # `assemblyai_speech_models` — model ladder, walked in order.
+    # Default `universal-2` ($0.15/hr vs Universal Pro's $0.21): it's
+    # only the transcript, and transcription is most of a run's cost
+    # (owner, 2026-10-03). Set ["universal-3-pro", "universal-2"] to go
+    # back to Pro first for its native ES/EN code-switching.
     #
     # `assemblyai_speaker_labels` — per-video diarization labels
     # (A / B / C). The pipeline reads these instead of running
@@ -146,7 +146,7 @@ class Settings(BaseSettings):
     # ~$0.02/hr diarization upcharge for labels nothing reads.
     assemblyai_language_mode: str = "auto"
     assemblyai_speech_models: list[str] = Field(
-        default_factory=lambda: ["universal-3-pro", "universal-2"]
+        default_factory=lambda: ["universal-2"]
     )
     assemblyai_speaker_labels: bool = False
     # Slice O.44 — Modal Whisper provider. Wired when
@@ -471,6 +471,40 @@ class Settings(BaseSettings):
     max_upload_bytes: int = Field(
         default=5 * 1024 * 1024 * 1024,
         validation_alias="CHALYBCLIP_MAX_UPLOAD_BYTES",
+    )
+
+    # ------------------------------------------------------------------
+    # Consumption contract (chalyb docs/engines/consumption-contract.md):
+    # admission, boost lane, durable usage delivery.
+    # ------------------------------------------------------------------
+    # Boost lane — the one-shot Cloud Run Job (8 vCPU / 32 GiB) a run is
+    # sent to when /usage/admit answers lane=boost. Unset → boost-lane runs
+    # fall back to the standard worker (logged; the boost fee is dropped by
+    # re-admitting with boost=false). Project/region default to the
+    # metadata server's, so on Cloud Run only the job name is required.
+    boost_job_name: str | None = Field(
+        default=None, validation_alias="CHALYBCLIP_BOOST_JOB_NAME"
+    )
+    boost_gcp_project: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("GOOGLE_CLOUD_PROJECT", "CHALYBCLIP_BOOST_GCP_PROJECT"),
+    )
+    boost_gcp_region: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("CLOUD_RUN_REGION", "CHALYBCLIP_BOOST_GCP_REGION"),
+    )
+    # How often the web box drains the usage outbox to Chalyb /usage. Runs
+    # also drain at job end, so this mostly catches retries + stragglers.
+    usage_outbox_interval_s: float = Field(
+        default=30.0, validation_alias="CHALYBCLIP_USAGE_OUTBOX_INTERVAL_S"
+    )
+    # Reservation TTL sent with /usage/admit, and the heartbeat cadence
+    # that pushes it out while a long run is still going.
+    usage_reservation_ttl_s: int = Field(
+        default=10800, validation_alias="CHALYBCLIP_USAGE_RESERVATION_TTL_S"
+    )
+    usage_heartbeat_interval_s: float = Field(
+        default=1800.0, validation_alias="CHALYBCLIP_USAGE_HEARTBEAT_INTERVAL_S"
     )
 
     # Slice O.9 — admin tenant allowlist. Comma-separated tenant IDs that

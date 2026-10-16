@@ -34,6 +34,8 @@ EntityKind = Literal[
     "hpj",  # hub_publish_jobs — internal service API publishes (Hub phase 3)
     "snp",  # zernio_publish_snapshots — daily per-post metrics (Hub phase 7)
     "bcl",  # zernio_broadcast_log — per-tenant daily broadcast cap (Hub phase 10)
+    "ujob",  # usage_jobs — admitted runs (external_job_id sent to Chalyb /usage/admit)
+    "run",  # one un-admitted pipeline run (compute.seconds source_id)
 ]
 
 

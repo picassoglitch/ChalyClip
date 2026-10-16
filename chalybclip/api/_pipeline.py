@@ -50,26 +50,45 @@ async def default_pipeline_runner(kickoff: PipelineKickoff) -> None:
         for the operator.
     """
     from chalybclip.jobs.active import pipeline_active
+    from chalybclip.jobs.usage import metered_run
     from chalybclip.pipeline import process_vod
     from chalybclip.settings import get_settings
+
+    # An upload parked in the bucket (e.g. a boost-lane run that fell back
+    # to the in-process lane) is ingested from the bucket, not a URL.
+    if getattr(kickoff, "source_object_key", None):
+        await remote_upload_runner(kickoff)
+        return
 
     db_path = resolve_db_target(get_settings())
 
     try:
-        # Registered as in-flight so the disk reclaimers (watchdog,
-        # ingest preflight, sweep backstop) never delete this stream's
-        # source mid-run — long transcribe/LLM stretches only READ it,
-        # so mtime-based activity checks can't see the run.
-        with pipeline_active(kickoff.stream.id):
-            await process_vod(
-                tenant_id=kickoff.tenant_id,
-                vod_url=kickoff.stream.vod_url,
-                output_dir=kickoff.output_dir,
-                persona_id=kickoff.persona_id,
-                stream_id=kickoff.stream.id,
-                language=kickoff.language,
-                db_path=db_path,
-            )
+        # Consumption contract: meter compute + settle the reservation in
+        # every exit path; re-admit with the real duration after ingest.
+        async with metered_run(
+            db_path,
+            tenant_id=kickoff.tenant_id,
+            stream_id=kickoff.stream.id,
+            job_id=getattr(kickoff, "usage_job_id", None),
+            reservation_id=getattr(kickoff, "reservation_id", None),
+            lane=getattr(kickoff, "lane", "standard"),
+            stream_dir=kickoff.output_dir / kickoff.stream.id,
+        ) as run:
+            # Registered as in-flight so the disk reclaimers (watchdog,
+            # ingest preflight, sweep backstop) never delete this stream's
+            # source mid-run — long transcribe/LLM stretches only READ it,
+            # so mtime-based activity checks can't see the run.
+            with pipeline_active(kickoff.stream.id):
+                await process_vod(
+                    tenant_id=kickoff.tenant_id,
+                    vod_url=kickoff.stream.vod_url,
+                    output_dir=kickoff.output_dir,
+                    persona_id=kickoff.persona_id,
+                    stream_id=kickoff.stream.id,
+                    language=kickoff.language,
+                    db_path=db_path,
+                    deps=_readmit_deps(db_path, run),
+                )
     except Exception as e:
         # Best-effort: emit a top-level failure event so the dashboard's
         # progress card surfaces the error instead of spinning. We catch
@@ -129,7 +148,30 @@ async def default_pipeline_runner(kickoff: PipelineKickoff) -> None:
         db_path=db_path,
         tenant_id=kickoff.tenant_id,
         stream_id=kickoff.stream.id,
+        reservation_id=getattr(kickoff, "reservation_id", None),
     )
+
+
+def _readmit_deps(db_path: str, run: object) -> object | None:
+    """PipelineDeps whose `on_ingested` re-admits the run with the probed
+    duration (URL ingests only learn it after the download). None when the
+    run wasn't admitted — process_vod then uses its defaults."""
+    if not getattr(run, "job_id", None):
+        return None
+    from chalybclip.db import Database
+    from chalybclip.pipeline import PipelineDeps
+
+    async def _on_ingested(stream: object) -> None:
+        db = Database(db_path)
+        await db.connect()
+        try:
+            await run.readmit(  # type: ignore[attr-defined]
+                db, source_minutes=float(getattr(stream, "duration_s", 0) or 0) / 60.0
+            )
+        finally:
+            await db.close()
+
+    return PipelineDeps(on_ingested=_on_ingested)
 
 
 # Grace delay before the post-run balance pull. The pipeline's final LLM /
@@ -141,6 +183,7 @@ _BALANCE_REFRESH_GRACE_S = 4.0
 
 async def _refresh_balance_after_run(
     *, db_path: str, tenant_id: str, stream_id: str | None = None,
+    reservation_id: str | None = None,
 ) -> None:
     """Token T2/T3 — after a successful run: (1) charge the per-run base
     fee, (2) pull the live Chalyb balance into the cache so the chip is
@@ -162,8 +205,10 @@ async def _refresh_balance_after_run(
             # (1) Per-run base charge — covers server/render/storage
             #     overhead so a near-free-API run still draws down quota.
             if stream_id:
-                await _charge_run_base_fee(db, tenant_id, stream_id)
-            # (2) Let the run's fire-and-forget provider reports land.
+                await _charge_run_base_fee(
+                    db, tenant_id, stream_id, reservation_id=reservation_id
+                )
+            # (2) Let the outbox drain kicked by the base fee land.
             await asyncio.sleep(_BALANCE_REFRESH_GRACE_S)
             # (3) Live balance fetch → cache → chip.
             await fetch_balance_now(db, tenant_id=tenant_id)
@@ -176,7 +221,8 @@ async def _refresh_balance_after_run(
 
 
 async def _charge_run_base_fee(
-    db: "Database", tenant_id: str, stream_id: str
+    db: "Database", tenant_id: str, stream_id: str,
+    *, reservation_id: str | None = None,
 ) -> None:
     """Token T3 — report the per-run base charge (engine.base) to Chalyb.
 
@@ -204,6 +250,7 @@ async def _charge_run_base_fee(
             occurred_at_iso=_dt.datetime.now(_dt.UTC).isoformat(),
             provider="chalybclip",
             operation="pipeline_run",
+            reservation_id=reservation_id,
         )
     except Exception:  # noqa: BLE001 — never affects the run
         _log.warning(
@@ -222,19 +269,29 @@ async def _hand_upload_to_worker(
     output_dir: "Path",
     title: str | None,
     language: str | None,
+    usage_job_id: str | None = None,
+    reservation_id: str | None = None,
+    lane: str = "standard",
 ) -> bool:
     """Park the raw upload in the bucket and dispatch it to the remote
-    worker. Returns False — caller runs in-process — when there is no
-    remote dispatcher or no bucket, or the bucket upload fails."""
+    worker (or, for a boost-lane run, the boost job). Returns False —
+    caller runs in-process — when there is no remote target or no bucket,
+    or the bucket upload fails."""
     from chalybclip.ingest import Stream
     from chalybclip.integrations.storage import (
         build_artifact_store,
         upload_source_key,
     )
+    from chalybclip.jobs.boost import boost_configured
     from chalybclip.jobs.modal import ModalJobDispatcher
     from chalybclip.settings import get_settings
 
-    if not isinstance(dispatcher, ModalJobDispatcher):
+    # The production dispatcher is wrapped by BoostLaneDispatcher.
+    inner = getattr(dispatcher, "inner", dispatcher)
+    remote = isinstance(inner, ModalJobDispatcher) or (
+        lane == "boost" and boost_configured() and inner is not dispatcher
+    )
+    if not remote:
         return False
     store = build_artifact_store(get_settings())
     if store is None:
@@ -271,9 +328,12 @@ async def _hand_upload_to_worker(
             language=language,
             source_object_key=key,
             title=title,
+            usage_job_id=usage_job_id,
+            reservation_id=reservation_id,
+            lane=lane,
         )
     )
-    _log.info("upload.handed_to_worker stream=%s", stream_id)
+    _log.info("upload.handed_to_worker stream=%s lane=%s", stream_id, lane)
     return True
 
 
@@ -324,6 +384,9 @@ async def remote_upload_runner(kickoff: PipelineKickoff) -> None:
         output_dir=kickoff.output_dir,
         title=kickoff.title,
         language=kickoff.language,
+        usage_job_id=kickoff.usage_job_id,
+        reservation_id=kickoff.reservation_id,
+        lane=kickoff.lane,
     )
 
 
@@ -374,6 +437,9 @@ async def upload_pipeline_runner(
     title: str | None,
     language: str | None = None,
     dispatcher: object | None = None,
+    usage_job_id: str | None = None,
+    reservation_id: str | None = None,
+    lane: str = "standard",
 ) -> None:
     """Run the full pipeline for an uploaded file in the background.
 
@@ -425,57 +491,71 @@ async def upload_pipeline_runner(
         output_dir=output_dir,
         title=title,
         language=language,
+        usage_job_id=usage_job_id,
+        reservation_id=reservation_id,
+        lane=lane,
     ):
         return
 
+    from chalybclip.jobs.usage import metered_run
+
     try:
-        # Phase 1 — finish ingest (move file + extract audio + persist
-        # stream.json). Idempotent on stream.json: if the operator
-        # somehow re-triggers this run, the second call returns the
-        # cached Stream without re-extracting.
-        stream = await ingest_uploaded(
+        async with metered_run(
+            db_path,
             tenant_id=tenant_id,
-            source_path=tmp_path,
-            output_dir=output_dir,
             stream_id=stream_id,
-            title=title,
-        )
-
-        # Phase 2 — promote the placeholder StreamRow we inserted in
-        # the endpoint to the real values (duration_s, title from
-        # ffprobe, etc.). The pipeline's StreamsRepo.upsert further
-        # along would also do this, but doing it here means the
-        # dashboard's progress page shows real metadata as soon as
-        # ingest finishes instead of waiting for transcribe to start.
-        db = Database(db_path)
-        await db.connect()
-        try:
-            with bound_tenant(tenant_id):
-                await StreamsRepo(db).upsert(stream_to_row(stream))
-                # upsert is INSERT OR IGNORE; backfill the real length onto
-                # a row a live webhook may have created with duration 0.
-                await StreamsRepo(db).set_duration(
-                    stream.id, float(getattr(stream, "duration_s", 0) or 0)
-                )
-        finally:
-            await db.close()
-
-        # Phase 3 — run the full pipeline. process_vod sees the
-        # cached stream.json and skips ingest_vod entirely (the
-        # upload:// pseudo-URL never has to hit yt-dlp). Registered as
-        # in-flight so the disk reclaimers never eat the source mid-run.
-        from chalybclip.jobs.active import pipeline_active
-
-        with pipeline_active(stream.id):
-            await process_vod(
+            job_id=usage_job_id,
+            reservation_id=reservation_id,
+            lane=lane,
+            stream_dir=output_dir / stream_id,
+        ):
+            # Phase 1 — finish ingest (move file + extract audio + persist
+            # stream.json). Idempotent on stream.json: if the operator
+            # somehow re-triggers this run, the second call returns the
+            # cached Stream without re-extracting.
+            stream = await ingest_uploaded(
                 tenant_id=tenant_id,
-                vod_url=stream.vod_url,
+                source_path=tmp_path,
                 output_dir=output_dir,
-                persona_id=persona_id,
-                stream_id=stream.id,
-                language=language,
-                db_path=db_path,
+                stream_id=stream_id,
+                title=title,
             )
+
+            # Phase 2 — promote the placeholder StreamRow we inserted in
+            # the endpoint to the real values (duration_s, title from
+            # ffprobe, etc.). The pipeline's StreamsRepo.upsert further
+            # along would also do this, but doing it here means the
+            # dashboard's progress page shows real metadata as soon as
+            # ingest finishes instead of waiting for transcribe to start.
+            db = Database(db_path)
+            await db.connect()
+            try:
+                with bound_tenant(tenant_id):
+                    await StreamsRepo(db).upsert(stream_to_row(stream))
+                    # upsert is INSERT OR IGNORE; backfill the real length onto
+                    # a row a live webhook may have created with duration 0.
+                    await StreamsRepo(db).set_duration(
+                        stream.id, float(getattr(stream, "duration_s", 0) or 0)
+                    )
+            finally:
+                await db.close()
+
+            # Phase 3 — run the full pipeline. process_vod sees the
+            # cached stream.json and skips ingest_vod entirely (the
+            # upload:// pseudo-URL never has to hit yt-dlp). Registered as
+            # in-flight so the disk reclaimers never eat the source mid-run.
+            from chalybclip.jobs.active import pipeline_active
+
+            with pipeline_active(stream.id):
+                await process_vod(
+                    tenant_id=tenant_id,
+                    vod_url=stream.vod_url,
+                    output_dir=output_dir,
+                    persona_id=persona_id,
+                    stream_id=stream.id,
+                    language=language,
+                    db_path=db_path,
+                )
     except Exception as e:
         try:
             await _emit_top_level_failure(
@@ -494,6 +574,7 @@ async def upload_pipeline_runner(
     # Token T2 — run succeeded; charge the base fee + refresh the balance.
     await _refresh_balance_after_run(
         db_path=db_path, tenant_id=tenant_id, stream_id=stream_id,
+        reservation_id=reservation_id,
     )
 
 
@@ -601,6 +682,9 @@ async def live_pipeline_runner(
     output_dir: "Path",
     title: str | None = None,
     language: str | None = None,
+    usage_job_id: str | None = None,
+    reservation_id: str | None = None,
+    lane: str = "standard",
 ) -> None:
     """Phase L.2 — run the full clip pipeline on a finished live recording.
 
@@ -619,6 +703,7 @@ async def live_pipeline_runner(
     from chalybclip.db import Database, StreamsRepo
     from chalybclip.db.adapters import stream_to_row
     from chalybclip.ingest import ingest_uploaded
+    from chalybclip.jobs.usage import metered_run, readmit_job
     from chalybclip.pipeline import process_vod
     from chalybclip.settings import get_settings
     from chalybclip.tenancy import bound_tenant
@@ -626,68 +711,83 @@ async def live_pipeline_runner(
     db_path = resolve_db_target(get_settings())
 
     try:
-        # 1. Acquire the recording locally — pull from R2 (Path B) or read
-        #    the shared volume (Path A), polling until it shows up.
-        work_dir = output_dir / stream_id / "_incoming"
-        source_file = await _acquire_live_recording(
-            stream_id=stream_id,
-            recording_path=recording_path,
-            work_dir=work_dir,
-        )
-        if source_file is None:
-            raise RuntimeError(
-                f"live recording for {stream_id} did not become available "
-                f"(R2 prefix live/{stream_id}/ or disk {recording_path}); "
-                "the upload may have failed or recordPath differs"
-            )
-
-        # 2. Ingest the recording like an upload (audio + duration +
-        #    stream.json + canonical layout). Idempotent on stream_id.
-        stream = await ingest_uploaded(
+        async with metered_run(
+            db_path,
             tenant_id=tenant_id,
-            source_path=source_file,
-            output_dir=output_dir,
             stream_id=stream_id,
-            title=title or f"Live {stream_id[:12]}",
-        )
-
-        # 3. Promote the StreamRow with the real duration/paths, but keep
-        #    it tagged as a live stream (platform + live:// url) so the
-        #    dashboard still groups it with live runs.
-        db = Database(db_path)
-        await db.connect()
-        try:
-            with bound_tenant(tenant_id):
-                row = stream_to_row(stream).model_copy(
-                    update={
-                        "platform": "live",
-                        "vod_url": f"live://rtmp/{stream_id}",
-                    }
-                )
-                await StreamsRepo(db).upsert(row)
-                # upsert is INSERT OR IGNORE; backfill the real length onto
-                # the live row the ChalyOBS webhook created with duration 0.
-                await StreamsRepo(db).set_duration(
-                    stream.id, float(getattr(stream, "duration_s", 0) or 0)
-                )
-        finally:
-            await db.close()
-
-        # 4. Run the pipeline on the cached stream.json (no re-ingest).
-        # Registered as in-flight so the disk reclaimers never eat the
-        # recording mid-run.
-        from chalybclip.jobs.active import pipeline_active
-
-        with pipeline_active(stream.id):
-            await process_vod(
-                tenant_id=tenant_id,
-                vod_url=stream.vod_url,
-                output_dir=output_dir,
-                persona_id=persona_id,
-                stream_id=stream.id,
-                language=language,
-                db_path=db_path,
+            job_id=usage_job_id,
+            reservation_id=reservation_id,
+            lane=lane,
+            stream_dir=output_dir / stream_id,
+        ):
+            # 1. Acquire the recording locally — pull from R2 (Path B) or read
+            #    the shared volume (Path A), polling until it shows up.
+            work_dir = output_dir / stream_id / "_incoming"
+            source_file = await _acquire_live_recording(
+                stream_id=stream_id,
+                recording_path=recording_path,
+                work_dir=work_dir,
             )
+            if source_file is None:
+                raise RuntimeError(
+                    f"live recording for {stream_id} did not become available "
+                    f"(R2 prefix live/{stream_id}/ or disk {recording_path}); "
+                    "the upload may have failed or recordPath differs"
+                )
+
+            # 2. Ingest the recording like an upload (audio + duration +
+            #    stream.json + canonical layout). Idempotent on stream_id.
+            stream = await ingest_uploaded(
+                tenant_id=tenant_id,
+                source_path=source_file,
+                output_dir=output_dir,
+                stream_id=stream_id,
+                title=title or f"Live {stream_id[:12]}",
+            )
+
+            # 3. Promote the StreamRow with the real duration/paths, but keep
+            #    it tagged as a live stream (platform + live:// url) so the
+            #    dashboard still groups it with live runs.
+            db = Database(db_path)
+            await db.connect()
+            try:
+                with bound_tenant(tenant_id):
+                    row = stream_to_row(stream).model_copy(
+                        update={
+                            "platform": "live",
+                            "vod_url": f"live://rtmp/{stream_id}",
+                        }
+                    )
+                    await StreamsRepo(db).upsert(row)
+                    # upsert is INSERT OR IGNORE; backfill the real length onto
+                    # the live row the ChalyOBS webhook created with duration 0.
+                    await StreamsRepo(db).set_duration(
+                        stream.id, float(getattr(stream, "duration_s", 0) or 0)
+                    )
+                # Re-admit with the probed length (the webhook's duration
+                # was the push window, not the recording).
+                await readmit_job(
+                    db, job_id=usage_job_id,
+                    source_minutes=float(getattr(stream, "duration_s", 0) or 0) / 60.0,
+                )
+            finally:
+                await db.close()
+
+            # 4. Run the pipeline on the cached stream.json (no re-ingest).
+            # Registered as in-flight so the disk reclaimers never eat the
+            # recording mid-run.
+            from chalybclip.jobs.active import pipeline_active
+
+            with pipeline_active(stream.id):
+                await process_vod(
+                    tenant_id=tenant_id,
+                    vod_url=stream.vod_url,
+                    output_dir=output_dir,
+                    persona_id=persona_id,
+                    stream_id=stream.id,
+                    language=language,
+                    db_path=db_path,
+                )
     except Exception as e:
         try:
             await _emit_top_level_failure(
@@ -724,6 +824,7 @@ async def live_pipeline_runner(
     # Token T2/T3 — run succeeded; charge the base fee + refresh balance.
     await _refresh_balance_after_run(
         db_path=db_path, tenant_id=tenant_id, stream_id=stream_id,
+        reservation_id=reservation_id,
     )
 
 
@@ -797,6 +898,32 @@ async def maybe_autoclip_after_live_end(
     if not await _streams_repo_try_claim_for_processing(db, stream_id=stream_id):
         return False
 
+    # Consumption contract: admit before pulling the recording. The push
+    # window is the best length we have until ingest probes the file (the
+    # runner re-admits then). The live runner isn't dispatcher-routed and
+    # its recording may sit on this box's disk, so a boost answer is
+    # downgraded to the standard lane (boost=false drops the fee).
+    from chalybclip.integrations.chalyb.admission import AdmissionRefused
+    from chalybclip.jobs.usage import admit_job, fail_stream_for_refusal, readmit_job
+
+    try:
+        admission = await admit_job(
+            db,
+            tenant_id=tenant_id,
+            stream_id=stream_id,
+            source_minutes=float(getattr(row, "duration_s", 0) or 0) / 60.0,
+        )
+        if admission.lane == "boost":
+            admission = await readmit_job(db, job_id=admission.job_id, boost=False) or admission
+    except AdmissionRefused as refusal:
+        from chalybclip.db.repos import _streams_repo_set_status
+
+        await fail_stream_for_refusal(
+            db, tenant_id=tenant_id, stream_id=stream_id, refusal=refusal
+        )
+        await _streams_repo_set_status(db, stream_id=stream_id, status="failed")
+        return False
+
     schedule(
         tenant_id=tenant_id,
         stream_id=stream_id,
@@ -805,6 +932,9 @@ async def maybe_autoclip_after_live_end(
         output_dir=Path(settings.default_output_dir),
         title=getattr(row, "title", None),
         language=None,
+        usage_job_id=admission.job_id,
+        reservation_id=admission.reservation_id,
+        lane="standard",
     )
     return True
 

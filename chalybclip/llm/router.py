@@ -20,6 +20,7 @@ import asyncio
 import datetime as _dt
 import functools
 import json
+import logging
 import os
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -30,6 +31,7 @@ from pydantic import BaseModel, ValidationError
 from chalybclip.errors import BudgetExceeded, LLMError
 
 from .config import LLMConfig, ProviderConfig, Quality
+from .prices import cost_micros
 from .provider import LLMProvider, MultimodalImage, ProviderResult, RetryableLLMError
 
 if TYPE_CHECKING:
@@ -37,6 +39,8 @@ if TYPE_CHECKING:
     from chalybclip.governance import BudgetGovernor
 
 T = TypeVar("T", bound=BaseModel)
+
+_router_log = logging.getLogger("chalybclip.llm.router")
 
 ProviderFactory = Callable[[str, ProviderConfig, str], LLMProvider | None]
 ProviderInvoker = Callable[[LLMProvider, str], Awaitable[ProviderResult]]
@@ -77,6 +81,8 @@ class CallLogRow(BaseModel):
     quality: Quality
     input_tokens: int = 0
     output_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
     cost_usd_micros: int = 0
     status: str = "ok"
     error: str | None = None
@@ -273,17 +279,24 @@ class LLMRouter:
             model = self._config.model_for(provider_name, effective_quality)
 
             try:
-                validated, attempts, result = await self._call_with_retries(
+                validated, attempts, spent = await self._call_with_retries(
                     schema=schema,
                     invoke=functools.partial(invoke_provider, provider, model),
                 )
             except (LLMError, ValidationError) as e:
+                # Failed attempts still consumed tokens (schema-invalid
+                # output, a response with no tool_use block) — bill them.
+                failed_usage = _sum_usage(getattr(e, "spent", None) or [])
                 await self._log(
                     tenant_id=tenant_id,
                     purpose=purpose,
                     provider=provider_name,
                     model=model,
                     quality=effective_quality,
+                    usage=failed_usage,
+                    cost_usd_micros=self._compute_cost_micros(
+                        provider=provider_name, model=model, usage=failed_usage,
+                    ),
                     status="error",
                     error=f"{type(e).__name__}: {e}",
                     attempts=getattr(e, "attempts", 1),
@@ -317,11 +330,11 @@ class LLMRouter:
                     )
                 continue
 
+            # Every attempt's tokens, not just the one that validated: a
+            # retry after a schema violation paid for both responses.
+            usage = _sum_usage(spent)
             cost = self._compute_cost_micros(
-                provider=provider_name,
-                model=model,
-                input_tokens=result.input_tokens,
-                output_tokens=result.output_tokens,
+                provider=provider_name, model=model, usage=usage,
             )
             await self._log(
                 tenant_id=tenant_id,
@@ -329,8 +342,7 @@ class LLMRouter:
                 provider=provider_name,
                 model=model,
                 quality=effective_quality,
-                input_tokens=result.input_tokens,
-                output_tokens=result.output_tokens,
+                usage=usage,
                 cost_usd_micros=cost,
                 attempts=attempts,
             )
@@ -357,16 +369,25 @@ class LLMRouter:
         *,
         schema: type[T],
         invoke: Callable[[], Awaitable[ProviderResult]],
-    ) -> tuple[T, int, ProviderResult]:
-        """Drive a single provider through `RetryConfig.max_attempts`."""
+    ) -> tuple[T, int, list[ProviderResult]]:
+        """Drive a single provider through `RetryConfig.max_attempts`.
+
+        Returns `(validated, attempts, spent)` where `spent` is the usage of
+        EVERY attempt that reached the provider — the billed ones that
+        failed validation included. On failure the same list rides on the
+        raised error as `.spent` so the error row is billed too."""
         retry = self._config.retry
         last_err: Exception | None = None
+        spent: list[ProviderResult] = []
         for attempt in range(1, retry.max_attempts + 1):
             try:
                 result = await invoke()
+                spent.append(result)
                 validated = schema.model_validate(result.output)
-                return validated, attempt, result
+                return validated, attempt, spent
             except RetryableLLMError as e:
+                if e.usage is not None:
+                    spent.append(e.usage)
                 last_err = e
                 if attempt < retry.max_attempts:
                     backoff = retry.initial_backoff_s * (retry.backoff_multiplier ** (attempt - 1))
@@ -380,10 +401,16 @@ class LLMRouter:
                     backoff = retry.initial_backoff_s * (retry.backoff_multiplier ** (attempt - 1))
                     await asyncio.sleep(backoff)
                 continue
+            except LLMError as e:
+                # Non-retryable: stop here, but keep what earlier attempts cost.
+                e.attempts = attempt  # type: ignore[attr-defined]
+                e.spent = spent  # type: ignore[attr-defined]
+                raise
 
         # Annotate so the caller can record attempts in the failure log row.
         if last_err is not None:
             last_err.attempts = retry.max_attempts  # type: ignore[attr-defined]
+            last_err.spent = spent  # type: ignore[attr-defined]
             raise last_err
         raise LLMError("retry loop exited without success or error")
 
@@ -400,14 +427,25 @@ class LLMRouter:
         return self._providers[name]
 
     def _compute_cost_micros(
-        self, *, provider: str, model: str, input_tokens: int, output_tokens: int
+        self, *, provider: str, model: str, usage: ProviderResult
     ) -> int:
-        """`cost_usd_micros = round(input * input_pmtok + output * output_pmtok)`."""
-        pricing = self._config.pricing_for(provider, model)
-        cost = (
-            input_tokens * pricing.input_per_mtok_usd + output_tokens * pricing.output_per_mtok_usd
+        """Real USD micros incl. prompt-cache reads/writes. An unpriced
+        model of a paid provider bills at the conservative (highest) rate
+        and logs an error — never silently 0."""
+        rates, known = self._config.rates_for(provider, model)
+        if not known and _usage_total(usage) > 0:
+            _router_log.error(
+                "llm.price_unknown provider=%s model=%s — billed at the "
+                "conservative rate; add it to chalybclip/llm/prices.py",
+                provider, model,
+            )
+        return cost_micros(
+            rates,
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+            cache_read_tokens=usage.cache_read_tokens,
+            cache_write_tokens=usage.cache_write_tokens,
         )
-        return round(cost)
 
     async def _log(
         self,
@@ -417,8 +455,7 @@ class LLMRouter:
         provider: str,
         model: str,
         quality: Quality,
-        input_tokens: int = 0,
-        output_tokens: int = 0,
+        usage: ProviderResult | None = None,
         cost_usd_micros: int = 0,
         status: str = "ok",
         error: str | None = None,
@@ -430,6 +467,9 @@ class LLMRouter:
         a write failure here must not propagate up. The JSONL is the
         Phase 0 carry-over; the DB row is the Phase 1 source of truth.
         """
+        usage = usage or ProviderResult(output={}, model=model)
+        input_tokens = usage.input_tokens
+        output_tokens = usage.output_tokens
         ts = self._clock().isoformat()
         row = CallLogRow(
             ts=ts,
@@ -440,6 +480,8 @@ class LLMRouter:
             quality=quality,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
+            cache_read_tokens=usage.cache_read_tokens,
+            cache_write_tokens=usage.cache_write_tokens,
             cost_usd_micros=cost_usd_micros,
             status=status,
             error=error,
@@ -492,33 +534,45 @@ class LLMRouter:
                 # has the row; a DB write failure must not propagate up.
                 pass
 
-            # Slice NX.3 — push usage back to Chalyb so the user's cross-
-            # engine token balance updates. Fire-and-forget so the LLM hot
-            # path doesn't wait for the outbound HTTP. Only reports SUCCESSFUL
-            # calls (status='ok'); error rows shouldn't count against quota.
+            # Slice NX.3 — usage back to Chalyb, via the durable outbox (the
+            # drain delivers it; a restart no longer drops it). EVERY call
+            # that consumed tokens is reported, failed/retried ones included
+            # — the provider billed us for them. `amount` is the total of
+            # all four token kinds; `metadata.tokens` carries the split.
             #
-            # Operation tag: pass the LLM purpose (variant_generation, hooks,
-            # etc.) so /app/usage on the Chalyb side can collapse all the
-            # calls inside one pipeline run into a single user-visible row
-            # ("Variantes para stream X · 5.2k tokens · 8 llamadas").
-            if status == "ok" and (input_tokens > 0 or output_tokens > 0):
-                from chalybclip.integrations.chalyb.reporter import schedule_report
+            # Operation tag: the LLM purpose, so /app/usage on the Chalyb
+            # side can collapse one pipeline run into a single row.
+            if _usage_total(usage) > 0 or cost_usd_micros > 0:
+                from chalybclip.integrations.chalyb.outbox import enqueue_usage
 
-                schedule_report(
-                    self._db,
-                    tenant_id=tenant_id,
-                    llm_call_id=llm_call_id,
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
-                    # Token T4 — send the real USD cost too, not just the
-                    # token count, so Chalyb prices off true spend.
-                    cost_usd_micros=cost_usd_micros,
-                    # Explicit provider name ("anthropic") for per-provider
-                    # cost rollups on the Chalyb side.
-                    provider=provider,
-                    occurred_at_iso=ts,
-                    operation=purpose,
-                )
+                try:
+                    await enqueue_usage(
+                        self._db,
+                        tenant_id=tenant_id,
+                        kind="llm.tokens",
+                        amount=_usage_total(usage),
+                        cost_usd_micros=cost_usd_micros,
+                        source_id=llm_call_id,
+                        occurred_at_iso=ts,
+                        provider=provider,
+                        operation=purpose,
+                        metadata={
+                            "model": model,
+                            "status": status,
+                            "attempts": attempts,
+                            "tokens": {
+                                "input": usage.input_tokens,
+                                "output": usage.output_tokens,
+                                "cache_read": usage.cache_read_tokens,
+                                "cache_write": usage.cache_write_tokens,
+                            },
+                        },
+                    )
+                except Exception:
+                    _router_log.exception(
+                        "llm usage enqueue failed · tenant=%s call=%s",
+                        tenant_id, llm_call_id,
+                    )
 
     async def _emit_event(
         self,
@@ -538,6 +592,28 @@ class LLMRouter:
                 await emit(self._db, type_, payload)
         except Exception:
             pass
+
+
+def _sum_usage(results: list[ProviderResult]) -> ProviderResult:
+    """Token totals across attempts (output payload dropped)."""
+    return ProviderResult(
+        output={},
+        input_tokens=sum(r.input_tokens for r in results),
+        output_tokens=sum(r.output_tokens for r in results),
+        cache_read_tokens=sum(r.cache_read_tokens for r in results),
+        cache_write_tokens=sum(r.cache_write_tokens for r in results),
+        model=results[-1].model if results else "",
+    )
+
+
+def _usage_total(usage: ProviderResult) -> int:
+    return max(
+        0,
+        usage.input_tokens
+        + usage.output_tokens
+        + usage.cache_read_tokens
+        + usage.cache_write_tokens,
+    )
 
 
 def _read_api_keys(config: LLMConfig) -> dict[str, str]:

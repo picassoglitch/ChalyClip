@@ -91,3 +91,22 @@ steps:
           --region=${_REGION} --project=${_PROJECT} \
           --no-cpu-throttling --quiet
     waitFor: [push]
+
+  # The boost lane's one-shot Cloud Run Job (hub Terraform creates it with a
+  # placeholder image and ignores image changes) runs the same image, so a
+  # deploy has to move it too or paid jobs run stale code. Skipped while the
+  # job doesn't exist yet.
+  - id: deploy-boost
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        if ! gcloud run jobs describe ${_SERVICE}-boost --region=${_REGION} --project=${_PROJECT} >/dev/null 2>&1; then
+          echo "no ${_SERVICE}-boost job; skipping"
+          exit 0
+        fi
+        gcloud run jobs update ${_SERVICE}-boost \
+          --image=${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_SERVICE}:${SHORT_SHA} \
+          --region=${_REGION} --project=${_PROJECT} --quiet
+    waitFor: [push]

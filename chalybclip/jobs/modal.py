@@ -152,6 +152,9 @@ class ModalJobDispatcher(JobDispatcher):
                 reason="a pipeline run for this stream is already queued or "
                        "running (locally or on the worker)",
             )
+            from .usage import settle_kickoff
+
+            await settle_kickoff(kickoff, "cancelled")
             return
         register(stream_id)
         task = asyncio.create_task(self._run_remote(kickoff))
@@ -183,6 +186,11 @@ class ModalJobDispatcher(JobDispatcher):
             if kickoff.source_object_key:
                 payload["source_object_key"] = kickoff.source_object_key
                 payload["title"] = kickoff.title
+            # The worker's runner meters + settles against this admission.
+            if kickoff.usage_job_id or kickoff.reservation_id:
+                payload["usage_job_id"] = kickoff.usage_job_id
+                payload["reservation_id"] = kickoff.reservation_id
+                payload["lane"] = kickoff.lane
             _log.info(
                 "jobs.modal.dispatch",
                 stream_id=stream_id,
@@ -265,7 +273,13 @@ class ModalJobDispatcher(JobDispatcher):
     ) -> None:
         """Best-effort `pipeline.failed` event so the dashboard's progress
         card explains the dead run instead of spinning. Mirrors the shape
-        `default_pipeline_runner` writes for in-process failures."""
+        `default_pipeline_runner` writes for in-process failures. Also
+        settles the run's reservation as failed: a worker that never started
+        the runner never will. (If it did start, its own settle got there
+        first and this one is a no-op.)"""
+        from .usage import settle_kickoff
+
+        await settle_kickoff(kickoff, "failed")
         try:
             from chalybclip.db import Database
             from chalybclip.events import emit

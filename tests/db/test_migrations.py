@@ -11,7 +11,7 @@ from chalybclip.db.migrations import MigrationError, _discover_migrations
 
 from .._db_backend import pg_enabled
 
-_CURRENT_HEAD = 58  # bumped each time we add a migration (058_rebrand_brand_kit_columns)
+_CURRENT_HEAD = 61  # bumped each time we add a migration (061_backfill_default_personas)
 
 # These assert SQLite implementation details (sqlite_master, PRAGMA). The
 # Postgres schema + FK enforcement are covered by test_pg_migration.py.
@@ -108,3 +108,17 @@ def test_discover_migrations_requires_contiguous_versions(tmp_path: Path) -> Non
 async def test_apply_migrations_missing_dir_raises(db: Database, tmp_path: Path) -> None:
     with pytest.raises(MigrationError, match="not found"):
         await apply_migrations(db, migrations_dir=tmp_path / "does_not_exist")
+
+
+def test_pg_twin_files_are_skipped_by_discovery(tmp_path: Path) -> None:
+    """`NNN_name.pg.sql` is the Postgres twin of `NNN_name.sql`, never a
+    migration of its own."""
+    from chalybclip.db.migrations import _discover_migrations, _pg_variant
+
+    (tmp_path / "001_a.sql").write_text("SELECT 1;")
+    (tmp_path / "002_b.sql").write_text("SELECT 1;")
+    (tmp_path / "002_b.pg.sql").write_text("SELECT 2;")
+    found = _discover_migrations(tmp_path)
+    assert [(v, n) for v, n, _ in found] == [(1, "a"), (2, "b")]
+    assert _pg_variant(tmp_path / "002_b.sql").name == "002_b.pg.sql"
+    assert _pg_variant(tmp_path / "001_a.sql").name == "001_a.sql"

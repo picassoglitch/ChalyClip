@@ -20,7 +20,7 @@ import datetime as _dt
 import json
 import re
 import time
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -354,6 +354,10 @@ class PipelineDeps:
     personas: dict[str, Persona] | None = None
     settings: Settings | None = None
     router_factory: Callable[[Path], LLMRouter] | None = None
+    # Called inside the ingest step once the real duration is known —
+    # the runner's post-probe re-admit (consumption contract). Raising
+    # (AdmissionRefused) fails the ingest step with the user's message.
+    on_ingested: Callable[[Stream], Awaitable[None]] | None = None
     clock: Callable[[], _dt.datetime] = field(
         default_factory=lambda: lambda: _dt.datetime.now(_dt.UTC)
     )
@@ -718,6 +722,8 @@ async def _run_pipeline(
                     "duration_s": stream.duration_s,
                 },
             )
+        if deps.on_ingested is not None:
+            await deps.on_ingested(stream)
 
     structlog.contextvars.bind_contextvars(stream_id=stream.id)
     stream_dir = output_dir / stream.id

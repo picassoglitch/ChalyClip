@@ -15,11 +15,11 @@ with a per-video label (A / B / C). Cross-video persistent identity is
 deferred (see TODO marker in chalybclip/diarize/__init__.py); for the v1
 migration we use AssemblyAI's per-video labels only.
 
-Cost model (cached for reference, NOT computed here — Task A1b wires
-this into the budget governor):
-    base transcription:  $0.15 / hr
+Cost model (AssemblyAI list prices, checked 2026-10-03):
+    Universal-3.x Pro:   $0.21 / hr   (first rung of the ladder)
+    Universal-2:         $0.15 / hr   (fallback rung)
     + speaker_labels:    $0.02 / hr
-    Total:              ~$0.17 / hr of audio
+    Total:              ~$0.23 / hr of audio on the Pro model
 On a typical 1-hour VOD that's $0.17 vs Modal's ~$0.40-0.60 GPU minute
 math, AND no GPU dependency to keep alive.
 
@@ -125,12 +125,10 @@ class AssemblyAIProvider:
         #          no prompt (max accuracy on a monolingual creator).
         self._language_mode = (language_mode or "auto").strip().lower()
         self._speaker_labels = speaker_labels
-        # Model ladder — U3-Pro first (best ES/EN + native code-
-        # switching), U2 second (99-language fallback). Operators
-        # can override via CHALYBCLIP_ASSEMBLYAI_SPEECH_MODELS.
-        self._speech_models = list(
-            speech_models or ["universal-3-pro", "universal-2"]
-        )
+        # Model ladder — Universal-2 by default (cheapest; it's only
+        # the transcript). Operators can put universal-3-pro first via
+        # CHALYBCLIP_ASSEMBLYAI_SPEECH_MODELS for native code-switching.
+        self._speech_models = list(speech_models or ["universal-2"])
         self._polling_interval_s = polling_interval_s
         self._timeout_s = request_timeout_s
 
@@ -153,7 +151,9 @@ class AssemblyAIProvider:
         method; the service's hasattr check falls through to a no-op.
         """
         return cost_micros_for(
-            duration_s=duration_s, speaker_labels=self._speaker_labels,
+            duration_s=duration_s,
+            speaker_labels=self._speaker_labels,
+            speech_model=self._speech_models[0] if self._speech_models else None,
         )
 
     # ---- public entry ----
@@ -308,8 +308,10 @@ class AssemblyAIProvider:
             # Code-switching prompt — instructs U3-Pro to preserve each
             # phrase in its original language. Without this AAI sometimes
             # "helpfully" translates English filler into Spanish (or
-            # vice versa) in mixed audio.
-            payload["prompt"] = _CODE_SWITCHING_PROMPT
+            # vice versa) in mixed audio. Prompting is a Universal Pro
+            # feature, so it's only sent when a Pro model is in the ladder.
+            if any(m.startswith("universal-3") for m in self._speech_models):
+                payload["prompt"] = _CODE_SWITCHING_PROMPT
         else:
             # Locked language. NEVER send language_detection alongside —
             # the API rejects the combo. Prompt is also dropped because
@@ -553,11 +555,14 @@ def _word_from_assemblyai(w: dict[str, Any]) -> Word:
 # operators can override via the per-tenant LLM cap (budget governor)
 # or by setting CHALYBCLIP_ASSEMBLYAI_SPEECH_MODEL=nano which is ~5×
 # cheaper on the base rate.
-_COST_BASE_USD_PER_SECOND = 0.15 / 3600.0
+_COST_PRO_USD_PER_SECOND = 0.21 / 3600.0
+_COST_U2_USD_PER_SECOND = 0.15 / 3600.0
 _COST_DIARIZATION_USD_PER_SECOND = 0.02 / 3600.0
 
 
-def cost_micros_for(*, duration_s: float, speaker_labels: bool) -> int:
+def cost_micros_for(
+    *, duration_s: float, speaker_labels: bool, speech_model: str | None = None,
+) -> int:
     """USD micros for a transcript of `duration_s` seconds, accounting
     for the +$0.02/hr diarization upcharge when speaker_labels is on.
 
@@ -565,7 +570,10 @@ def cost_micros_for(*, duration_s: float, speaker_labels: bool) -> int:
     pre-call estimator that wants to show the operator a quote before
     they spend credits.
     """
-    rate = _COST_BASE_USD_PER_SECOND
+    # Priced at the ladder's first rung: the cost is settled before we know
+    # whether AssemblyAI fell back to Universal-2, and over-billing that
+    # rare fallback by $0.06/hr beats under-billing every Pro transcript.
+    rate = _COST_U2_USD_PER_SECOND if speech_model == "universal-2" else _COST_PRO_USD_PER_SECOND
     if speaker_labels:
         rate += _COST_DIARIZATION_USD_PER_SECOND
     return int(round(max(0.0, duration_s) * rate * 1_000_000))
