@@ -657,7 +657,7 @@ class PersonasRepo:
             "INSERT INTO personas (id, tenant_id, name, primary_language, "
             "target_languages_json, voice_prompt, routing_tags_json, created_at) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
-            "ON CONFLICT(id) DO UPDATE SET "
+            "ON CONFLICT(tenant_id, id) DO UPDATE SET "
             "name = excluded.name, "
             "primary_language = excluded.primary_language, "
             "target_languages_json = excluded.target_languages_json, "
