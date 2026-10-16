@@ -296,7 +296,11 @@ async def test_settle_once_per_run(
     alice = tenants["alice"]["id"]
     await _stream(db, alice, tmp_path, sid="str_s1")
     url = "/api/hub/v1/streams/str_s1/settle"
+    [row] = (await client.get("/api/hub/v1/streams", headers=hdr(alice))).json()["streams"]
+    assert row["settled"] is False
     assert (await client.post(url, headers=hdr(alice))).json() == {"first": True}
+    [row] = (await client.get("/api/hub/v1/streams", headers=hdr(alice))).json()["streams"]
+    assert row["settled"] is True
     assert (await client.post(url, headers=hdr(alice))).json() == {"first": False}
     with bound_tenant(alice):
         await EventsRepo(db).emit(type="stream.rerun_requested", payload={"stream_id": "str_s1"})
@@ -582,3 +586,55 @@ async def test_calibration_and_admin_pages(
     )
     assert r.json() == {"price_es": "$99", "price_en": ""}
     assert (await client.get("/api/hub/v1/admin/site-settings", headers=hdr(alice))).json()["price_es"] == "$99"
+
+
+async def test_old_runs_are_never_announced(
+    client: httpx.AsyncClient, db: Database, tenants: dict[str, dict[str, str]], tmp_path: Path
+) -> None:
+    """History the hub finds after cutover counts as settled (no notice)."""
+    alice = tenants["alice"]["id"]
+    old = (_dt.datetime.now(_dt.UTC) - _dt.timedelta(days=3)).isoformat()
+    with bound_tenant(alice):
+        await StreamsRepo(db).upsert(
+            StreamRow(
+                id="str_old", tenant_id=alice, vod_url="https://kick.com/x", platform="kick",
+                duration_s=1.0, source_video_path="/x.mp4", source_audio_path="/x.wav",
+                status="done", created_at=old,
+            )
+        )
+    [row] = (await client.get("/api/hub/v1/streams", headers=hdr(alice))).json()["streams"]
+    assert row["settled"] is True
+    r = await client.post("/api/hub/v1/streams/str_old/settle", headers=hdr(alice))
+    assert r.json() == {"first": False}
+
+
+async def test_persona_id_taken_by_another_account_is_409(
+    client: httpx.AsyncClient, tenants: dict[str, dict[str, str]]
+) -> None:
+    """personas.id is a global primary key: an id another tenant already
+    uses must answer 409, not 500."""
+    alice, bob = tenants["alice"]["id"], tenants["bob"]["id"]
+    p = {"id": "shared", "name": "X", "primary_language": "es", "voice_prompt": "v"}
+    assert (await client.post("/api/hub/v1/personas", json=p, headers=hdr(alice))).status_code == 200
+    r = await client.post("/api/hub/v1/personas", json=p, headers=hdr(bob))
+    _err(r, 409, "conflict", "exists")
+
+
+async def test_progress_marks_one_failed_step(
+    client: httpx.AsyncClient, db: Database, tenants: dict[str, dict[str, str]], tmp_path: Path
+) -> None:
+    alice = tenants["alice"]["id"]
+    await _stream(db, alice, tmp_path, sid="str_f2", status="failed")
+    with bound_tenant(alice):
+        await EventsRepo(db).emit(type="pipeline.step.start", payload={"stream_id": "str_f2", "step": "ingest"})
+        await EventsRepo(db).emit(
+            type="pipeline.step.failed",
+            payload={"stream_id": "str_f2", "step": "ingest", "error": "yt-dlp: 404"},
+        )
+        await EventsRepo(db).emit(
+            type="pipeline.failed", payload={"stream_id": "str_f2", "error": "IngestError: yt-dlp"}
+        )
+    p = (await client.get("/api/hub/v1/streams/str_f2/progress", headers=hdr(alice))).json()
+    assert [s["status"] for s in p["steps"]][:2] == ["failed", "pending"]
+    assert p["steps"][0]["error_kind"] == "source"
+    assert "error" not in p["steps"][0]

@@ -67,7 +67,7 @@ def _refused(e: AdmissionRefused) -> HubError:
 
 
 def _clip_json(tenant_id: str, clip: Any, candidate: Any | None = None) -> dict[str, Any]:
-    from chalybclip.api.routers.dashboard import _humanize_candidate, _viral_score
+    from chalybclip.api.routers.dashboard import _viral_score
 
     return {
         "id": clip.id,
@@ -78,7 +78,7 @@ def _clip_json(tenant_id: str, clip: Any, candidate: Any | None = None) -> dict[
         "duration_s": clip.duration_s,
         "created_at": clip.created_at,
         "viral_score": _viral_score(clip, candidate),
-        "signals": _humanize_candidate(candidate),
+        "why": _why(candidate),
         "publishability_status": clip.publishability_status,
         "title": _clip_title(clip),
         "media_url": media_path("clip", clip.id, tenant_id=tenant_id),
@@ -88,6 +88,25 @@ def _clip_json(tenant_id: str, clip: Any, candidate: Any | None = None) -> dict[
             if clip.thumbnail_frame_path
             else None
         ),
+    }
+
+
+def _why(candidate: Any | None) -> dict[str, Any] | None:
+    """Why the AI picked the moment, as data (the hub words it): the
+    detector reason, the phrase it heard, the speaker, and whether a second
+    AI pass confirmed it — the same facts dashboard._humanize_candidate
+    turns into English bullets."""
+    if candidate is None:
+        return None
+    ev = getattr(candidate, "evidence", None) or {}
+    phrase = ev.get("phrase") or ev.get("transcript_snippet") if isinstance(ev, dict) else None
+    speaker = ev.get("speaker_label") if isinstance(ev, dict) else None
+    reason = (getattr(candidate, "reason", "") or "").lower()
+    return {
+        "reason": reason if reason in ("voice", "audio", "chat", "visual", "viral") else "other",
+        "phrase": phrase.strip()[:120] if isinstance(phrase, str) and phrase.strip() else None,
+        "speaker": speaker.strip()[:60] if isinstance(speaker, str) and speaker.strip() else None,
+        "confirmed": bool(isinstance(ev, dict) and ev.get("rescore")),
     }
 
 
@@ -239,7 +258,11 @@ async def stream_progress_view(
         if is_admin:
             failure["error"] = err[:500]
             failure["error_type"] = str(latest.payload.get("error_type") or "Exception")
-        for s in steps:
+        # Point at the first step that never ran — unless a step already
+        # reports its own failure (the dashboard marks both; one red row
+        # reads clearer).
+        already = any(s["status"] == "failed" for s in steps)
+        for s in [] if already else steps:
             if s["status"] == "pending":
                 s["status"] = "failed"
                 s["error_kind"] = failure["kind"]
@@ -324,6 +347,35 @@ async def _run_cost_view(
     }
     if getattr(request.state, "is_admin", False) and actual is not None:
         out["usd_micros"] = int(actual.total_cost_usd_micros)
+    return out
+
+
+# ── hub "settled" bookkeeping ────────────────────────────────────────────
+
+# A finished run older than this is never announced by the hub (no "your
+# clips are ready" notice for history it finds on first visit after cutover).
+_SETTLE_WINDOW_S = 24 * 3600
+
+
+def _settled_map(events: list[Any], streams: list[Any]) -> dict[str, bool]:
+    """stream_id → whether the hub already handled its latest run: a
+    `hub.settled` after the last Córrelo/recovery, or a latest run that
+    started more than _SETTLE_WINDOW_S ago."""
+    last_settle: dict[str, str] = {}
+    last_start: dict[str, str] = {}
+    for e in events:
+        sid = e.payload.get("stream_id")
+        if not isinstance(sid, str):
+            continue
+        if e.type == "hub.settled":
+            last_settle[sid] = max(last_settle.get(sid, ""), e.ts)
+        elif e.type in ("stream.rerun_requested", "stream.recovery_dispatched"):
+            last_start[sid] = max(last_start.get(sid, ""), e.ts)
+    cutoff = (_dt.datetime.now(_dt.UTC) - _dt.timedelta(seconds=_SETTLE_WINDOW_S)).isoformat()
+    out: dict[str, bool] = {}
+    for s in streams:
+        started = max(last_start.get(s.id, ""), s.created_at or "")
+        out[s.id] = last_settle.get(s.id, "") >= started or started < cutoff
     return out
 
 
@@ -834,6 +886,7 @@ async def hub_streams(
     limit = max(1, min(int(limit), 200))
     streams = (await StreamsRepo(db).list_for_tenant())[:limit]
     active = active_stream_ids()
+    settled = _settled_map(await EventsRepo(db).list_for_tenant(limit=5000), streams)
     clips = await ClipsRepo(db).list_for_tenant_with_status(ALL_CLIP_STATUSES, limit=5000)
     by_stream: dict[str, list[Any]] = {}
     for c in clips:
@@ -851,6 +904,7 @@ async def hub_streams(
         if kind in ("pending", "failed") and s.id in active:
             kind = "running"
         item["status_kind"] = kind
+        item["settled"] = settled.get(s.id, False)
         first_thumb = next((c for c in sc if c.thumbnail_frame_path), None)
         item["thumb_url"] = (
             media_path("thumb", first_thumb.id, tenant_id=tenant_id) if first_thumb else None
@@ -1191,15 +1245,9 @@ async def hub_stream_settle(
     """The hub's once-per-run "your clips are ready" bookkeeping (its job
     policy notifies exactly once). `first` is True only for the call that
     recorded it for the stream's latest run."""
-    await _get_stream(db, stream_id)
-    events = [
-        e
-        for e in await EventsRepo(db).list_for_tenant(limit=2000)
-        if e.payload.get("stream_id") == stream_id
-        and e.type in ("hub.settled", "stream.rerun_requested")
-    ]
-    latest = max(events, key=lambda e: e.ts) if events else None
-    if latest is not None and latest.type == "hub.settled":
+    stream = await _get_stream(db, stream_id)
+    events = await EventsRepo(db).list_for_tenant(limit=5000)
+    if _settled_map(events, [stream]).get(stream_id):
         return {"first": False}
     await EventsRepo(db).emit(type="hub.settled", payload={"stream_id": stream_id})
     return {"first": True}

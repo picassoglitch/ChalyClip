@@ -316,14 +316,21 @@ async def hub_personas_create(
     repo = PersonasRepo(db)
     if await repo.get(body.id) is not None:
         raise HubError("conflict", "Ya existe una persona con ese id.", reason="exists")
-    await repo.create(
-        persona_id=body.id,
-        name=body.name,
-        primary_language=body.primary_language,
-        voice_prompt=body.voice_prompt,
-        target_languages=_clean_list(body.target_languages),
-        routing_tags=_clean_list(body.routing_tags),
-    )
+    from chalybclip.db import IntegrityViolation
+
+    try:
+        await repo.create(
+            persona_id=body.id,
+            name=body.name,
+            primary_language=body.primary_language,
+            voice_prompt=body.voice_prompt,
+            target_languages=_clean_list(body.target_languages),
+            routing_tags=_clean_list(body.routing_tags),
+        )
+    except IntegrityViolation:
+        # Persona ids are unique across the whole engine (personas.id is the
+        # primary key), so another account may already use this one.
+        raise HubError("conflict", "Ese identificador ya está en uso.", reason="exists") from None
     return {"persona": _persona_json(await repo.get(body.id))}
 
 
