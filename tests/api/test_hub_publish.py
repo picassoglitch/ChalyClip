@@ -776,3 +776,94 @@ async def test_compose_other_tenants_clip_is_refused(
     clip_id = await _approved_clip(db, alice)
     r = await client.post(f"/api/hub/v1/publish/compose/{clip_id}", headers=_hub(bob))
     _err(r, 404, "not_found")
+
+
+# ---- autopilot is VIP-only (owner decision 2026-10-15) ----
+
+
+@pytest.mark.parametrize(
+    ("tier", "ok"),
+    [("vip", True), ("all_access", True), ("partner", False), ("pro", False), ("free", False)],
+)
+async def test_autopilot_on_is_vip_only_from_the_hub(
+    client: httpx.AsyncClient, env: None, alice: str, tier: str, ok: bool
+) -> None:
+    r = await client.post(
+        "/api/hub/v1/publish/autopublish/save",
+        headers=_hub(alice, tier=tier),
+        json={"enabled": True},
+    )
+    if ok:
+        assert r.status_code == 200, r.text
+    else:
+        err = _err(r, 402, "needs_plan")
+        assert err["reason"] == "paywall_autopilot"
+    # Turning it off / saving other knobs is never blocked.
+    r = await client.post(
+        "/api/hub/v1/publish/autopublish/save",
+        headers=_hub(alice, tier=tier),
+        json={"enabled": False, "daily_cap": 3},
+    )
+    assert r.status_code == 200, r.text
+
+
+async def test_autopilot_on_is_top_tier_only_on_the_dashboard_too(
+    client: httpx.AsyncClient, db: Database, env: None, tenants: dict[str, dict[str, str]]
+) -> None:
+    from chalybclip.integrations.chalyb.service import sync_tenant_tier
+
+    tid = tenants["bob"]["id"]
+    await sync_tenant_tier(db, tenant_id=tid, tier="pro")
+    r = await client.post(
+        "/dashboard/publish/zernio/autopublish/save",
+        headers=auth(tenants["bob"]["token"]),
+        json={"enabled": True},
+    )
+    assert r.status_code == 402, r.text
+    assert r.json()["detail"]["reason"] == "paywall_autopilot"
+    await sync_tenant_tier(db, tenant_id=tid, tier="all_access")
+    r = await client.post(
+        "/dashboard/publish/zernio/autopublish/save",
+        headers=auth(tenants["bob"]["token"]),
+        json={"enabled": True},
+    )
+    assert r.status_code == 200, r.text
+
+
+async def test_autopilot_does_not_fire_below_top_tier(db: Database, env: None, alice: str) -> None:
+    """A tenant who enabled it earlier (or downgraded) gets nothing posted."""
+    from chalybclip.api.routers.zernio import (
+        autopublish_hands_free_sweep,
+        maybe_autopublish_on_approve,
+    )
+    from chalybclip.db import AutopublishSettingsRepo
+    from chalybclip.integrations.chalyb.service import sync_tenant_tier
+
+    await sync_tenant_tier(db, tenant_id=alice, tier="pro")
+    clip_id = await _approved_clip(db, alice)
+    for mode in ("on_approve", "hands_free"):
+        await AutopublishSettingsRepo(db).upsert(
+            alice,
+            enabled=True,
+            mode=mode,
+            targets=None,
+            post_mode="now",
+            daily_cap=0,
+            score_threshold=0.0,
+            tag_suffix="",
+            growth_min_score=0,
+            daily_clip_budget=None,
+        )
+        with respx.mock(assert_all_called=False) as mock:
+            anything = mock.route().mock(return_value=httpx.Response(500))
+            fired = await maybe_autopublish_on_approve(
+                request=None,  # type: ignore[arg-type]
+                db=db,
+                tenant_id=alice,
+                clip_id=clip_id,
+            )
+            swept = await autopublish_hands_free_sweep(
+                db=db, tenant_id=alice, base_url="http://x", clip_scores=[(clip_id, 1.0)]
+            )
+        assert fired is None and swept == 0
+        assert not anything.called

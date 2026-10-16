@@ -1688,6 +1688,30 @@ async def zernio_community_save_settings(
 # `_publish_clip` (renders first) — the legacy publish_jobs worker is gone.
 
 _AUTOPUBLISH_MODES = ("on_approve", "hands_free")
+
+
+def autopilot_allowed_tier(tier: str | None) -> bool:
+    """Auto-publish ("Piloto automático") is a top-tier perk (Chalyb VIP —
+    owner decision 2026-10-15): saving it ON is refused below, and the
+    on-approve / hands-free firing paths skip tenants below the top tier
+    (covers a tenant who enabled it on a lower plan or downgraded)."""
+    from chalybclip.tiers import TOP_TIERS, normalize_tier
+
+    return normalize_tier(tier) in TOP_TIERS
+
+
+def _autopilot_paywall() -> HTTPException:
+    return HTTPException(
+        status_code=402,
+        detail={
+            "reason": "paywall_autopilot",
+            "message": (
+                "El piloto automático es parte del plan VIP. Puedes publicar "
+                "y programar tus clips a mano, o subir tu plan."
+            ),
+            "upgrade_url": "https://chalyb.com/app/planes",
+        },
+    )
 _AUTOPUBLISH_POST_MODES = ("queue", "now")
 
 
@@ -1739,6 +1763,10 @@ async def zernio_autopublish_save(
     data = await _read_json(request)
     if not isinstance(data, dict):
         return JSONResponse({"ok": False, "error": "Body must be JSON"}, status_code=400)
+    if bool(data.get("enabled")) and not autopilot_allowed_tier(
+        getattr(request.state, "tenant_tier", None)
+    ):
+        raise _autopilot_paywall()
     mode = str(data.get("mode") or "on_approve")
     if mode not in _AUTOPUBLISH_MODES:
         mode = "on_approve"
@@ -1957,6 +1985,9 @@ async def maybe_autopublish_on_approve(
         if not get_settings().zernio_api_key:
             return None
         tenant = await TenantsRepo(db).get(tenant_id)
+        if not autopilot_allowed_tier(tenant.tier if tenant else None):
+            log.info("autopublish.tier_not_allowed", tenant_id=tenant_id)
+            return None
         profile_id = tenant.zernio_profile_id if tenant else None
         if not profile_id:
             return None
@@ -2044,6 +2075,9 @@ async def autopublish_hands_free_sweep(
         if not settings.zernio_api_key or not base_url:
             return 0
         tenant = await TenantsRepo(db).get(tenant_id)
+        if not autopilot_allowed_tier(tenant.tier if tenant else None):
+            log.info("autopublish.handsfree.tier_not_allowed", tenant_id=tenant_id)
+            return 0
         profile_id = tenant.zernio_profile_id if tenant else None
         if not profile_id:
             return 0

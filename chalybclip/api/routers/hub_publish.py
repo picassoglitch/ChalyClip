@@ -317,6 +317,37 @@ async def _gate_clip(kw: dict[str, Any]) -> None:
         raise _not_found()
 
 
+# Hub tiers that may run auto-publish. Chalyb's `partner` normalizes to the
+# engine's top tier too, but the hub's plan table (TIER_CAPS.clipAutoPublish)
+# gives it to VIP only — so the hub path checks the token's own label.
+_AUTOPILOT_HUB_TIERS = frozenset({"vip", "all_access"})
+
+
+async def _gate_autopilot(kw: dict[str, Any]) -> None:
+    """autopublish/save ON: VIP only (owner decision 2026-10-15)."""
+    from chalybclip.integrations.chalyb import verify_sso_token
+
+    request: Request = kw["request"]
+    data = await zn._read_json(request)
+    if not (isinstance(data, dict) and data.get("enabled")):
+        return
+    header = request.headers.get("authorization", "")
+    token = header[7:].strip() if header.lower().startswith("bearer ") else ""
+    raw = ""
+    try:
+        payload = verify_sso_token(token, secret=get_settings().chalyb_sso_secret or "")
+        raw = str(getattr(payload, "tier", "") or "").strip().lower()
+    except Exception:
+        raw = ""
+    if raw not in _AUTOPILOT_HUB_TIERS:
+        raise HubError(
+            "needs_plan",
+            "El piloto automático es parte del plan VIP.",
+            status_code=402,
+            reason="paywall_autopilot",
+        )
+
+
 def _gate_listed(id_param: str, lister: str) -> Gate:
     async def gate(kw: dict[str, Any]) -> None:
         profile_id = await _profile_id(kw["db"], kw["tenant_id"])
@@ -377,7 +408,7 @@ _REUSED: list[tuple[str, str, Callable[..., Awaitable[Any]], Gate | None]] = [
     ("GET", "/rendimiento.json", zn.zernio_performance_json, None),
     # autopilot
     ("GET", "/autopublish.json", zn.zernio_autopublish_json, None),
-    ("POST", "/autopublish/save", zn.zernio_autopublish_save, None),
+    ("POST", "/autopublish/save", zn.zernio_autopublish_save, _gate_autopilot),
     ("GET", "/autopublish/rules.json", zn.zernio_pacing_rules_json, None),
     ("POST", "/autopublish/rules/save", zn.zernio_pacing_rules_save, None),
     # community
