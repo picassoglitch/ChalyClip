@@ -7,8 +7,11 @@ Pins:
     chain (clip overlay → newest edited sibling → brand-kit prefs);
   * save / finalize / reject / revert-trim drive the SAME handlers as the
     dashboard (status walk, next clip, cache invalidation, brand-kit mirror);
-  * render / render-status / render-retry / download never leak a
-    /dashboard URL and gate the download on a servable render;
+  * render / render-status / render-retry never leak a /dashboard URL; a
+    ready render hands out a signed `render` media link (hub_media) that
+    serves only a servable file, for that tenant, as an attachment;
+  * the editor payload's media links play the clip (Range) and are bound
+    to the tenant that signed them;
   * a hub-initiated render (no operator cookie) signs the /render page.
 """
 
@@ -168,9 +171,6 @@ _ROUTES: list[tuple[str, str, dict[str, Any] | None]] = [
     ("POST", "/api/hub/v1/clips/clp_h1/render", None),
     ("GET", "/api/hub/v1/clips/clp_h1/render-status", None),
     ("POST", "/api/hub/v1/clips/clp_h1/render-retry", None),
-    ("GET", "/api/hub/v1/clips/clp_h1/download", None),
-    ("GET", "/api/hub/v1/clips/clp_h1/media", None),
-    ("GET", "/api/hub/v1/clips/clp_h1/thumbnail", None),
 ]
 
 
@@ -523,22 +523,28 @@ async def test_read_only_feeds(
     assert r.json() == {"scored": False}
 
 
-async def test_media_supports_range(
+async def test_media_links_play_and_stay_in_their_tenant(
     client: httpx.AsyncClient,
     db: Database,
     tenants: dict[str, dict[str, str]],
     hub_env: str,
     tmp_path: Path,
 ) -> None:
-    alice = tenants["alice"]["id"]
+    alice, bob = tenants["alice"]["id"], tenants["bob"]["id"]
     await _seed(db, alice, tmp_path)
-    r = await client.get(
-        "/api/hub/v1/clips/clp_h1/media", headers={**_hub(alice), "Range": "bytes=0-15"}
-    )
+    body = (await client.get("/api/hub/v1/clips/clp_h1/editor", headers=_hub(alice))).json()
+    link = body["media"]["preview"]
+    assert link.startswith("/api/hub/media/clip/clp_h1?")
+    assert body["media"]["thumbnail"] is None  # no thumbnail on this clip
+    # No credential needed: the link is the credential (a <video src>).
+    r = await client.get(link, headers={"Range": "bytes=0-15"})
     assert r.status_code == 206, r.text
     assert r.content == _MP4_HEADER[:16]
-    r = await client.get("/api/hub/v1/clips/clp_h1/thumbnail", headers=_hub(alice))
-    _err(r, 404, "not_found")
+    # Re-pointing the link at another tenant breaks the signature.
+    r = await client.get(link.replace(f"t={alice}", f"t={bob}"))
+    assert r.status_code == 403
+    r = await client.get(link.replace("clp_h1", "clp_other"))
+    assert r.status_code == 403
 
 
 # ── render / download ─────────────────────────────────────────────────────
@@ -563,9 +569,13 @@ async def test_render_flow_without_dashboard_urls(
     h = _hub(alice)
 
     r = await client.get("/api/hub/v1/clips/clp_h1/render-status", headers=h)
-    assert r.json() == {"state": "idle", "progress_pct": 0, "error": None, "quality": "1080"}
-    r = await client.get("/api/hub/v1/clips/clp_h1/download", headers=h)
-    _err(r, 409, "conflict")
+    assert r.json() == {
+        "state": "idle",
+        "progress_pct": 0,
+        "error": None,
+        "quality": "1080",
+        "download": None,
+    }
 
     r = await client.post("/api/hub/v1/clips/clp_h1/render?quality=4k", headers=h)
     assert r.status_code == 200, r.text
@@ -579,17 +589,30 @@ async def test_render_flow_without_dashboard_urls(
     r = await client.post("/api/hub/v1/clips/clp_h1/render?quality=8k", headers=h)
     _err(r, 400, "bad_request")
 
-    # Render lands on disk → ready → download streams the MP4.
+    # A signed render link for a render that isn't there yet is a 404,
+    # never the unedited source.
+    from chalybclip.api.hub_media import media_path
+
+    early = media_path("render", "clp_h1", tenant_id=alice, params={"q": "1080"})
+    assert (await client.get(early)).status_code == 404
+
+    # Render lands on disk → ready → a signed download link (asked 4k on a
+    # free plan → the 1080 file, like the dashboard).
     (clip_path.parent / "clip_render_1080.mp4").write_bytes(
         _MP4_HEADER + b"\x00" * (1024 * 1024 + 16)
     )
-    r = await client.get("/api/hub/v1/clips/clp_h1/render-status", headers=h)
-    assert r.json()["state"] == "ready"
+    r = await client.get("/api/hub/v1/clips/clp_h1/render-status?quality=4k", headers=h)
+    st = r.json()
+    assert st["state"] == "ready"
     assert "/dashboard" not in r.text
-    r = await client.get("/api/hub/v1/clips/clp_h1/download", headers=h)
+    assert st["download"].startswith("/api/hub/media/render/clp_h1?")
+    assert "q=1080" in st["download"]
+    r = await client.get(st["download"])
     assert r.status_code == 200
     assert r.headers["content-disposition"].startswith("attachment")
     assert r.content[: len(_MP4_HEADER)] == _MP4_HEADER
+    # The signed resolution can't be swapped for another one.
+    assert (await client.get(st["download"].replace("q=1080", "q=4k"))).status_code == 403
 
     r = await client.post("/api/hub/v1/clips/clp_h1/render-retry", headers=h)
     assert r.json()["state"] == "idle"

@@ -15,9 +15,11 @@ dashboard uses — no business rule is forked:
   * POST prefs             → `dashboard.me_brand_kit_prefs`
   * GET  captions/waveform/intelligence → the dashboard JSON feeds
   * GET  growth            → `zernio.zernio_clip_growth_json`
-  * POST render / GET render-status / POST render-retry / GET download
+  * POST render / GET render-status / POST render-retry
                             → the dashboard's background-render flow
-  * GET  media / thumbnail → the dashboard media endpoints (Range-aware)
+  * media: the editor payload and a ready render carry short-lived signed
+    links (api/hub_media.py; this module registers the `render` kind) that
+    the browser loads directly — bytes never go through the hub
 
 Auth: `hub_router()` binds the tenant from the hub's Bearer launch token
 (see hub_api). Every repo read is tenant-filtered, so another tenant's clip
@@ -33,12 +35,13 @@ import json
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
-from fastapi import BackgroundTasks, Depends, Request
+from fastapi import BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from chalybclip.api.deps import get_db
 from chalybclip.api.hub_api import HubError, hub_router, hub_tenant
+from chalybclip.api.hub_media import media_kind, media_path
 from chalybclip.api.routers import dashboard as dash
 from chalybclip.db import ClipsRepo, Database, StreamsRepo
 
@@ -326,6 +329,15 @@ async def hub_clip_editor(
             "render_state": clip.render_state,
             "created_at": clip.created_at,
         },
+        # Short-lived signed links the browser loads directly (hub_media).
+        "media": {
+            "preview": media_path("clip", clip.id, tenant_id=tenant_id),
+            "thumbnail": (
+                media_path("thumb", clip.id, tenant_id=tenant_id)
+                if clip.thumbnail_frame_path
+                else None
+            ),
+        },
         "can_finalize": clip.status in ("cut", "ready_for_review", "approved"),
         "can_reject": clip.status != "rejected",
         "next_clip_id": await _next_clip_id(db, clip),
@@ -571,18 +583,46 @@ async def hub_clip_growth(
 # ---- render / download ---------------------------------------------------
 
 
-def _render_state(resp: Response) -> dict[str, Any]:
+def _resolved_quality(request: Request, quality: str) -> str:
+    """The resolution the engine really renders for this plan (free/pro →
+    1080 whatever was asked), so the signed link points at that file."""
+    tier = getattr(request.state, "tenant_tier", "free") or "free"
+    return dash._resolve_export_resolution(tier, quality)[0]
+
+
+def _render_state(
+    resp: Response, *, request: Request, clip_id: str, tenant_id: str, quality: str
+) -> dict[str, Any]:
     """Normalize the dashboard's download/render-status answers to
-    `{state, progress_pct, error}` (no dashboard URLs)."""
+    `{state, progress_pct, error, quality, download}`. No dashboard URLs;
+    when ready, `download` is a short-lived signed media path the browser
+    loads directly (hub_media), never through the hub."""
     if not isinstance(resp, JSONResponse):
         # A file response = the cached MP4 is ready.
-        return {"state": "ready", "progress_pct": 100, "error": None}
-    data = _strip_urls(_json_body(resp))
-    return {
-        "state": data.get("state") or "idle",
+        data: dict[str, Any] = {"state": "ready", "progress_pct": 100, "error": None}
+    else:
+        data = _strip_urls(_json_body(resp))
+    state = data.get("state") or "idle"
+    out: dict[str, Any] = {
+        "state": state,
         "progress_pct": int(data.get("progress_pct") or 0),
         "error": data.get("error"),
+        "quality": quality,
+        "download": None,
     }
+    if state == "ready":
+        out["download"] = media_path(
+            "render",
+            clip_id,
+            tenant_id=tenant_id,
+            ttl_s=_DOWNLOAD_TTL_S,
+            params={"q": _resolved_quality(request, quality)},
+        )
+    return out
+
+
+# The link is used right away (same-tab download); short on purpose.
+_DOWNLOAD_TTL_S = 600
 
 
 @router.post("/clips/{clip_id}/render")
@@ -602,10 +642,8 @@ async def hub_clip_render(
     resp = await dash.clip_download(
         request, background_tasks, clip_id, quality=q, tenant_id=tenant_id, db=db
     )
-    if not isinstance(resp, JSONResponse):
-        # Don't stream the file on a POST — the hub fetches GET download.
-        return {"state": "ready", "progress_pct": 100, "error": None, "quality": q}
-    return {**_render_state(resp), "quality": q}
+    # A cache hit returns the file response; the hub gets a signed link.
+    return _render_state(resp, request=request, clip_id=clip_id, tenant_id=tenant_id, quality=q)
 
 
 @router.get("/clips/{clip_id}/render-status")
@@ -619,7 +657,7 @@ async def hub_clip_render_status(
     q = _quality(quality)
     await _require_clip(db, clip_id)
     resp = await dash.clip_render_status(request, clip_id, quality=q, tenant_id=tenant_id, db=db)
-    return {**_render_state(resp), "quality": q}
+    return _render_state(resp, request=request, clip_id=clip_id, tenant_id=tenant_id, quality=q)
 
 
 @router.post("/clips/{clip_id}/render-retry")
@@ -633,56 +671,37 @@ async def hub_clip_render_retry(
     q = _quality(quality)
     await _require_clip(db, clip_id)
     await dash.clip_render_retry(request, clip_id, quality=q, tenant_id=tenant_id, db=db)
-    return {"state": "idle", "progress_pct": 0, "error": None, "quality": q}
+    return {"state": "idle", "progress_pct": 0, "error": None, "quality": q, "download": None}
 
 
-@router.get("/clips/{clip_id}/download")
-async def hub_clip_download(
-    request: Request,
-    background_tasks: BackgroundTasks,
-    clip_id: str,
-    quality: str = "1080",
-    tenant_id: str = hub_tenant(),
-    db: Database = Depends(get_db),
+@media_kind("render")
+async def _render_media(
+    request: Request, db: Database, tenant_id: str, clip_id: str, params: dict[str, str]
 ) -> Response:
-    """The rendered MP4 as an attachment once it's ready; 409 otherwise
-    (the hub starts renders with POST render and polls render-status)."""
-    q = _quality(quality)
-    await _require_clip(db, clip_id)
-    status = await dash.clip_render_status(request, clip_id, quality=q, tenant_id=tenant_id, db=db)
-    if _render_state(status)["state"] != "ready":
-        raise HubError(
-            "conflict", "El video todavía se está preparando.", reason="render_not_ready"
-        )
-    resp = await dash.clip_download(
-        request, background_tasks, clip_id, quality=q, tenant_id=tenant_id, db=db
+    """The rendered export (overlays + captions burned in) at the signed
+    resolution, as a download. Only a servable file: a missing or partial
+    render is a 404, never the unedited source."""
+    from pathlib import Path
+
+    from chalybclip.api._render_validation import is_servable_cached_mp4
+    from chalybclip.api._video_response import video_file_response
+
+    q = params.get("q", "1080")
+    if q not in _QUALITIES:
+        raise HTTPException(status_code=404, detail="not found")
+    clip = await ClipsRepo(db).get(clip_id)
+    if clip is None:
+        raise HTTPException(status_code=404, detail="not found")
+    rendered = Path(clip.path).parent / f"clip_render_{q}.mp4"
+    if not is_servable_cached_mp4(rendered):
+        raise HTTPException(status_code=404, detail="not found")
+    name = f"chalybclip_{clip_id}.mp4"
+    return video_file_response(
+        request,
+        rendered,
+        filename=name,
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
     )
-    if isinstance(resp, JSONResponse):
-        raise HubError(
-            "conflict", "El video todavía se está preparando.", reason="render_not_ready"
-        )
-    return resp
-
-
-@router.api_route("/clips/{clip_id}/media", methods=["GET", "HEAD"])
-async def hub_clip_media(
-    request: Request,
-    clip_id: str,
-    tenant_id: str = hub_tenant(),
-    db: Database = Depends(get_db),
-) -> Response:
-    """The cut MP4 (no burns) for the preview player. Range-aware; may
-    redirect to the bucket copy when the local file was reclaimed."""
-    await _require_clip(db, clip_id)
-    return await dash.clip_media(request, clip_id, source="original", tenant_id=tenant_id, db=db)
-
-
-@router.get("/clips/{clip_id}/thumbnail")
-async def hub_clip_thumbnail(
-    clip_id: str, tenant_id: str = hub_tenant(), db: Database = Depends(get_db)
-) -> Response:
-    await _require_clip(db, clip_id)
-    return await dash.clip_thumbnail(clip_id, tenant_id=tenant_id, db=db)
 
 
 __all__ = ["PLATFORM_COLORS", "OverlayIn", "editor_form", "router"]
