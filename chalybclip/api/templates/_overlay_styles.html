@@ -497,4 +497,20 @@
   .nc-preview[data-watermark="off"] .nc-pv-watermark {
     display: none !important;
   }
+  /* ---------- 16:9 and 1:1 layouts (chalybclip.clip.formats) ----------
+     No phone UI covers these frames, so the banner drops near the bottom
+     edge, and on 16:9 the boxes stay centered instead of spanning the
+     whole width. 9:16 is untouched. */
+  .nc-preview[data-format="horizontal"] .nc-pv-title { left: 20%; right: 20%; top: 8%; }
+  .nc-preview[data-format="horizontal"] .nc-pv-top-hook { left: 26%; right: 26%; top: 3%; }
+  .nc-preview[data-format="horizontal"] .nc-pv-banner,
+  .nc-preview[data-format="horizontal"] .nc-pv-banner--kick_repost_page {
+    left: 22%; right: 22%; bottom: 6cqh;
+  }
+  .nc-preview[data-format="horizontal"] .nc-pv-banner--kick_minimal_url { bottom: 3cqh; }
+  .nc-preview[data-format="square"] .nc-pv-title { top: 14%; }
+  .nc-preview[data-format="square"] .nc-pv-top-hook { top: 7%; }
+  .nc-preview[data-format="square"] .nc-pv-banner,
+  .nc-preview[data-format="square"] .nc-pv-banner--kick_repost_page { bottom: 10cqh; }
+  .nc-preview[data-format="square"] .nc-pv-banner--kick_minimal_url { bottom: 3cqh; }
 </style>
