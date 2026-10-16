@@ -305,6 +305,18 @@ async def _gate_cancel(kw: dict[str, Any]) -> None:
     await _gate_owned_or_listed(kw, scheduled)
 
 
+async def _gate_clip(kw: dict[str, Any]) -> None:
+    """compose/{clip_id}: the clip must be the caller's — the composer would
+    otherwise spend an LLM call on an id it can't read (and answer blanks)."""
+    from chalybclip.db import ClipsRepo
+    from chalybclip.tenancy import bound_tenant
+
+    with bound_tenant(kw["tenant_id"]):
+        clip = await ClipsRepo(kw["db"]).get(str(kw["clip_id"]))
+    if clip is None:
+        raise _not_found()
+
+
 def _gate_listed(id_param: str, lister: str) -> Gate:
     async def gate(kw: dict[str, Any]) -> None:
         profile_id = await _profile_id(kw["db"], kw["tenant_id"])
@@ -335,7 +347,7 @@ _REUSED: list[tuple[str, str, Callable[..., Awaitable[Any]], Gate | None]] = [
     # publish (single / bulk / drafts / manual state)
     ("POST", "/post/{clip_id}", zn.zernio_post_clip, None),
     ("POST", "/bulk-post", zn.zernio_bulk, None),
-    ("POST", "/compose/{clip_id}", zn.zernio_compose_clip, None),
+    ("POST", "/compose/{clip_id}", zn.zernio_compose_clip, _gate_clip),
     ("POST", "/draft/{post_id}/publish", zn.zernio_draft_publish, None),
     ("POST", "/draft/{post_id}/delete", zn.zernio_draft_delete, None),
     ("POST", "/clip/{clip_id}/mark-published", zn.zernio_mark_published, None),

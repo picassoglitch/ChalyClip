@@ -745,3 +745,34 @@ async def test_every_route_is_hub_only(
         r = await client.request(method, url, headers=auth(tenants["alice"]["token"]))
         assert r.status_code == 401, (method, path, r.status_code)
         assert json.loads(r.text)["error"]["code"] == "unauthorized"
+
+
+async def test_cookieless_render_url_signed_for_1800s_is_accepted(
+    client: httpx.AsyncClient,
+    env: None,
+    render_spy: list[dict[str, Any]],
+    db: Database,
+    alice: str,
+) -> None:
+    """Hub publishes carry no session cookie, so the recorder authenticates
+    with the signed render query `_publish_clip` mints (1800 s). The auth
+    middleware used to cap that at 900 s and bounce it to the login page."""
+    from chalybclip.api.routers.internal import sign_render_query
+
+    clip_id = await _approved_clip(db, alice)
+    q = sign_render_query(clip_id=clip_id, tenant_id=alice, ttl_seconds=1800)
+    r = await client.get(f"/dashboard/clips/{clip_id}/render?capture=1&{q}")
+    assert r.status_code != 303, r.headers.get("location")
+    assert "login" not in (r.headers.get("location") or "")
+    # Anything past the cap is still refused.
+    q = sign_render_query(clip_id=clip_id, tenant_id=alice, ttl_seconds=4000)
+    r = await client.get(f"/dashboard/clips/{clip_id}/render?capture=1&{q}")
+    assert r.status_code in (303, 401)
+
+
+async def test_compose_other_tenants_clip_is_refused(
+    client: httpx.AsyncClient, env: None, db: Database, alice: str, bob: str
+) -> None:
+    clip_id = await _approved_clip(db, alice)
+    r = await client.post(f"/api/hub/v1/publish/compose/{clip_id}", headers=_hub(bob))
+    _err(r, 404, "not_found")

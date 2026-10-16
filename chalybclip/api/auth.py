@@ -101,9 +101,13 @@ def _verify_render_signature(request: Request) -> str | None:
     try:
         from chalybclip.api.routers.internal import _verify_signed_params
 
+        # 1800 s: what every cookieless render mints (zernio._publish_clip
+        # and the growth engine sign for 1800 s — a cold render can wait
+        # 240 s for an in-flight one, then fall back to the ~5 min legacy
+        # recorder). At 900 every such render was refused (303 to login).
         _verify_signed_params(
             resource_id=parts[2], tenant=tenant, exp=int(exp), sig=sig,
-            max_ttl_s=900,
+            max_ttl_s=1800,
         )
     except Exception:  # invalid / expired sig → fall back to cookie auth
         return None
