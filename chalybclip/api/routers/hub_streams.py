@@ -81,6 +81,7 @@ def _clip_json(tenant_id: str, clip: Any, candidate: Any | None = None) -> dict[
         "why": _why(candidate),
         "publishability_status": clip.publishability_status,
         "title": _clip_title(clip),
+        "format": _clip_format(clip),
         "media_url": media_path("clip", clip.id, tenant_id=tenant_id),
         "download_url": media_path("clip", clip.id, tenant_id=tenant_id, params={"dl": "1"}),
         "thumb_url": (
@@ -108,6 +109,18 @@ def _why(candidate: Any | None) -> dict[str, Any] | None:
         "speaker": speaker.strip()[:60] if isinstance(speaker, str) and speaker.strip() else None,
         "confirmed": bool(isinstance(ev, dict) and ev.get("rescore")),
     }
+
+
+_FORMATS = ("vertical", "horizontal", "square")
+
+
+def _clip_format(clip: Any) -> str:
+    """The output format the editor saved in overlay_config["format"]
+    (same rule as the editor's clip.formats.clip_format): vertical when
+    unset or unknown."""
+    cfg = clip.overlay_config if isinstance(clip.overlay_config, dict) else {}
+    fmt = cfg.get("format")
+    return fmt if isinstance(fmt, str) and fmt in _FORMATS else "vertical"
 
 
 def _clip_title(clip: Any) -> str | None:

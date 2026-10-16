@@ -639,3 +639,15 @@ async def test_progress_marks_one_failed_step(
     assert [s["status"] for s in p["steps"]][:2] == ["failed", "pending"]
     assert p["steps"][0]["error_kind"] == "source"
     assert "error" not in p["steps"][0]
+
+
+async def test_clip_list_reports_the_saved_format(
+    client: httpx.AsyncClient, db: Database, tenants: dict[str, dict[str, str]], tmp_path: Path
+) -> None:
+    alice = tenants["alice"]["id"]
+    await _stream(db, alice, tmp_path, sid="str_fmt", clips=[("clp_v", "cut"), ("clp_h", "cut"), ("clp_x", "cut")])
+    with bound_tenant(alice):
+        await ClipsRepo(db).set_overlay_config("clp_h", overlay_config={"format": "horizontal"})
+        await ClipsRepo(db).set_overlay_config("clp_x", overlay_config={"format": "weird"})
+    clips = {c["id"]: c["format"] for c in (await client.get("/api/hub/v1/clips", headers=hdr(alice))).json()["clips"]}
+    assert clips == {"clp_v": "vertical", "clp_h": "horizontal", "clp_x": "vertical"}
