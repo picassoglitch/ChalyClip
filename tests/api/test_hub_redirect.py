@@ -10,6 +10,8 @@ from chalybclip.api.hub_redirect import hub_target
 
 def test_page_map() -> None:
     assert hub_target("/dashboard") == "/app/clips"
+    assert hub_target("/") == "/app/clips"
+    assert hub_target("/agents") == "/app/clips"
     assert hub_target("/dashboard/start") == "/app/clips"
     assert hub_target("/dashboard/streams/str_1") == "/app/clips/videos/str_1"
     assert hub_target("/dashboard/brand-kits/new") == "/app/clips/ajustes/estilos/nuevo"
@@ -24,6 +26,10 @@ def test_page_map() -> None:
         "/overlay/kick",
         "/api/hub/v1/me",
         "/dashboard/streams/../x",
+        "/robots.txt",
+        "/sitemap.xml",
+        "/llms.txt",
+        "/healthz",
     ):
         assert hub_target(kept) is None, kept
 

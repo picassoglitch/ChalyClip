@@ -36,6 +36,10 @@ def hub_route(pattern: str, target: str) -> None:
 
 
 for _p, _t in (
+    # The old public site (landing, agents page) has no place either: Clips
+    # lives in the hub. robots.txt, sitemap, llms.txt and health stay.
+    (r"/", "/app/clips"),
+    (r"/agents/?", "/app/clips"),
     (r"/dashboard/?", "/app/clips"),
     (r"/dashboard/start", "/app/clips"),
     (r"/dashboard/url-jobs/new", "/app/clips/nuevo"),
