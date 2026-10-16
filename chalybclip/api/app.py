@@ -38,6 +38,8 @@ from .routers import dashboard as dashboard_router
 from .routers import hub as hub_router
 from .routers import hub_editor as hub_editor_router
 from .routers import hub_publish as hub_publish_router
+from .routers import hub_settings as hub_settings_router
+from .routers import hub_streams as hub_streams_router
 from .routers import internal as internal_router
 from .routers import internal_publish as internal_publish_router
 from .routers import live as live_router
@@ -282,6 +284,8 @@ def create_app(
     app.include_router(live_router.router)
     # Chalyb hub API (/api/hub/v1) — core + editor + publishing.
     app.include_router(hub_router.router)
+    app.include_router(hub_streams_router.router)
+    app.include_router(hub_settings_router.router)
     app.include_router(hub_editor_router.router)
     app.include_router(hub_publish_router.router)
     app.include_router(hub_media_router)

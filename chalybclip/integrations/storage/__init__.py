@@ -166,6 +166,32 @@ class S3ArtifactStore:
             ttl,
         )
 
+    async def presigned_put_url(
+        self, *, key: str, ttl_seconds: int, content_type: str
+    ) -> str:
+        """A URL the browser can PUT the object to directly (hub uploads).
+        The Content-Type is part of the signature, so the uploader must send
+        exactly that header."""
+        ttl = max(1, min(int(ttl_seconds), self._PRESIGN_MAX_TTL_S))
+        return await asyncio.to_thread(
+            self._client.generate_presigned_url,
+            "put_object",
+            {"Bucket": self._bucket, "Key": self._full(key), "ContentType": content_type},
+            ttl,
+        )
+
+    async def size(self, *, key: str) -> int | None:
+        """The object's size in bytes, or None when it doesn't exist."""
+
+        def _head() -> int | None:
+            try:
+                resp = self._client.head_object(Bucket=self._bucket, Key=self._full(key))
+            except Exception:
+                return None
+            return int(resp.get("ContentLength") or 0)
+
+        return await asyncio.to_thread(_head)
+
     async def exists(self, *, key: str) -> bool:
         def _head() -> bool:
             try:
