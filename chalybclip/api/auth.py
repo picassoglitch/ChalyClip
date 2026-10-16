@@ -17,6 +17,7 @@ from fastapi import Request, Response, status
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from chalybclip.api.hub_api import authenticate_hub_request, is_hub_path
 from chalybclip.db import ApiTokensRepo, Database
 from chalybclip.tenancy import hash_token
 
@@ -140,8 +141,16 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
         # (mint_signed_render_url) instead of a cookie. A valid signature
         # binds the tenant and skips the bearer/cookie requirement — scoped
         # to one clip's render page, short TTL. No valid sig → normal auth.
-        signed_tenant = _verify_render_signature(request)
-        if signed_tenant is not None:
+        # Hub API (/api/hub/v1): the Chalyb hub's per-request launch token
+        # is the ONLY credential accepted there — no cookie, no api_token.
+        # Tenant resolution (incl. auto-provision) mirrors /auth/sso.
+        hub_call = is_hub_path(path)
+        signed_tenant = None if hub_call else _verify_render_signature(request)
+        if hub_call:
+            refused = await authenticate_hub_request(request, self._db)
+            if refused is not None:
+                return refused
+        elif signed_tenant is not None:
             request.state.tenant_id = signed_tenant
             request.state.token_scope = "read"
         else:
@@ -225,7 +234,11 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
             from chalybclip.settings import get_settings
             raw = (get_settings().admin_tenant_ids or "").strip()
             admin_ids = {p.strip() for p in raw.split(",") if p.strip()}
-            request.state.is_admin = token_row.tenant_id in admin_ids
+            # A signed render URL authenticates without a token row (and with
+            # read scope only) — never treat it as an operator session.
+            request.state.is_admin = (
+                signed_tenant is None and request.state.tenant_id in admin_ids
+            )
         except Exception:  # noqa: BLE001 — best-effort
             request.state.is_admin = False
 

@@ -29,10 +29,14 @@ from chalybclip.jobs import InProcessJobDispatcher, JobDispatcher, get_dispatche
 
 from ._pipeline import PipelineKickoff, PipelineRunner, default_pipeline_runner
 from .auth import BearerAuthMiddleware
+from .hub_api import install_hub_error_handlers
 from .lifespan import background_drains_lifespan
 from .routers import chalyb as chalyb_router
 from .routers import clips as clips_router
 from .routers import dashboard as dashboard_router
+from .routers import hub as hub_router
+from .routers import hub_editor as hub_editor_router
+from .routers import hub_publish as hub_publish_router
 from .routers import internal as internal_router
 from .routers import internal_publish as internal_publish_router
 from .routers import live as live_router
@@ -133,6 +137,9 @@ def create_app(
     app.state.job_dispatcher = job_dispatcher
 
     app.add_middleware(BearerAuthMiddleware, db=db)
+    # /api/hub/v1 answers errors in the hub's shared format; other paths
+    # keep FastAPI's defaults (see hub_api.install_hub_error_handlers).
+    install_hub_error_handlers(app)
 
     # Static assets — serves /static/chalybclip-theme.css and any future
     # CSS / JS / icon bundles. The auth middleware whitelists `/static/`
@@ -272,5 +279,9 @@ def create_app(
     # bearer-skip from the auth middleware. Dashboard pages live
     # under /dashboard/live and go through the normal tenant cookie.
     app.include_router(live_router.router)
+    # Chalyb hub API (/api/hub/v1) — core + editor + publishing.
+    app.include_router(hub_router.router)
+    app.include_router(hub_editor_router.router)
+    app.include_router(hub_publish_router.router)
 
     return app
