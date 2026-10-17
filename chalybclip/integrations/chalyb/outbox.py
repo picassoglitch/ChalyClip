@@ -14,10 +14,24 @@ Response handling per batch:
   * 408 / 429 / 5xx / network → rows stay `pending`, `next_attempt_at`
     backs off exponentially (30s → 1h cap). The hub dedupes on
     (engine, source_id), so re-sending is always safe.
-  * any other 4xx → permanent. A multi-event batch is split and re-sent
-    one event at a time so one bad event can't sink its neighbours; a
-    single rejected event is marked `dead` and logged at ERROR. Never
-    dropped — the row stays for the operator.
+  * 401 / 403 / 404 and any other 4xx that isn't about the event itself
+    (bad or rotated CHALYB_ADMIN_TOKEN, engine not registered, unknown
+    user, wrong base URL) → our config, not the event: rows stay
+    `pending` with the same backoff, logged at ERROR and shown on the
+    tenant's chip / diag page. Dead-lettering here would mean that usage
+    is never billed once the config is fixed.
+  * 400 / 413 / 422 → the hub rejected the event's contents. A multi-event
+    batch is split and re-sent one event at a time so one bad event can't
+    sink its neighbours; a single rejected event is marked `dead` and
+    logged at ERROR. Never dropped — the row stays for the operator.
+
+A settle waits until its reservation has no undelivered usage events, so
+the hub never releases a job's hold before the job's spend has landed (a
+release first would let the user start more work against tokens the
+finished job already used).
+
+Each pass claims its rows with a conditional UPDATE per row
+(`UsageOutboxRepo.claim`), so concurrent drains never work the same row.
 
 Drained: on web-box startup and every `usage_outbox_interval_s` (lifespan
 loop), right after each enqueue (a background kick, single-flight per DB),
@@ -191,6 +205,44 @@ def _is_transient(status: int) -> bool:
     return status in (408, 429) or status >= 500
 
 
+# Statuses the hub uses to reject what we SENT (contract validation on
+# POST /usage, a malformed settle). Anything else non-2xx and non-transient
+# (401/403 bearer, 404 unknown engine/user, a 404 page from a wrong base
+# URL, 405, …) says nothing about the event: it's config, so retry.
+_PAYLOAD_REJECTIONS = (400, 409, 413, 422)
+
+
+def _hub_error(resp: httpx.Response) -> str:
+    try:
+        data = resp.json()
+    except Exception:  # noqa: BLE001 — HTML 404 page, empty body, …
+        return ""
+    if isinstance(data, dict) and isinstance(data.get("error"), str):
+        return data["error"]
+    return ""
+
+
+def _rejects_payload(resp: httpx.Response, *, endpoint: str) -> bool:
+    """True when the hub refused this specific event / settle for good."""
+    error = _hub_error(resp).lower()
+    # "unknown engine: …" (bearer check) / "engine not registered: …"
+    # (settle) are our deployment's config, whatever status they come with.
+    if "engine" in error:
+        return False
+    if endpoint == "settle" and resp.status_code == 404:
+        # The settle route's own 404: this reservation doesn't exist.
+        return error == "unknown reservation"
+    return resp.status_code in _PAYLOAD_REJECTIONS
+
+
+def _config_hint(status: int) -> str:
+    if status in (401, 403):
+        return " (check CHALYB_ADMIN_TOKEN)"
+    if status == 404:
+        return " (check CHALYB_BASE_URL, the engine registration and the tenant's Chalyb user)"
+    return ""
+
+
 async def drain_outbox(
     db: Database,
     *,
@@ -228,9 +280,17 @@ async def drain_outbox(
         rows = await repo.due(now_iso=_iso(now), limit=max_rows)
         if not rows:
             return report
-        await repo.lease(
-            [r.id for r in rows], until_iso=_iso(now + _dt.timedelta(seconds=_LEASE_S))
+        claimed = set(
+            await repo.claim(
+                [r.id for r in rows],
+                now_iso=_iso(now),
+                until_iso=_iso(now + _dt.timedelta(seconds=_LEASE_S)),
+            )
         )
+        # Rows another drain claimed first are theirs to send.
+        rows = [r for r in rows if r.id in claimed]
+        if not rows:
+            return report
     except Exception as e:  # noqa: BLE001 — a drain pass is best-effort
         _log.warning("outbox drain: read failed: %s", e)
         report.errors.append(str(e))
@@ -343,7 +403,22 @@ async def _post_events(
         await _record_status(db, tenant_id, ok=False, error=err)
         return
 
-    # Permanent rejection. Isolate the offender(s) before declaring death.
+    if not _rejects_payload(resp, endpoint="usage"):
+        # Auth / config: nothing wrong with the events. Keep them and alert.
+        err = f"Chalyb HTTP {resp.status_code}{_config_hint(resp.status_code)}" + (
+            f" · {excerpt}" if excerpt else ""
+        )
+        _log.error(
+            "outbox: hub refused the request (config/auth, events kept) · "
+            "tenant=%s events=%d status=%d body=%s",
+            tenant_id, len(rows), resp.status_code, excerpt,
+        )
+        await _retry(repo, rows, error=err, now=now, report=report)
+        await _record_status(db, tenant_id, ok=False, error=err)
+        return
+
+    # The hub rejected event contents. Isolate the offender(s) before
+    # declaring death.
     if len(rows) > 1:
         for r in rows:
             await _post_events(
@@ -354,8 +429,6 @@ async def _post_events(
     err = f"Chalyb rejected the event: HTTP {resp.status_code}" + (
         f" · body: {excerpt}" if excerpt else ""
     )
-    if resp.status_code in (401, 403):
-        err += " (check CHALYB_ADMIN_TOKEN)"
     _log.error(
         "outbox: usage event DEAD · tenant=%s source=%s status=%d body=%s",
         tenant_id, rows[0].id, resp.status_code, excerpt,
@@ -376,6 +449,21 @@ async def _drain_settle(
     report: DrainReport,
 ) -> None:
     repo = UsageOutboxRepo(db)
+    reservation_id = str(row.payload.get("reservation_id") or "")
+    try:
+        waiting = await repo.pending_usage_for_reservation(reservation_id)
+    except Exception as e:  # noqa: BLE001
+        await _retry(repo, [row], error=f"outbox read failed: {e}", now=now, report=report)
+        return
+    if waiting:
+        # Its usage is still in the queue (backing off): settle after it.
+        when = now + _dt.timedelta(seconds=_BACKOFF_BASE_S)
+        await repo.defer(
+            [row.id], note=f"waiting for {waiting} usage event(s) of this job",
+            next_attempt_at=_iso(when),
+        )
+        report.retried += 1
+        return
     try:
         resp = await http.post(f"{root}/usage/settle", json=row.payload, headers=headers)
     except Exception as e:  # noqa: BLE001
@@ -389,6 +477,17 @@ async def _drain_settle(
         await _retry(repo, [row], error=f"Chalyb HTTP {resp.status_code}", now=now, report=report)
         return
     excerpt = (resp.text or "").strip().replace("\n", " ")[:200]
+    if not _rejects_payload(resp, endpoint="settle"):
+        err = f"Chalyb HTTP {resp.status_code}{_config_hint(resp.status_code)}" + (
+            f" · {excerpt}" if excerpt else ""
+        )
+        _log.error(
+            "outbox: hub refused the settle (config/auth, kept) · reservation=%s "
+            "status=%d body=%s", reservation_id, resp.status_code, excerpt,
+        )
+        await _retry(repo, [row], error=err, now=now, report=report)
+        await _record_status(db, row.tenant_id, ok=False, error=err)
+        return
     _log.error(
         "outbox: settle DEAD · reservation=%s status=%d body=%s",
         row.payload.get("reservation_id"), resp.status_code, excerpt,

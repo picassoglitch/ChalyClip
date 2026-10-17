@@ -340,6 +340,11 @@ async def metered_run(
     if reservation_id:
         hb_task = asyncio.create_task(_heartbeat_loop(reservation_id))
     started = time.monotonic()
+    # This attempt's own id: the same usage job can run more than once (a
+    # dispatch retried after a lost response, a boost start that timed out
+    # but ran, then fell back to the standard worker), and each attempt
+    # really used its compute.
+    attempt_id = new_id("run")
     outcome = "failed"
     handle = MeteredRun(
         stream_id=stream_id, job_id=job_id, reservation_id=reservation_id, lane=lane
@@ -365,7 +370,7 @@ async def metered_run(
             _finish_run(
                 db_path, tenant_id=tenant_id, stream_id=stream_id, job_id=job_id,
                 reservation_id=reservation_id, lane=lane, elapsed_s=elapsed,
-                outcome=outcome, stream_dir=stream_dir,
+                outcome=outcome, stream_dir=stream_dir, attempt_id=attempt_id,
             )
         )
 
@@ -388,6 +393,7 @@ async def _finish_run(
     elapsed_s: float,
     outcome: str,
     stream_dir: Path | None,
+    attempt_id: str | None = None,
 ) -> None:
     try:
         db = Database(db_path)
@@ -403,9 +409,13 @@ async def _finish_run(
             kind="compute.seconds",
             amount=seconds,
             cost_usd_micros=seconds * COMPUTE_MICROS_PER_S[lane],
-            # One compute event per run attempt: job id when admitted, else
-            # the stream plus a fresh suffix (reruns are separate runs).
-            source_id=f"compute_{job_id or new_id('run')}",
+            # One compute event per run ATTEMPT. Keyed on the job id alone,
+            # a second attempt of the same job collided with the first
+            # (outbox + hub both dedupe on source_id) and went unbilled.
+            source_id=(
+                f"compute_{job_id}_{attempt_id or new_id('run')}"
+                if job_id else f"compute_{attempt_id or new_id('run')}"
+            ),
             occurred_at_iso=_dt.datetime.now(_dt.UTC).isoformat(),
             provider="gcp",
             operation=OPERATION_PIPELINE,

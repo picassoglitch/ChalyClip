@@ -85,16 +85,52 @@ class UsageOutboxRepo:
         )
         return [_outbox_row(r) for r in await cur.fetchall()]
 
-    async def lease(self, ids: list[str], *, until_iso: str) -> None:
-        """Push `next_attempt_at` out while this drain works the rows, so a
-        concurrent drain (another web instance, the worker's job-end drain)
-        skips them. Best-effort: the hub dedupes on source_id anyway."""
+    async def claim(self, ids: list[str], *, now_iso: str, until_iso: str) -> list[str]:
+        """Lease the rows this drain pass will work: push `next_attempt_at`
+        out to `until_iso`, but only on rows that are still pending AND due.
+        Each row is a single conditional UPDATE (atomic in SQLite and
+        Postgres), so when two drains (another web instance, the worker's
+        job-end drain) read the same due rows, exactly one of them claims
+        each row and only the claimed ids are returned to work on."""
+        if not ids:
+            return []
+        conn = await self._db.connect()
+        claimed: list[str] = []
+        for i in ids:
+            cur = await conn.execute(
+                "UPDATE usage_outbox SET next_attempt_at = ? "
+                "WHERE id = ? AND status = 'pending' AND next_attempt_at <= ?",
+                (until_iso, i, now_iso),
+            )
+            if getattr(cur, "rowcount", 0) == 1:
+                claimed.append(i)
+        await conn.commit()
+        return claimed
+
+    async def pending_usage_for_reservation(self, reservation_id: str) -> int:
+        """How many usage events tied to this reservation are still waiting
+        to be delivered. A settle is held back until this is 0, so the hub
+        never closes a job's hold before the job's spend has landed."""
+        conn = await self._db.connect()
+        # Matches the payload as `add` serializes it (json.dumps defaults).
+        needle = json.dumps({"reservation_id": reservation_id}, ensure_ascii=False)[1:-1]
+        cur = await conn.execute(
+            "SELECT COUNT(*) AS n FROM usage_outbox WHERE endpoint = 'usage' "
+            "AND status = 'pending' AND payload_json LIKE ?",
+            (f"%{needle}%",),
+        )
+        row = await cur.fetchone()
+        return int(row["n"] or 0) if row is not None else 0
+
+    async def defer(self, ids: list[str], *, note: str, next_attempt_at: str) -> None:
+        """Push rows out without counting an attempt (nothing was sent)."""
         if not ids:
             return
         conn = await self._db.connect()
         await conn.executemany(
-            "UPDATE usage_outbox SET next_attempt_at = ? WHERE id = ? AND status = 'pending'",
-            [(until_iso, i) for i in ids],
+            "UPDATE usage_outbox SET last_error = ?, next_attempt_at = ? "
+            "WHERE id = ? AND status = 'pending'",
+            [(note[:500], next_attempt_at, i) for i in ids],
         )
         await conn.commit()
 
@@ -116,7 +152,7 @@ class UsageOutboxRepo:
         conn = await self._db.connect()
         await conn.executemany(
             "UPDATE usage_outbox SET attempts = attempts + 1, last_error = ?, "
-            "next_attempt_at = ? WHERE id = ?",
+            "next_attempt_at = ? WHERE id = ? AND status = 'pending'",
             [(error[:500], next_attempt_at, i) for i in ids],
         )
         await conn.commit()
@@ -127,7 +163,7 @@ class UsageOutboxRepo:
         conn = await self._db.connect()
         await conn.executemany(
             "UPDATE usage_outbox SET status = 'dead', attempts = attempts + 1, "
-            "last_error = ? WHERE id = ?",
+            "last_error = ? WHERE id = ? AND status = 'pending'",
             [(error[:500], i) for i in ids],
         )
         await conn.commit()
