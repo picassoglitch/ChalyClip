@@ -138,11 +138,11 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
             from chalybclip.api.i18n import detect_locale
             request.state.locale = detect_locale(request)
         except Exception:  # noqa: BLE001 — i18n is non-essential
-            request.state.locale = "en"
+            request.state.locale = "es"
 
         path = request.url.path
         if path in _PUBLIC_PATHS or any(path.startswith(p) for p in _PUBLIC_PREFIXES):
-            return await call_next(request)
+            return _remember_locale(request, await call_next(request))
 
         # Auto-publish hands-free: a background render carries a signed URL
         # (mint_signed_render_url) instead of a cookie. A valid signature
@@ -263,7 +263,26 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
             response.headers["Cache-Control"] = "no-store, must-revalidate"
             response.headers["Pragma"] = "no-cache"
 
-        return response
+        return _remember_locale(request, response)
+
+
+def _remember_locale(request: Request, response: Response) -> Response:
+    """Persist an explicit `?lang=es|en` as a cookie so the choice sticks
+    across pages (the hub's launch link can forward the hub's language)."""
+    from chalybclip.api.i18n import LOCALE_COOKIE, LOCALE_QUERY_PARAM, SUPPORTED_LOCALES
+
+    lang = (request.query_params.get(LOCALE_QUERY_PARAM) or "").strip().lower()
+    lang = lang.split("-", 1)[0]
+    if lang in SUPPORTED_LOCALES and request.cookies.get(LOCALE_COOKIE) != lang:
+        response.set_cookie(
+            LOCALE_COOKIE, lang, max_age=60 * 60 * 24 * 365,
+            httponly=True, samesite="lax",
+            secure=(
+                request.url.scheme == "https"
+                or request.headers.get("x-forwarded-proto", "").split(",")[0].strip() == "https"
+            ),
+        )
+    return response
 
 
 def _extract_token(request: Request) -> str:

@@ -97,7 +97,7 @@ def require_paid_tier(request: Request) -> None:
             "reason": "paywall_paid",
             "current_tier": tier,
             "message": (
-                "Esta función requiere el plan Pro o All-Access. Puedes "
+                "Esta función requiere el plan Pro o VIP. Puedes "
                 "descargar el clip con la marca de agua de ChalyClip, o subir "
                 "tu plan."
             ),
@@ -128,7 +128,7 @@ def require_top_tier(request: Request) -> None:
             "current_tier": tier,
             "message": (
                 "Publicar en TikTok/YouTube/Instagram requiere el plan "
-                "All-Access. Puedes descargar el clip y publicarlo "
+                "VIP. Puedes descargar el clip y publicarlo "
                 "manualmente, o subir tu plan."
             ),
             "upgrade_url": "https://chalyb.com/app/subscription",

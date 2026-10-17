@@ -181,17 +181,19 @@ async def test_status_404_ignores_other_tenants_record(
         post_id="p_bob", tenant_id=tenants["bob"]["id"], clip_id="clp_b",
         platforms=["tiktok"], content="x", status="published",
     )
-    with respx.mock(assert_all_called=True) as mock:
-        mock.get(f"{_ZBASE}/posts/p_bob").mock(
+    with respx.mock(assert_all_called=False) as mock:
+        live = mock.get(f"{_ZBASE}/posts/p_bob").mock(
             return_value=httpx.Response(404, json={"error": "not found"})
         )
         resp = await client.get(
             "/dashboard/publish/zernio/status/p_bob.json",
             headers=auth(alice["token"]),
         )
-    assert resp.status_code == 200
-    # Falls through to UNAVAILABLE — Bob's published result is not leaked.
-    assert resp.json()["status"] == "UNAVAILABLE"
+    # Audit 2026-10-08: a post our records attribute to ANOTHER tenant is
+    # refused outright (404) before the company-wide Zernio key is used —
+    # neither Bob's local result nor Zernio's live status leaks to Alice.
+    assert resp.status_code == 404
+    assert not live.called
 
 
 # ---- job detail page ----
@@ -211,7 +213,7 @@ async def test_job_page_404_renders_unavailable_not_raw_error(
     assert resp.status_code == 200
     html = resp.text
     assert 'data-s="UNAVAILABLE"' in html
-    assert "no longer available" in html
+    assert "ya no está disponible" in html
     # The raw transport error must not leak onto the page.
     assert "returned HTTP 404" not in html
 

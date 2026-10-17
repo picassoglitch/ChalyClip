@@ -31,6 +31,7 @@ reach it.
 from __future__ import annotations
 
 import asyncio
+import hmac
 import json
 import os
 import time
@@ -206,7 +207,10 @@ def create_worker_app(*, runner: PipelineRunner | None = None) -> FastAPI:
     async def submit(request: Request) -> Response:
         payload = await request.json()
         expected = _expected_token()
-        if not expected or (payload or {}).get("auth_token", "") != expected:
+        provided = str((payload or {}).get("auth_token", "") or "")
+        if not expected or not hmac.compare_digest(
+            provided.encode("utf-8"), expected.encode("utf-8")
+        ):
             raise HTTPException(status_code=401, detail="invalid bearer token")
 
         preflight = _preflight_error()

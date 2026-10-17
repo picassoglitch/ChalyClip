@@ -2,6 +2,7 @@
    GET /dashboard/streams/{id}/progress and re-fetched every 3s while
    the pipeline is running. The outer #stream-progress div on the
    parent page swaps in place. #}
+{%- set _is_admin = (request.state.is_admin if request and request.state else False) -%}
 <div id="stream-progress"
      {% if is_running and not is_done and not has_failed and not is_abandoned %}
      hx-get="/dashboard/streams/{{ stream.id }}/progress"
@@ -17,12 +18,22 @@
   <div class="nc-panel" style="border-color: var(--nc-danger); background: rgba(229, 72, 77, 0.06); margin-bottom: 14px;">
     <div class="nc-panel__header" style="border-color: rgba(229, 72, 77, 0.25);">
       <i class="ti ti-alert-octagon" aria-hidden="true" style="color: var(--nc-danger);"></i>
-      <span class="nc-panel__title" style="color: var(--nc-danger);">El pipeline no pudo arrancar</span>
+      <span class="nc-panel__title" style="color: var(--nc-danger);">No pudimos procesar tu video</span>
     </div>
     <div class="nc-panel__body">
+      {#- Raw exception text (class names, bucket keys, HTTP bodies, stream /
+          tenant ids) is operator detail: admins see it verbatim; creators see
+          it only for AdmissionRefused, whose `error` is already written as
+          Spanish user copy (jobs.usage.fail_stream_for_refusal). -#}
+      {% if _is_admin %}
       <div style="font-size: 13.5px; color: var(--nc-text); line-height: 1.5; margin-bottom: 10px;">
         <strong>{{ pipeline_failure.error_type }}:</strong> {{ pipeline_failure.error }}
       </div>
+      {% elif pipeline_failure.error_type == 'AdmissionRefused' %}
+      <div style="font-size: 13.5px; color: var(--nc-text); line-height: 1.5; margin-bottom: 10px;">
+        {{ pipeline_failure.error }}
+      </div>
+      {% endif %}
       {% if "unknown persona" in pipeline_failure.error|lower %}
       <div style="font-size: 12.5px; color: var(--nc-text-muted); line-height: 1.55; padding: 10px 12px; background: rgba(255,255,255,0.03); border-radius: 6px;">
         <strong>Lo que suele pasar:</strong> la persona que mandaste al subir el video
@@ -167,8 +178,8 @@
           {% elif s.status == "failed" %}
             <span class="nc-steps__icon nc-steps__icon--failed"><i class="ti ti-x" aria-hidden="true"></i></span>
             <span style="flex: 1;">
-              <strong>{{ s.name }}</strong> — <span style="color: var(--nc-danger);">{{ s.error or "falló" }}</span>
-              {% if s.error and ("cublas" in s.error|lower or "cudnn" in s.error|lower or "cudart" in s.error|lower) %}
+              <strong>{{ s.name }}</strong> — <span style="color: var(--nc-danger);">{% if _is_admin or s.error_type == 'AdmissionRefused' %}{{ s.error or "falló" }}{% else %}falló{% endif %}</span>
+              {% if _is_admin and s.error and ("cublas" in s.error|lower or "cudnn" in s.error|lower or "cudart" in s.error|lower) %}
               <small style="display: block; margin-top: 6px;">
                 <strong>Solución recomendada:</strong> cambia Whisper a CPU. Abre <code>.env</code> y pon:<br>
                 <code>CHALYBCLIP_WHISPER_DEVICE=cpu</code>,

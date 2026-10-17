@@ -282,6 +282,24 @@ async def _recover_one_tenant(
     if not decisions:
         return []
 
+    # The tenant-wide window above can miss an old stream's terminal events
+    # on a busy tenant, making a finished run look like a never-started
+    # orphan (→ re-admitted, re-billed, re-run). Re-check each candidate
+    # against ITS OWN full event history before acting.
+    candidate_ids = {d.stream_id for d in decisions}
+    events_repo = EventsRepo(db)
+    per_stream: list[Event] = []
+    for sid in candidate_ids:
+        per_stream.extend(await events_repo.list_for_stream(sid))
+    decisions = classify_streams(
+        [s for s in streams if s.id in candidate_ids],
+        per_stream,
+        now=now,
+        active_ids=active_stream_ids(),
+    )
+    if not decisions:
+        return []
+
     # Oldest first so a backlog drains in submission order.
     decisions.sort(key=lambda d: d.created_at)
 

@@ -25,6 +25,11 @@
    stale (Chalyb never deducted). Surface it so the operator knows the
    chip is lying rather than trusting a frozen number. report_ok is
    tri-state: True (fresh), False (sync failing), None (never reported). #}
+{#- 1–999 used to render "0k". Exact below 1,000; one decimal "k" above
+    (12.3k), no decimal from 100k up. -#}
+{%- macro _short_tokens(n) -%}
+  {%- if n < 1000 -%}{{ n }}{%- elif n < 100000 -%}{{ '%.1f'|format(n / 1000) }}k{%- else -%}{{ n // 1000 }}k{%- endif -%}
+{%- endmacro -%}
 {%- set _report_failing = _has_bal and (_bal.get('report_ok') == false) -%}
 {%- set _sync_err = (_bal.get('report_error') if _has_bal else None) or 'No estamos sincronizando con Chalyb — este número puede estar desactualizado. Haz clic para reintentar.' -%}
 
@@ -40,22 +45,9 @@
   <i class="ti ti-coin" aria-hidden="true"></i>
   <span>— tokens · actualizar</span>
 </a>
-{%- elif _unlimited -%}
-<a href="/dashboard/_balance/refresh"
-   id="nc-balance-chip"
-   class="nc-chip nc-chip--success"
-   title="Admin · tokens sin límite. Llevas usados este mes: {{ '{:,}'.format(_monthly_used) }}."
-   hx-get="/dashboard/_balance/chip"
-   hx-trigger="balance-poll from:body"
-   hx-swap="outerHTML"
-   style="text-decoration: none;">
-  <i class="ti ti-infinity" aria-hidden="true"></i>
-  <span>∞ tokens</span>
-</a>
 {%- elif _report_failing -%}
   {# Sync is failing → the number can't be trusted. Danger chip + a
      warning icon + the actual error in the tooltip; click refreshes. #}
-  {%- set _short = _remaining // 1000 -%}
 <a href="/dashboard/_balance/refresh"
    id="nc-balance-chip"
    class="nc-chip nc-chip--danger"
@@ -65,11 +57,22 @@
    hx-swap="outerHTML"
    style="text-decoration: none;">
   <i class="ti ti-alert-triangle" aria-hidden="true"></i>
-  <span>{{ _short }}k · sin sincronizar ⚠</span>
+  <span>{{ _short_tokens(_remaining) }} · sin sincronizar ⚠</span>
+</a>
+{%- elif _unlimited -%}
+<a href="/dashboard/_balance/refresh"
+   id="nc-balance-chip"
+   class="nc-chip nc-chip--success"
+   title="Tokens sin límite. Llevas usados este mes: {{ '{:,}'.format(_monthly_used) }}."
+   hx-get="/dashboard/_balance/chip"
+   hx-trigger="balance-poll from:body"
+   hx-swap="outerHTML"
+   style="text-decoration: none;">
+  <i class="ti ti-coin" aria-hidden="true"></i>
+  <span>∞ tokens</span>
 </a>
 {%- else -%}
   {%- set _low = _remaining < 50000 -%}
-  {%- set _short = _remaining // 1000 -%}
   {# Healthy balance reads GREEN (success), low balance amber. Red is
      reserved for an actual sync failure (handled above) — the default
      state should look fine, not alarming. #}
@@ -82,6 +85,6 @@
    hx-swap="outerHTML"
    style="text-decoration: none;">
   <i class="ti ti-coin" aria-hidden="true"></i>
-  <span>{{ _short }}k tokens</span>
+  <span>{{ _short_tokens(_remaining) }} tokens</span>
 </a>
 {%- endif -%}

@@ -261,9 +261,14 @@ async def fetch_balance_now(db: Database, *, tenant_id: str) -> bool:
         return False
 
     try:
-        balance = response.json().get("balance") or {}
+        balance = response.json().get("balance")
     except Exception:
         _log.warning("fetch ok but JSON parse failed · tenant=%s", tenant_id)
+        return False
+    if not isinstance(balance, dict):
+        # A 2xx without a balance object must not overwrite a good cache
+        # with remaining=0 / unlimited=False (VIPs lost their ∞ chip).
+        _log.warning("fetch ok but no balance object · tenant=%s", tenant_id)
         return False
 
     now_iso = _dt.datetime.now(_dt.UTC).isoformat()

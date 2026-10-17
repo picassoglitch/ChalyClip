@@ -54,19 +54,27 @@
              style="display:none; margin-top:10px; font-size:12px; padding:8px 10px;"></div>
         <label class="nc-ingest__boost" style="display:flex; gap:8px; align-items:center; margin-top:10px; font-size:13px;">
           <input type="checkbox" name="boost" value="1">
-          <span><b>Boost</b> — máquina dedicada, más rápido (cobra una tarifa extra en tokens salvo VIP)</span>
+          <span><b>{{ t('newClip.boost.label') }}</b> — {{ t('newClip.boost.help') }}</span>
         </label>
         <button type="submit" id="urlSubmit" class="nc-btn nc-btn--primary nc-btn--full nc-ingest__cta"
                 {% if not personas or not ffmpeg_ok %}disabled{% endif %}>
           <i class="ti ti-player-play" aria-hidden="true"></i><span>{{ t('newClip.url.start') }}</span>
         </button>
       </form>
+      {#- Cookie setup is an operator task (env var on the server). Admins get
+          the setup hint; everyone else gets a plain-language note with the
+          workaround, never the env var. -#}
+      {%- set _is_admin = (request.state.is_admin if request and request.state else False) -%}
       {% if not cookies_configured %}
+      {% if _is_admin %}
       <p class="nc-ingest__foot">
         {{ t('newClip.url.cookiesPre') }}
         <code class="nc-envchip">CHALYBCLIP_COOKIES_FILE=/data/cookies.txt</code>
         {{ t('newClip.url.cookiesMid') }}
       </p>
+      {% else %}
+      <p class="nc-ingest__foot">{{ t('newClip.url.cookiesUser') }}</p>
+      {% endif %}
       {% endif %}
     </div>
 
@@ -93,7 +101,7 @@
         {% endif %}
         <label class="nc-ingest__boost" style="display:flex; gap:8px; align-items:center; margin-top:10px; font-size:13px;">
           <input type="checkbox" name="boost" value="1">
-          <span><b>Boost</b> — máquina dedicada, más rápido (cobra una tarifa extra en tokens salvo VIP)</span>
+          <span><b>{{ t('newClip.boost.label') }}</b> — {{ t('newClip.boost.help') }}</span>
         </label>
         <button type="submit" id="uploadSubmit" class="nc-btn nc-btn--primary nc-btn--full nc-ingest__cta"
                 {% if not personas or not ffmpeg_ok %}disabled{% endif %}>
@@ -117,24 +125,32 @@
         <button type="button" class="nc-btn nc-btn--sm" data-copy="{{ live_rtmp_base_url }}">{{ t('newClip.live.copy') }}</button>
       </div>
       <label class="nc-ingest__flabel" style="margin-top:14px;">{{ t('newClip.live.keyLabel') }}</label>
-      {# TODO(ingest): fetch the per-tenant RTMP stream key from the live
-         endpoint and render it here. Placeholder shown until wired — this is
-         a UI-restructure-only pass (see redesign brief: screenshot states
-         before endpoint wiring). #}
+      {#- The tenant's real active RTMP key (LiveStreamKeysRepo). This used to
+          render a hard-coded placeholder ("nx_live_placeholder_key") that users
+          could copy into OBS and that MediaMTX would always reject. -#}
+      {% if live_stream_key %}
       <div class="nc-ro">
-        <span class="nc-ro__v" id="liveKey" data-masked="•••••••••••••••• nx_xxxx" data-real="nx_live_placeholder_key">•••••••••••••••• nx_xxxx</span>
+        <span class="nc-ro__v" id="liveKey" data-masked="••••••••••••••••" data-real="{{ live_stream_key }}">••••••••••••••••</span>
         <button type="button" class="nc-btn nc-btn--sm" id="liveReveal">{{ t('newClip.live.reveal') }}</button>
-        <button type="button" class="nc-btn nc-btn--sm" data-copy="nx_live_placeholder_key">{{ t('newClip.live.copy') }}</button>
+        <button type="button" class="nc-btn nc-btn--sm" data-copy="{{ live_stream_key }}">{{ t('newClip.live.copy') }}</button>
       </div>
+      {% else %}
+      <p class="nc-ingest__help">{{ t('newClip.live.noKey') }}</p>
+      {% endif %}
       <a href="/dashboard/live" class="nc-btn nc-btn--full nc-ingest__cta">
         <span>{{ t('newClip.live.openDashboard') }}</span><i class="ti ti-arrow-right" aria-hidden="true"></i>
       </a>
       <p class="nc-ingest__foot">{{ t('newClip.live.note') }}</p>
       {% else %}
-      <p class="nc-ingest__help">{{ t('newClip.live.notConfigured') }}</p>
-      <button class="nc-btn nc-btn--full nc-ingest__cta" disabled>
-        <i class="ti ti-lock" aria-hidden="true"></i><span>{{ t('newClip.live.unavailable') }}</span>
-      </button>
+      {#- No raw RTMP ingest on this deployment. Live goes through ChalyOBS
+          (see /dashboard/live). The env-var hint is operator-only. -#}
+      <p class="nc-ingest__help">{{ t('newClip.live.viaChalyobs') }}</p>
+      <a href="/dashboard/live" class="nc-btn nc-btn--full nc-ingest__cta">
+        <span>{{ t('newClip.live.openDashboard') }}</span><i class="ti ti-arrow-right" aria-hidden="true"></i>
+      </a>
+      {% if _is_admin %}
+      <p class="nc-ingest__foot">{{ t('newClip.live.notConfigured') }}</p>
+      {% endif %}
       {% endif %}
     </div>
 
@@ -238,10 +254,10 @@
   var urlSubmit = document.getElementById('urlSubmit');
   var urlForm = document.getElementById('urlForm');
   function validate(url) {
-    if (!url) return "Pega el enlace de tu VOD.";
+    if (!url) return {{ t('newClip.url.invalidEmpty')|tojson }};
     var trimmed = url.trim();
     for (var i = 0; i < URL_PATTERNS.length; i++) { if (URL_PATTERNS[i].test(trimmed)) return null; }
-    return "Solo funcionan enlaces de kick.com, twitch.tv, youtube.com o youtu.be.";
+    return {{ t('newClip.url.invalidHost')|tojson }};
   }
   function showError(msg) {
     if (!errorBox) return;
@@ -260,7 +276,7 @@
       var msg = validate(input.value);
       if (msg) { e.preventDefault(); showError(msg); input.focus(); return; }
       urlSubmit.disabled = true;
-      urlSubmit.innerHTML = '<i class="ti ti-loader-2 nc-spin" aria-hidden="true"></i> <span>Empezando…</span>';
+      urlSubmit.innerHTML = '<i class="ti ti-loader-2 nc-spin" aria-hidden="true"></i> <span>' + {{ t('newClip.url.starting')|tojson }} + '</span>';
     });
   }
 
@@ -298,7 +314,7 @@
     uploadForm.addEventListener('submit', function () {
       if (uploadSubmit) {
         uploadSubmit.disabled = true;
-        uploadSubmit.innerHTML = '<i class="ti ti-loader-2 nc-spin" aria-hidden="true"></i> <span>Subiendo…</span>';
+        uploadSubmit.innerHTML = '<i class="ti ti-loader-2 nc-spin" aria-hidden="true"></i> <span>' + {{ t('newClip.upload.uploading')|tojson }} + '</span>';
       }
     });
   }
@@ -308,7 +324,7 @@
     b.addEventListener('click', function () {
       if (navigator.clipboard) navigator.clipboard.writeText(b.dataset.copy);
       var prev = b.textContent;
-      b.textContent = "{{ t('newClip.live.copied') }}";
+      b.textContent = {{ t('newClip.live.copied')|tojson }};
       setTimeout(function () { b.textContent = prev; }, 1200);
     });
   });
@@ -318,7 +334,7 @@
     reveal.addEventListener('click', function () {
       var masked = keyEl.textContent.indexOf('•') !== -1;
       keyEl.textContent = masked ? keyEl.dataset.real : keyEl.dataset.masked;
-      reveal.textContent = masked ? "{{ t('newClip.live.hide') }}" : "{{ t('newClip.live.reveal') }}";
+      reveal.textContent = masked ? {{ t('newClip.live.hide')|tojson }} : {{ t('newClip.live.reveal')|tojson }};
     });
   }
 })();

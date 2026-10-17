@@ -22,6 +22,7 @@ What L.1 does NOT do:
 """
 from __future__ import annotations
 
+import hmac
 import time as _time
 from pathlib import Path
 from typing import Annotated
@@ -47,12 +48,14 @@ from chalybclip.db.repos import (
 )
 from chalybclip.settings import get_settings
 from chalybclip.tenancy import bound_tenant
+from chalybclip.tiers import normalize_tier
 
 from ..deps import get_db, require_full_scope, tenant_binder
 
 _TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
 templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 from ..i18n import install_globals as _install_i18n  # noqa: E402
+
 _install_i18n(templates)
 
 router = APIRouter(prefix="", tags=["live"], include_in_schema=False)
@@ -101,7 +104,7 @@ async def live_dashboard(
 
     # Bidirectional connection switch state + full-access gate.
     tenant = await TenantsRepo(db).get(tenant_id)
-    is_full_access = bool(tenant and (tenant.tier or "").lower() == "all_access")
+    is_full_access = bool(tenant and normalize_tier(tenant.tier) == "all_access")
     external_user_id = tenant.external_user_id if tenant else None
     connection_on = (
         await get_connection(external_user_id) if external_user_id else False
@@ -137,7 +140,7 @@ async def live_set_connection(
     from chalybclip.integrations.chalybobs import set_connection
 
     tenant = await TenantsRepo(db).get(tenant_id)
-    is_full_access = bool(tenant and (tenant.tier or "").lower() == "all_access")
+    is_full_access = bool(tenant and normalize_tier(tenant.tier) == "all_access")
     if not (is_full_access and tenant and tenant.external_user_id):
         return RedirectResponse(url="/dashboard/live", status_code=303)
 
@@ -187,7 +190,8 @@ def _verify_internal_bearer(authorization: str | None) -> None:
     received = ""
     if authorization and authorization.lower().startswith("bearer "):
         received = authorization[len("bearer "):].strip()
-    if received != expected:
+    # Constant-time: this secret is also the HMAC key for signed URLs.
+    if not hmac.compare_digest(received.encode("utf-8"), expected.encode("utf-8")):
         raise HTTPException(status_code=401, detail="bad bearer")
 
 
@@ -495,7 +499,7 @@ async def chalybobs_started(
     tenant = await TenantsRepo(db).find_by_external_user_id(external_user_id)
     if tenant is None:
         return JSONResponse({"ok": False, "reason": "no_tenant"})
-    if (tenant.tier or "").lower() != "all_access":
+    if normalize_tier(tenant.tier) != "all_access":
         return JSONResponse({"ok": False, "reason": "not_full_access"})
 
     from chalybclip.db.adapters import _now as _adapters_now
@@ -566,7 +570,7 @@ async def chalybobs_ended(
     )
 
     autoclip_scheduled = False
-    if tenant is not None and (tenant.tier or "").lower() == "all_access":
+    if tenant is not None and normalize_tier(tenant.tier) == "all_access":
         try:
             from chalybclip.api._pipeline import (
                 live_pipeline_runner,
