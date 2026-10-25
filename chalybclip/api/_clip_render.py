@@ -111,9 +111,6 @@ async def _build_ass_for_clip(
     highlight = captions_cfg.get("highlight_color") or "#ffd84a"
     position = captions_cfg.get("position") or "lower_third"
     font_size_key = captions_cfg.get("font_size") or "medium"
-    # Match the CSS scale * the base size. CSS base is 4.231cqw on a
-    # 1080-px-wide container = ~46 px. Scale to absolute pixels and
-    # scale by the operator's size pick.
     # One overlay unit = min(1% of width, 0.5625% of height): the same --u the
     # overlay CSS uses (_overlay_styles.html), so 9:16 stays exactly 1% of width.
     base_size = int(min(width, height * 0.5625) * 0.0423)
@@ -188,8 +185,8 @@ async def render_clip_in_background(
     from chalybclip.resources import heavy_slot
     from chalybclip.tenancy import bound_tenant
 
-    # Hub renders carry no operator cookie, so sign the /render query like auto-publish
-    # does; 900 s is the max auth._verify_render_signature accepts. No secret, no change.
+    # Hub renders carry no operator cookie, so sign /render like auto-publish does;
+    # 900 s suffices because the page is opened once at render start.
     if not auth_cookie_value and not auth_query:
         import contextlib
 

@@ -99,8 +99,8 @@ def make_channel_ingest_callback(
             raise
         try:
             with bound_tenant(tenant_id):
-                # Reuse the stream id of an already-ingested (tenant, vod_url) so ingest_vod cache-hits;
-                # a fresh ULID per re-detection re-downloaded the VOD into a duplicate row.
+                # Reuse an already-ingested (tenant, vod_url) stream id so ingest_vod
+                # cache-hits; a fresh ULID per re-detection re-downloaded the VOD.
                 existing = await StreamsRepo(db).find_by_vod_url(vod_url)
                 if existing is None:
                     # Write a 'pending' placeholder + detected event up front so the stream shows

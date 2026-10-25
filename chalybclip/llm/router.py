@@ -536,9 +536,6 @@ class LLMRouter:
 
             # NX.3 — report EVERY token-consuming call (failed/retried too: we were billed)
             # via the durable outbox; `amount` is all four token kinds, split in metadata.
-            #
-            # Operation tag: the LLM purpose, so /app/usage on the Chalyb
-            # side can collapse one pipeline run into a single row.
             if _usage_total(usage) > 0 or cost_usd_micros > 0:
                 from chalybclip.integrations.chalyb.outbox import enqueue_usage
 

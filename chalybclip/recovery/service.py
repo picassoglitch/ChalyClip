@@ -320,8 +320,8 @@ async def _recover_one_tenant(
         row = streams_by_id.get(d.stream_id)
         if row is None:
             continue
-        # Consumption contract: a re-dispatch is a fresh run on the hub's books.
-        # Hub down → leave it for the next sweep; refused → surface why and stop.
+        # A re-dispatch is a fresh run on the hub's books (the dead run's reservation
+        # expires on its TTL). Hub down → retry next sweep; refused → surface why, stop.
         from chalybclip.integrations.chalyb.admission import AdmissionRefused
         from chalybclip.jobs.usage import admit_job, fail_stream_for_refusal
 
