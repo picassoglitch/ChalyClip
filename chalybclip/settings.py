@@ -133,11 +133,8 @@ class Settings(BaseSettings):
     #     channels). Per-stream overrides through the existing
     #     `language` field on the pipeline call.
     #
-    # `assemblyai_speech_models` — model ladder, walked in order.
-    # Default `universal-2` ($0.15/hr vs Universal Pro's $0.21): it's
-    # only the transcript, and transcription is most of a run's cost
-    # (owner, 2026-10-03). Set ["universal-3-pro", "universal-2"] to go
-    # back to Pro first for its native ES/EN code-switching.
+    # `assemblyai_speech_models` — ladder; default universal-2 ($0.15/hr vs Pro $0.21,
+    # owner 2026-10-03). Put universal-3-pro first for native ES/EN code-switching.
     #
     # `assemblyai_speaker_labels` — per-video diarization labels
     # (A / B / C). The pipeline reads these instead of running
@@ -474,14 +471,8 @@ class Settings(BaseSettings):
     )
 
     # ------------------------------------------------------------------
-    # Consumption contract (chalyb docs/engines/consumption-contract.md):
-    # admission, boost lane, durable usage delivery.
-    # ------------------------------------------------------------------
-    # Boost lane — the one-shot Cloud Run Job (8 vCPU / 32 GiB) a run is
-    # sent to when /usage/admit answers lane=boost. Unset → boost-lane runs
-    # fall back to the standard worker (logged; the boost fee is dropped by
-    # re-admitting with boost=false). Project/region default to the
-    # metadata server's, so on Cloud Run only the job name is required.
+    # Consumption contract (chalyb docs/engines/consumption-contract.md). Boost lane: one-shot
+    # Cloud Run Job; unset → standard worker. Project/region default to the metadata server's.
     boost_job_name: str | None = Field(
         default=None, validation_alias="CHALYBCLIP_BOOST_JOB_NAME"
     )

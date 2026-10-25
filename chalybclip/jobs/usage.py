@@ -62,10 +62,8 @@ _MIB = 1024 * 1024
 # prices). standard = 4 vCPU / 8 GiB worker, boost = 8 vCPU / 32 GiB job.
 COMPUTE_MICROS_PER_S: dict[str, int] = {"standard": 88, "boost": 208}
 
-# Admission estimate inputs. Wall time is assumed ~0.5x the source length
-# (transcribe is remote; detect + cut dominate); a source of unknown
-# length (pre-probe) is estimated as 10 minutes so the first admit doesn't
-# refuse a short clip on a 1-hour guess — the post-probe re-admit corrects it.
+# Wall ~0.5x source (transcribe is remote; detect + cut dominate). Unknown length
+# counts as 10 min so a short clip isn't refused; the post-probe re-admit corrects it.
 _EST_WALL_PER_SOURCE_S = 0.5
 _UNKNOWN_SOURCE_MINUTES = 10.0
 # Billable tokens per USD micro (contract: blended $4 / 1M tokens).

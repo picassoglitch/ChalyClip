@@ -408,9 +408,8 @@ async def _publish_clip(
     # recorder — past 600s the auth-gated /render page 403s mid-render.
     # Best-effort: without the signing secret the cookie path still applies.
     auth_query = ""
-    # Also when a live request carries no session cookie: the Chalyb hub
-    # calls with a Bearer launch token (routers/hub_publish.py), so there is
-    # no `chalybclip_token` to hand the recorder.
+    # Also when a live request has no session cookie: the hub calls with a Bearer
+    # launch token (hub_publish.py), so there's no `chalybclip_token` for the recorder.
     if request is None or not cookie_val:
         with contextlib.suppress(RuntimeError):
             from chalybclip.api.routers.internal import sign_render_query

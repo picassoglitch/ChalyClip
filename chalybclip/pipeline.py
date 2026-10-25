@@ -354,9 +354,8 @@ class PipelineDeps:
     personas: dict[str, Persona] | None = None
     settings: Settings | None = None
     router_factory: Callable[[Path], LLMRouter] | None = None
-    # Called inside the ingest step once the real duration is known —
-    # the runner's post-probe re-admit (consumption contract). Raising
-    # (AdmissionRefused) fails the ingest step with the user's message.
+    # Post-probe re-admit (consumption contract), called once the real duration
+    # is known; AdmissionRefused fails the ingest step with the user's message.
     on_ingested: Callable[[Stream], Awaitable[None]] | None = None
     clock: Callable[[], _dt.datetime] = field(
         default_factory=lambda: lambda: _dt.datetime.now(_dt.UTC)

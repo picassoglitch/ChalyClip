@@ -35,10 +35,8 @@ class PipelineKickoff:
     # does the ingest itself instead of reading the web box's disk.
     source_object_key: str | None = None
     title: str | None = None
-    # Consumption contract: the admission this run was granted
-    # (jobs.usage.admit_job). The runner meters + settles against it; the
-    # lane picks the shared worker ("standard") or a one-shot Cloud Run Job
-    # ("boost"). None/standard for runs nobody admitted (tests, CLI).
+    # Consumption contract: this run's admission (jobs.usage.admit_job); lane picks the
+    # shared worker or a one-shot Cloud Run Job. None for unadmitted runs (tests, CLI).
     usage_job_id: str | None = None
     reservation_id: str | None = None
     lane: str = "standard"

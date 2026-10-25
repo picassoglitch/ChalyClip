@@ -64,10 +64,8 @@ _LEASE_S = 120.0
 _BACKOFF_BASE_S = 30.0
 _BACKOFF_CAP_S = 3600.0
 
-# The reservation a pipeline run was admitted under. Bound by the metering
-# wrapper for the whole run; every usage event enqueued inside it (LLM
-# calls, transcription, compute) carries it so the hub can net the run's
-# spend against its hold. Context-local, so concurrent runs don't mix.
+# The reservation a run was admitted under; every usage event enqueued inside
+# carries it so the hub nets the run's spend. Context-local: concurrent runs don't mix.
 _current_reservation: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "chalybclip_usage_reservation", default=None
 )

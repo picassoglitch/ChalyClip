@@ -49,9 +49,8 @@ class ProviderResult(BaseModel):
     output: dict[str, Any]
     input_tokens: int = 0
     output_tokens: int = 0
-    # Prompt-cache split (Anthropic `usage.cache_read_input_tokens` /
-    # `cache_creation_input_tokens`). `input_tokens` is the UNCACHED input
-    # only, so the four counts add up to everything billed.
+    # Anthropic prompt-cache split; `input_tokens` is UNCACHED input only, so the
+    # four counts add up to everything billed.
     cache_read_tokens: int = 0
     cache_write_tokens: int = 0
     model: str

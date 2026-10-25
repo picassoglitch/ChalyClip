@@ -32,6 +32,10 @@ import httpx
 import structlog
 
 from chalybclip.errors import ChalybClipError
+from chalybclip.integrations.gcp_identity import (
+    CloudRunIdTokenAuth,
+    is_cloud_run_url,
+)
 from chalybclip.integrations.modal_http import (
     ModalPollDeadlineError,
     poll_until_terminal,
@@ -72,6 +76,7 @@ class ModalJobDispatcher(JobDispatcher):
         timeout_s: float | None = None,
         poll_interval_s: float = _POLL_INTERVAL_S,
         fallback: JobDispatcher | None = None,
+        auth: httpx.Auth | None = None,
     ) -> None:
         from chalybclip.settings import get_settings
 
@@ -91,6 +96,12 @@ class ModalJobDispatcher(JobDispatcher):
                 "infra/modal_pipeline_app.py`) and CHALYBCLIP_MODAL_TOKEN, "
                 "or set CHALYBCLIP_JOB_DISPATCHER=in_process."
             )
+        # The Cloud Run worker is IAM-locked to this service's account; the
+        # body token alone gets a 403 from Cloud Run before the app sees it.
+        self._auth = auth or (
+            CloudRunIdTokenAuth(self._endpoint_url)
+            if is_cloud_run_url(self._endpoint_url) else None
+        )
         self._timeout_s = float(
             timeout_s
             if timeout_s is not None
@@ -200,7 +211,9 @@ class ModalJobDispatcher(JobDispatcher):
                     if "//" in self._endpoint_url else "?"
                 ),
             )
-            async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT_S) as client:
+            async with httpx.AsyncClient(
+                timeout=_REQUEST_TIMEOUT_S, auth=self._auth
+            ) as client:
                 resp = await client.post(self._endpoint_url, json=payload)
                 resp = await poll_until_terminal(
                     client=client,
@@ -230,16 +243,14 @@ class ModalJobDispatcher(JobDispatcher):
                 error=str(e),
             )
         except httpx.HTTPStatusError as e:
-            if e.response.status_code == 404 and "/jobs/" in str(e.request.url):
-                # The poll landed on a worker instance that doesn't hold
-                # this job (the job ledger is per-instance and Cloud Run can
-                # scale out). The run itself is fine and writes its own
-                # step / failure events to the shared DB — same as a poll
-                # deadline: stop tracking, don't mark it failed.
-                _log.warning(
+            status_code = e.response.status_code
+            if status_code in (401, 403, 404) and "/jobs/" in str(e.request.url):
+                # Wrong worker instance (per-instance ledger) or a refused poll token:
+                # the run is fine and reports itself, so stop tracking, don't fail it.
+                (_log.warning if status_code == 404 else _log.error)(
                     "jobs.modal.poll_lost",
                     stream_id=stream_id,
-                    status=404,
+                    status=status_code,
                 )
                 return
             body = (e.response.text or "")[:300]

@@ -84,9 +84,8 @@ def _code_for(status_code: int, reason: str | None = None) -> str:
 
 
 def _hub_error(status_code: int, message: str | None, reason: str | None) -> HubError:
-    # 4xx copy is the engine's own operator-facing text (validation, caps,
-    # state conflicts). 5xx messages embed vendor/infra detail (Zernio
-    # bodies, env var names) — the hub shows its generic copy instead.
+    # 4xx copy is the engine's operator-facing text; 5xx embeds vendor/infra detail
+    # (Zernio bodies, env var names), so the hub shows its generic copy instead.
     keep = message if (message and status_code < 500) else None
     code = _code_for(status_code, reason)
     return HubError(
@@ -317,9 +316,8 @@ async def _gate_clip(kw: dict[str, Any]) -> None:
         raise _not_found()
 
 
-# Hub tiers that may run auto-publish. Chalyb's `partner` normalizes to the
-# engine's top tier too, but the hub's plan table (TIER_CAPS.clipAutoPublish)
-# gives it to VIP only — so the hub path checks the token's own label.
+# Chalyb's `partner` maps to the top tier too, but the hub's plan table gives
+# auto-publish to VIP only (TIER_CAPS.clipAutoPublish), so check the token's label.
 _AUTOPILOT_HUB_TIERS = frozenset({"vip", "all_access"})
 
 
@@ -454,9 +452,8 @@ _REUSED: list[tuple[str, str, Callable[..., Awaitable[Any]], Gate | None]] = [
 ]
 
 
-# ---------- hub-only routes ----------
-# Declared BEFORE the reused mounts so a literal path never loses to a
-# path-parameter route.
+# ---------- hub-only routes ---------- (declared BEFORE the reused mounts
+# so a literal path never loses to a path-parameter route)
 
 
 def _row_json(row: Any) -> dict[str, Any]:

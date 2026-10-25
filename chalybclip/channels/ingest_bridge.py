@@ -87,11 +87,8 @@ def make_channel_ingest_callback(
         from chalybclip.integrations.chalyb.admission import AdmissionRefused
         from chalybclip.jobs.usage import admit_job, cancel_admission, readmit_job
 
-        # Consumption contract: an auto-detected VOD is the user's run too —
-        # ask the hub before downloading it, re-admit with the real length
-        # after. A refusal raises, so the poller counts the VOD failed and
-        # retries / parks it on its own schedule (balance topped up, caps
-        # renewed) instead of silently dropping it.
+        # Consumption contract: admit before downloading, re-admit with the real length
+        # after. A refusal raises so the poller retries/parks the VOD instead of dropping it.
         try:
             admission = await admit_job(db, tenant_id=tenant_id, stream_id="")
         except AdmissionRefused as e:
@@ -102,21 +99,12 @@ def make_channel_ingest_callback(
             raise
         try:
             with bound_tenant(tenant_id):
-                # Idempotency on (tenant, vod_url): if this VOD was already
-                # ingested, reuse its stream id so ingest_vod cache-hits (no
-                # re-download) and the upsert is a no-op. Without this, every
-                # re-detection mints a fresh ULID and re-downloads the whole
-                # VOD into a duplicate stream row — which is what a lost
-                # seen-set or a retried pipeline failure was producing.
+                # Reuse an already-ingested (tenant, vod_url) stream id so ingest_vod
+                # cache-hits; a fresh ULID per re-detection re-downloaded the VOD.
                 existing = await StreamsRepo(db).find_by_vod_url(vod_url)
                 if existing is None:
-                    # New VOD: write a "pending" placeholder + emit the detected
-                    # event UP FRONT so the stream shows on the dashboard's
-                    # Streams list the moment it's pulled, not only once the
-                    # (potentially slow) download finishes. ingest_vod is
-                    # idempotent on this stream_id; reconcile_metadata below
-                    # backfills the placeholder with real metadata + flips it to
-                    # "ingested" when the download lands.
+                    # Write a 'pending' placeholder + detected event up front so the stream shows
+                    # the moment it's pulled; reconcile_metadata below flips it to 'ingested'.
                     stream_id = new_id("str")
                     await StreamsRepo(db).upsert(
                         _pending_placeholder(
@@ -148,20 +136,15 @@ def make_channel_ingest_callback(
                         db=db,
                     )
                 except Exception:
-                    # A detected VOD whose download fails (e.g. "video not
-                    # available") flips the placeholder from "pending" to "failed"
-                    # instead of hanging at "pending" forever on the Streams list.
-                    # Re-raise so the channel poller still counts the VOD failed
-                    # and applies its own retry/park.
+                    # A failed download flips the placeholder to 'failed' instead of 'pending'
+                    # forever; re-raise so the channel poller still applies its retry/park.
                     with contextlib.suppress(Exception):
                         await StreamsRepo(db).set_status(
                             stream_id, status="failed", only_if="pending"
                         )
                     raise
-                # Backfill the real metadata (title / channel / duration) onto the
-                # placeholder and flip "pending" -> "ingested". A plain upsert is
-                # INSERT-OR-IGNORE, so it would NOT update the pre-inserted row —
-                # reconcile_metadata is the same path the URL-job pipeline uses.
+                # reconcile_metadata, not upsert: upsert is INSERT-OR-IGNORE and would not
+                # update the pre-inserted placeholder (same path as the URL-job pipeline).
                 await StreamsRepo(db).reconcile_metadata(
                     stream_id,
                     title=stream.title,

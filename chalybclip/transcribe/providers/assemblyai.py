@@ -125,9 +125,8 @@ class AssemblyAIProvider:
         #          no prompt (max accuracy on a monolingual creator).
         self._language_mode = (language_mode or "auto").strip().lower()
         self._speaker_labels = speaker_labels
-        # Model ladder — Universal-2 by default (cheapest; it's only
-        # the transcript). Operators can put universal-3-pro first via
-        # CHALYBCLIP_ASSEMBLYAI_SPEECH_MODELS for native code-switching.
+        # Universal-2 by default (cheapest; it's only the transcript); put universal-3-pro
+        # first via CHALYBCLIP_ASSEMBLYAI_SPEECH_MODELS for native code-switching.
         self._speech_models = list(speech_models or ["universal-2"])
         self._polling_interval_s = polling_interval_s
         self._timeout_s = request_timeout_s
@@ -570,9 +569,8 @@ def cost_micros_for(
     pre-call estimator that wants to show the operator a quote before
     they spend credits.
     """
-    # Priced at the ladder's first rung: the cost is settled before we know
-    # whether AssemblyAI fell back to Universal-2, and over-billing that
-    # rare fallback by $0.06/hr beats under-billing every Pro transcript.
+    # Priced at the first rung: cost settles before we know if AssemblyAI fell back, and
+    # over-billing a rare U2 fallback by $0.06/hr beats under-billing every Pro transcript.
     rate = _COST_U2_USD_PER_SECOND if speech_model == "universal-2" else _COST_PRO_USD_PER_SECOND
     if speaker_labels:
         rate += _COST_DIARIZATION_USD_PER_SECOND
