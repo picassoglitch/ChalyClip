@@ -352,3 +352,59 @@ async def test_poll_404_is_lost_tracking_not_failure(
     await d.drain()
     assert errors == []
     assert "str_TEST" not in active_stream_ids()
+
+
+async def test_cloud_run_worker_gets_id_token_on_post_and_polls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The worker is IAM-locked: every request (kickoff POST + poll GETs)
+    must carry a Google ID token minted for the worker's URL."""
+    from chalybclip.integrations.gcp_identity import CloudRunIdTokenAuth
+
+    audiences: list[str] = []
+
+    def metadata(request: httpx.Request) -> httpx.Response:
+        assert request.headers["Metadata-Flavor"] == "Google"
+        audiences.append(request.url.params["audience"])
+        return httpx.Response(200, text="id-tok\n")
+
+    auth_headers: list[str | None] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        auth_headers.append(request.headers.get("authorization"))
+        if request.method == "POST":
+            return httpx.Response(303, headers={"location": "/jobs/j1"})
+        return httpx.Response(200, json={"status": "done"})
+
+    import chalybclip.jobs.modal as jobs_modal
+
+    monkeypatch.setattr(
+        jobs_modal.httpx, "AsyncClient",
+        lambda *a, **kw: _REAL_ASYNC_CLIENT(
+            transport=kw.get("transport") or httpx.MockTransport(handler),
+            auth=kw.get("auth"),
+        ),
+    )
+    url = "https://chalybclip-worker-abc-uc.a.run.app"
+    d = _dispatcher(
+        endpoint_url=url,
+        auth=CloudRunIdTokenAuth(
+            url, metadata_transport=httpx.MockTransport(metadata)
+        ),
+    )
+    errors = _no_failure_emit(d)
+
+    await d.dispatch_pipeline(_make_kickoff())
+    await d.drain()
+
+    assert auth_headers == ["Bearer id-tok", "Bearer id-tok"]
+    assert audiences == [url]  # cached across the poll
+    assert errors == []
+
+
+def test_cloud_run_endpoint_gets_id_token_auth_by_default() -> None:
+    from chalybclip.integrations.gcp_identity import CloudRunIdTokenAuth
+
+    run = _dispatcher(endpoint_url="https://w-abc-uc.a.run.app")
+    assert isinstance(run._auth, CloudRunIdTokenAuth)
+    assert _dispatcher(endpoint_url="https://x.modal.run/p")._auth is None
