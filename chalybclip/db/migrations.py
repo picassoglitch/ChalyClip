@@ -27,11 +27,8 @@ _PG_BASELINE_PATH = Path(__file__).parent / "pg_baseline.sql"
 _PG_BASELINE_VERSION_RE = re.compile(r"through v(\d+)", re.IGNORECASE)
 
 
-# A post-baseline migration that can't be written as portable SQL (e.g. a
-# primary-key change: SQLite rebuilds the table, Postgres alters it in place)
-# ships a Postgres twin `NNN_<name>.pg.sql` next to `NNN_<name>.sql`; the
-# Postgres runner uses the twin, SQLite (and the baseline generator) the
-# plain file.
+# Migrations that can't be portable SQL (e.g. a PK change) ship a Postgres twin
+# `NNN_<name>.pg.sql`; Postgres runs the twin, SQLite and the baseline the plain file.
 _PG_SUFFIX = ".pg.sql"
 
 

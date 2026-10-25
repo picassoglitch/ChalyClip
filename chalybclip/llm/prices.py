@@ -69,10 +69,8 @@ ANTHROPIC_RATES: dict[str, TokenRates] = {
     "claude-mythos-5-1": TokenRates(input=10.00, output=50.00, cache_read=0.25),
 }
 
-# What an unknown model of a PAID provider is charged at: the most
-# expensive rate in the table. Over-billing an unpriced model is a bug we
-# notice and fix (an error is logged on every call); under-billing it at 0
-# was silent.
+# Unknown PAID models bill at the most expensive rate: over-billing is logged
+# and gets fixed, under-billing at 0 was silent.
 CONSERVATIVE_RATES: TokenRates = max(
     ANTHROPIC_RATES.values(), key=lambda r: (r.output, r.input)
 )

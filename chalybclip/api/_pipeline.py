@@ -74,10 +74,8 @@ async def default_pipeline_runner(kickoff: PipelineKickoff) -> None:
             lane=getattr(kickoff, "lane", "standard"),
             stream_dir=kickoff.output_dir / kickoff.stream.id,
         ) as run:
-            # Registered as in-flight so the disk reclaimers (watchdog,
-            # ingest preflight, sweep backstop) never delete this stream's
-            # source mid-run — long transcribe/LLM stretches only READ it,
-            # so mtime-based activity checks can't see the run.
+            # In-flight so disk reclaimers never delete the source mid-run: long
+            # transcribe/LLM stretches only READ it, so mtime checks can't see the run.
             with pipeline_active(kickoff.stream.id):
                 await process_vod(
                     tenant_id=kickoff.tenant_id,

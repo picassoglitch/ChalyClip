@@ -3294,12 +3294,8 @@ async def clip_overlay_finalize(
         },
     )
 
-    # Auto-publish ("Piloto automático", mode=on_approve) runs as a
-    # background job queued AFTER the 1080 pre-render above, so approve
-    # returns at once and the publish finds the render already warm. The
-    # job records a pending row the editor shows, and a failure lands in
-    # Publicar's failed list with Reintentar (api/_autopublish_job.py).
-    # Best-effort — never blocks approval.
+    # Auto-publish (on_approve) is queued AFTER the 1080 pre-render so approve returns
+    # at once; failures land in Publicar with Reintentar (_autopublish_job.py). Best-effort.
     try:
         from chalybclip.api._autopublish_job import enqueue_autopublish
 

@@ -101,10 +101,8 @@ def _verify_render_signature(request: Request) -> str | None:
     try:
         from chalybclip.api.routers.internal import _verify_signed_params
 
-        # 1800 s: what every cookieless render mints (zernio._publish_clip
-        # and the growth engine sign for 1800 s — a cold render can wait
-        # 240 s for an in-flight one, then fall back to the ~5 min legacy
-        # recorder). At 900 every such render was refused (303 to login).
+        # 1800 s: what cookieless renders sign for (zernio._publish_clip, growth engine);
+        # at 900 every such render was refused (303 to login).
         _verify_signed_params(
             resource_id=parts[2], tenant=tenant, exp=int(exp), sig=sig,
             max_ttl_s=1800,
@@ -148,9 +146,8 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
         # (mint_signed_render_url) instead of a cookie. A valid signature
         # binds the tenant and skips the bearer/cookie requirement — scoped
         # to one clip's render page, short TTL. No valid sig → normal auth.
-        # Hub API (/api/hub/v1): the Chalyb hub's per-request launch token
-        # is the ONLY credential accepted there — no cookie, no api_token.
-        # Tenant resolution (incl. auto-provision) mirrors /auth/sso.
+        # Hub API (/api/hub/v1): the hub's launch token is the ONLY credential accepted;
+        # tenant resolution (incl. auto-provision) mirrors /auth/sso.
         hub_call = is_hub_path(path)
         signed_tenant = None if hub_call else _verify_render_signature(request)
         if hub_call:

@@ -514,9 +514,8 @@ async def sso_finalize(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-    # Tier sync, Zernio auto-link and external_user_id reconciliation —
-    # all non-blocking. Shared with /api/hub/v1 so the hub's API calls
-    # resolve the tenant exactly like this login does (sso_tenant.py).
+    # Tier sync, Zernio auto-link, external_user_id reconciliation (non-blocking);
+    # shared with /api/hub/v1 so hub calls resolve the tenant like this login (sso_tenant.py).
     await sync_sso_claims(db, payload)
 
     # Pull the live balance from Chalyb in the background — chalyb's

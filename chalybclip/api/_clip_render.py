@@ -114,9 +114,8 @@ async def _build_ass_for_clip(
     # Match the CSS scale * the base size. CSS base is 4.231cqw on a
     # 1080-px-wide container = ~46 px. Scale to absolute pixels and
     # scale by the operator's size pick.
-    # One overlay unit = min(1% of width, 0.5625% of height): exactly
-    # 1% of the width on 9:16 (unchanged), height-relative on 16:9 and
-    # 1:1 — the same --u the overlay CSS uses (_overlay_styles.html).
+    # One overlay unit = min(1% of width, 0.5625% of height): the same --u the
+    # overlay CSS uses (_overlay_styles.html), so 9:16 stays exactly 1% of width.
     base_size = int(min(width, height * 0.5625) * 0.0423)
     scale = {"small": 0.78, "medium": 1.0, "large": 1.24, "xl": 1.5}.get(
         font_size_key, 1.0,
@@ -189,13 +188,8 @@ async def render_clip_in_background(
     from chalybclip.resources import heavy_slot
     from chalybclip.tenancy import bound_tenant
 
-    # Hub-initiated renders (/api/hub/v1, Bearer launch token) carry no
-    # operator cookie. Without a credential the auth-gated /render page
-    # bounces the recorder and the render fails, so mint the same signed
-    # render query background auto-publish uses. 900s: the most the /render
-    # signature check accepts (auth._verify_render_signature max_ttl_s), and
-    # the page is opened once at the start of the render. Best-effort — no
-    # signing secret, no change.
+    # Hub renders carry no operator cookie, so sign the /render query like auto-publish
+    # does; 900 s is the max auth._verify_render_signature accepts. No secret, no change.
     if not auth_cookie_value and not auth_query:
         import contextlib
 
@@ -241,11 +235,8 @@ async def render_clip_in_background(
                     clip_id, pct,
                 )
 
-        # Output format (chalybclip.clip.formats): horizontal / square
-        # render on their own base video at a 16:9 / 1:1 viewport. Callers
-        # keep passing the vertical preset; the cache paths don't change,
-        # so download, approve pre-render and publish all follow the
-        # clip's chosen format.
+        # Horizontal/square render from their own base video (clip.formats); cache paths
+        # don't change, so download, approve and publish all follow the clip's format.
         from chalybclip.clip.formats import clip_format, ensure_format_base, render_dims
         from chalybclip.db import StreamsRepo
 

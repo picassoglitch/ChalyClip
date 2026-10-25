@@ -534,11 +534,8 @@ class LLMRouter:
                 # has the row; a DB write failure must not propagate up.
                 pass
 
-            # Slice NX.3 — usage back to Chalyb, via the durable outbox (the
-            # drain delivers it; a restart no longer drops it). EVERY call
-            # that consumed tokens is reported, failed/retried ones included
-            # — the provider billed us for them. `amount` is the total of
-            # all four token kinds; `metadata.tokens` carries the split.
+            # NX.3 — report EVERY token-consuming call (failed/retried too: we were billed)
+            # via the durable outbox; `amount` is all four token kinds, split in metadata.
             #
             # Operation tag: the LLM purpose, so /app/usage on the Chalyb
             # side can collapse one pipeline run into a single row.

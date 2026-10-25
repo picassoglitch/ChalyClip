@@ -132,9 +132,8 @@ def create_app(
             job_dispatcher = get_dispatcher(runner=runner)
         except Exception:  # noqa: BLE001 — defensive boot
             job_dispatcher = InProcessJobDispatcher(runner)
-        # Consumption contract: boost-lane admissions go to a one-shot
-        # Cloud Run Job; everything else (and every fallback) to the
-        # dispatcher chosen above.
+        # Consumption contract: boost-lane admissions go to a one-shot Cloud Run Job;
+        # everything else (and every fallback) to the dispatcher chosen above.
         from chalybclip.jobs.boost import BoostLaneDispatcher
 
         job_dispatcher = BoostLaneDispatcher(job_dispatcher)
