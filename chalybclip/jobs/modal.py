@@ -243,16 +243,14 @@ class ModalJobDispatcher(JobDispatcher):
                 error=str(e),
             )
         except httpx.HTTPStatusError as e:
-            if e.response.status_code == 404 and "/jobs/" in str(e.request.url):
-                # The poll landed on a worker instance that doesn't hold
-                # this job (the job ledger is per-instance and Cloud Run can
-                # scale out). The run itself is fine and writes its own
-                # step / failure events to the shared DB — same as a poll
-                # deadline: stop tracking, don't mark it failed.
-                _log.warning(
+            status_code = e.response.status_code
+            if status_code in (401, 403, 404) and "/jobs/" in str(e.request.url):
+                # Wrong worker instance (per-instance ledger) or a refused poll token:
+                # the run is fine and reports itself, so stop tracking, don't fail it.
+                (_log.warning if status_code == 404 else _log.error)(
                     "jobs.modal.poll_lost",
                     stream_id=stream_id,
-                    status=404,
+                    status=status_code,
                 )
                 return
             body = (e.response.text or "")[:300]

@@ -7,7 +7,8 @@ GCP (local dev, tests, Modal) there is none and requests go out without
 the header, exactly as before.
 
 Tokens live 1 h and a pipeline poll loop can run for hours, so the token
-is cached and re-minted shortly before it expires.
+is cached, re-minted shortly before it expires, and re-minted once more
+if the worker still answers 401/403.
 """
 
 from __future__ import annotations
@@ -35,11 +36,12 @@ def is_cloud_run_url(url: str) -> bool:
 
 
 class CloudRunIdTokenAuth(httpx.Auth):
-    """Attaches a metadata-server ID token for `audience` to every request.
+    """Attaches a metadata-server ID token for `audience` to requests sent
+    to that origin (never to other hosts, e.g. after a redirect).
 
     `audience` is the target service's base URL (scheme + host). Fetch
-    failures are logged and the request is sent unauthenticated — Cloud
-    Run then answers 403, which the caller already surfaces as a failure.
+    failures are logged and the request is sent unauthenticated; Cloud Run
+    then answers 403 and the caller handles it.
     """
 
     def __init__(
@@ -54,8 +56,9 @@ class CloudRunIdTokenAuth(httpx.Auth):
         self._token: str | None = None
         self._fetched_at = 0.0
 
-    async def _get_token(self) -> str | None:
-        if self._token and time.monotonic() - self._fetched_at < _TOKEN_TTL_S:
+    async def _get_token(self, *, force: bool = False) -> str | None:
+        fresh = time.monotonic() - self._fetched_at < _TOKEN_TTL_S
+        if self._token and fresh and not force:
             return self._token
         try:
             async with httpx.AsyncClient(
@@ -73,19 +76,43 @@ class CloudRunIdTokenAuth(httpx.Auth):
                 "gcp_identity.token_unavailable",
                 audience=self._audience,
                 error=type(e).__name__,
+                status=(
+                    e.response.status_code
+                    if isinstance(e, httpx.HTTPStatusError) else None
+                ),
             )
             return None
-        self._token = resp.text.strip()
+        token = resp.text.strip()
+        if not token:
+            _log.warning(
+                "gcp_identity.token_unavailable",
+                audience=self._audience,
+                error="empty_body",
+            )
+            return None
+        self._token = token
         self._fetched_at = time.monotonic()
-        return self._token
+        return token
 
     async def async_auth_flow(
         self, request: httpx.Request
     ) -> AsyncGenerator[httpx.Request, httpx.Response]:
+        if f"{request.url.scheme}://{request.url.host}" != self._audience:
+            yield request
+            return
         token = await self._get_token()
         if token:
             request.headers["Authorization"] = f"Bearer {token}"
-        yield request
+        response = yield request
+        if response.status_code not in (401, 403):
+            return
+        # A rejected token (or a failed mint) shouldn't fail an hours-long
+        # poll loop: mint a fresh one and resend once.
+        await response.aread()
+        token = await self._get_token(force=True)
+        if token:
+            request.headers["Authorization"] = f"Bearer {token}"
+            yield request
 
 
 __all__ = ["CloudRunIdTokenAuth", "is_cloud_run_url"]

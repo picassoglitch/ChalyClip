@@ -354,6 +354,45 @@ async def test_poll_404_is_lost_tracking_not_failure(
     assert "str_TEST" not in active_stream_ids()
 
 
+@pytest.mark.parametrize("status", [401, 403])
+async def test_poll_auth_rejection_is_lost_tracking_not_failure(
+    monkeypatch: pytest.MonkeyPatch, status: int
+) -> None:
+    """A refused poll token mustn't fail (and settle) a run the worker is
+    still executing."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            return httpx.Response(303, headers={"location": "/jobs/j1"})
+        return httpx.Response(status, text="Forbidden")
+
+    d = _dispatcher()
+    _patch_client(monkeypatch, handler)
+    errors = _no_failure_emit(d)
+
+    await d.dispatch_pipeline(_make_kickoff())
+    await d.drain()
+    assert errors == []
+    assert "str_TEST" not in active_stream_ids()
+
+
+async def test_kickoff_403_emits_pipeline_failed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Refused at kickoff means the worker never got the job: that one fails."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(403, text="Forbidden")
+
+    d = _dispatcher()
+    _patch_client(monkeypatch, handler)
+    errors = _no_failure_emit(d)
+
+    await d.dispatch_pipeline(_make_kickoff())
+    await d.drain()
+    assert len(errors) == 1 and "403" in errors[0]
+
+
 async def test_cloud_run_worker_gets_id_token_on_post_and_polls(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

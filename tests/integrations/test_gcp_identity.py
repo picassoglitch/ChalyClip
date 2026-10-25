@@ -74,3 +74,66 @@ def test_is_cloud_run_url() -> None:
     assert is_cloud_run_url("https://chalybclip-worker-znilbomw3q-uc.a.run.app")
     assert not is_cloud_run_url("https://x--pipeline.modal.run")
     assert not is_cloud_run_url("https://evil.run.app.example.com")
+
+
+async def test_rejected_token_is_reminted_and_resent_once() -> None:
+    tokens = iter(["stale", "fresh", "never"])
+
+    def metadata(_r: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=next(tokens))
+
+    sent: list[str | None] = []
+
+    def worker(request: httpx.Request) -> httpx.Response:
+        sent.append(request.headers.get("authorization"))
+        ok = request.headers.get("authorization") == "Bearer fresh"
+        return httpx.Response(200 if ok else 403)
+
+    auth = CloudRunIdTokenAuth(
+        "https://w-abc-uc.a.run.app",
+        metadata_transport=httpx.MockTransport(metadata),
+    )
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(worker), auth=auth
+    ) as client:
+        assert (await client.get("https://w-abc-uc.a.run.app/jobs/j1")).status_code == 200
+        assert sent == ["Bearer stale", "Bearer fresh"]
+        sent.clear()
+        # Still refused after the re-mint: one resend only, then the 403 surfaces.
+        auth._token, auth._fetched_at = "revoked", gcp_identity.time.monotonic()
+        tokens = iter(["revoked-again"])
+        assert (await client.get("https://w-abc-uc.a.run.app/jobs/j1")).status_code == 403
+        assert len(sent) == 2
+
+
+async def test_token_is_not_sent_to_other_hosts() -> None:
+    def metadata(_r: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text="tok-1")
+
+    auth = CloudRunIdTokenAuth(
+        "https://w-abc-uc.a.run.app",
+        metadata_transport=httpx.MockTransport(metadata),
+    )
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(_echo_auth), auth=auth
+    ) as client:
+        assert (await client.get("https://elsewhere.example.com/")).text == ""
+
+
+async def test_empty_metadata_body_sends_no_header() -> None:
+    auth = CloudRunIdTokenAuth(
+        "https://w-abc-uc.a.run.app",
+        metadata_transport=httpx.MockTransport(
+            lambda _r: httpx.Response(200, text="  \n")
+        ),
+    )
+    assert await _call(auth) == ""
+    assert auth._token is None
+
+
+async def test_metadata_error_status_sends_no_header() -> None:
+    auth = CloudRunIdTokenAuth(
+        "https://w-abc-uc.a.run.app",
+        metadata_transport=httpx.MockTransport(lambda _r: httpx.Response(503)),
+    )
+    assert await _call(auth) == ""
