@@ -408,7 +408,9 @@ async def _publish_clip(
     # recorder — past 600s the auth-gated /render page 403s mid-render.
     # Best-effort: without the signing secret the cookie path still applies.
     auth_query = ""
-    if request is None:
+    # Also when a live request has no session cookie: the hub calls with a Bearer
+    # launch token (hub_publish.py), so there's no `chalybclip_token` for the recorder.
+    if request is None or not cookie_val:
         with contextlib.suppress(RuntimeError):
             from chalybclip.api.routers.internal import sign_render_query
             auth_query = sign_render_query(
@@ -582,6 +584,19 @@ async def zernio_dashboard(
       3. Active tab content
       4. History feed at the bottom
     """
+    return templates.TemplateResponse(
+        request,
+        "publish/zernio_dashboard.html",
+        await dashboard_context(request, tenant_id=tenant_id, db=db),
+    )
+
+
+async def dashboard_context(
+    request: Request, *, tenant_id: str, db: Database,
+) -> dict[str, Any]:
+    """Everything the Publish Center shows, as plain data. Shared by the
+    Jinja page above and the Chalyb hub's JSON API (routers/hub_publish.py)
+    so both read the same history/stats/publishable rules."""
     settings = get_settings()
     configured = bool(settings.zernio_api_key)
 
@@ -770,45 +785,41 @@ async def zernio_dashboard(
     }
     stats["total"] = stats["published"] + stats["failed"] + stats["scheduled"]
 
-    return templates.TemplateResponse(
-        request,
-        "publish/zernio_dashboard.html",
-        {
-            "configured": configured,
-            "profile_id": profile_id,
-            "profile_name": profile_name,
-            "accounts": accounts,
-            "connected_set": connected_set,
-            "account_by_platform": _account_map(accounts),
-            "account_limit": _account_limit(request),
-            "account_count": len(accounts),
-            "connect_fetch_failed": connect_fetch_failed,
-            "history": history,
-            # Clips still in `published` status — drives the "Republicar"
-            # action on the Published tab (reopen -> approved -> re-publish).
-            "published_clip_ids": sorted(c.id for c in published_clips),
-            "publishable_clips": publishable,
-            "publishable_total": publishable_total,
-            "supported_platforms": _SUPPORTED_PLATFORMS,
-            "stats": stats,
-            # Borradores — local rows seeded status='draft' at save time
-            # (publishes already tenant-filtered; limit=100 above).
-            "drafts": [p for p in publishes if p.status == "draft"],
-            # Phase 10 growth layer is Pro-gated — the tab shows the
-            # panels for paid tiers, an upsell card otherwise.
-            "is_pro": _is_paid_tier(request),
-            # Phase 11 — Discord/Telegram connect chips (community
-            # channels, not clip targets).
-            "community_platforms": _COMMUNITY_PLATFORMS,
-            "community_connected": sorted(
-                connected_set & _COMMUNITY_PLATFORM_IDS
-            ),
-            # Phase 12 — feature flags (default OFF) gate the ads +
-            # whatsapp UI; the controls don't render until turned on.
-            "feature_ads": get_settings().feature_ads,
-            "feature_whatsapp": get_settings().feature_whatsapp,
-        },
-    )
+    return {
+        "configured": configured,
+        "profile_id": profile_id,
+        "profile_name": profile_name,
+        "accounts": accounts,
+        "connected_set": connected_set,
+        "account_by_platform": _account_map(accounts),
+        "account_limit": _account_limit(request),
+        "account_count": len(accounts),
+        "connect_fetch_failed": connect_fetch_failed,
+        "history": history,
+        # Clips still in `published` status — drives the "Republicar"
+        # action on the Published tab (reopen -> approved -> re-publish).
+        "published_clip_ids": sorted(c.id for c in published_clips),
+        "publishable_clips": publishable,
+        "publishable_total": publishable_total,
+        "supported_platforms": _SUPPORTED_PLATFORMS,
+        "stats": stats,
+        # Borradores — local rows seeded status='draft' at save time
+        # (publishes already tenant-filtered; limit=100 above).
+        "drafts": [p for p in publishes if p.status == "draft"],
+        # Phase 10 growth layer is Pro-gated — the tab shows the
+        # panels for paid tiers, an upsell card otherwise.
+        "is_pro": _is_paid_tier(request),
+        # Phase 11 — Discord/Telegram connect chips (community
+        # channels, not clip targets).
+        "community_platforms": _COMMUNITY_PLATFORMS,
+        "community_connected": sorted(
+            connected_set & _COMMUNITY_PLATFORM_IDS
+        ),
+        # Phase 12 — feature flags (default OFF) gate the ads +
+        # whatsapp UI; the controls don't render until turned on.
+        "feature_ads": get_settings().feature_ads,
+        "feature_whatsapp": get_settings().feature_whatsapp,
+    }
 
 
 def _is_paid_tier(request: Request) -> bool:
@@ -917,6 +928,33 @@ async def zernio_connect(
             status_code=400,
         )
 
+    # After the OAuth callback, Zernio redirects the popup HERE instead
+    # of its own dashboard — our /connected page closes the popup and
+    # notifies the main tab. The operator never sees Zernio's UI. The
+    # platform rides on the query string so /connected can tell the
+    # opener WHICH chip just connected.
+    redirect_back = (
+        f"{_public_base_url(request)}/dashboard/publish/zernio/connected"
+        f"?platform={platform}"
+    )
+    return await connect_auth_url_response(
+        request, tenant_id=tenant_id, db=db, platform=platform,
+        redirect_back=redirect_back,
+    )
+
+
+async def connect_auth_url_response(
+    request: Request,
+    *,
+    tenant_id: str,
+    db: Database,
+    platform: str,
+    redirect_back: str,
+) -> Response:
+    """Tier cap check + mint the hosted-OAuth authUrl for one (already
+    validated) platform; Zernio sends the popup to `redirect_back` after
+    the OAuth. Shared by the dashboard (redirects to /connected here) and
+    the Chalyb hub's JSON API (redirects to the hub's own landing page)."""
     profile_id = await _require_profile(db, tenant_id)
     client = _build_client()
 
@@ -947,15 +985,6 @@ async def zernio_connect(
                 status_code=402,
             )
 
-    # After the OAuth callback, Zernio redirects the popup HERE instead
-    # of its own dashboard — our /connected page closes the popup and
-    # notifies the main tab. The operator never sees Zernio's UI. The
-    # platform rides on the query string so /connected can tell the
-    # opener WHICH chip just connected.
-    redirect_back = (
-        f"{_public_base_url(request)}/dashboard/publish/zernio/connected"
-        f"?platform={platform}"
-    )
     # Facebook needs a post-OAuth page selection. headless=true makes
     # Zernio's redirect carry the selection state (tempToken & co)
     # instead of showing Zernio's own picker, and /connected renders
@@ -1658,6 +1687,30 @@ async def zernio_community_save_settings(
 # `_publish_clip` (renders first) — the legacy publish_jobs worker is gone.
 
 _AUTOPUBLISH_MODES = ("on_approve", "hands_free")
+
+
+def autopilot_allowed_tier(tier: str | None) -> bool:
+    """Auto-publish ("Piloto automático") is a top-tier perk (Chalyb VIP —
+    owner decision 2026-10-15): saving it ON is refused below, and the
+    on-approve / hands-free firing paths skip tenants below the top tier
+    (covers a tenant who enabled it on a lower plan or downgraded)."""
+    from chalybclip.tiers import TOP_TIERS, normalize_tier
+
+    return normalize_tier(tier) in TOP_TIERS
+
+
+def _autopilot_paywall() -> HTTPException:
+    return HTTPException(
+        status_code=402,
+        detail={
+            "reason": "paywall_autopilot",
+            "message": (
+                "El piloto automático es parte del plan VIP. Puedes publicar "
+                "y programar tus clips a mano, o subir tu plan."
+            ),
+            "upgrade_url": "https://chalyb.com/app/planes",
+        },
+    )
 _AUTOPUBLISH_POST_MODES = ("queue", "now")
 
 
@@ -1709,6 +1762,10 @@ async def zernio_autopublish_save(
     data = await _read_json(request)
     if not isinstance(data, dict):
         return JSONResponse({"ok": False, "error": "Body must be JSON"}, status_code=400)
+    if bool(data.get("enabled")) and not autopilot_allowed_tier(
+        getattr(request.state, "tenant_tier", None)
+    ):
+        raise _autopilot_paywall()
     mode = str(data.get("mode") or "on_approve")
     if mode not in _AUTOPUBLISH_MODES:
         mode = "on_approve"
@@ -1900,7 +1957,12 @@ async def _emit_degenerate_skip(
 
 
 async def maybe_autopublish_on_approve(
-    *, request: Request, db: Database, tenant_id: str, clip_id: str
+    *,
+    request: Request,
+    db: Database,
+    tenant_id: str,
+    clip_id: str,
+    raise_errors: bool = False,
 ) -> str | None:
     """Best-effort auto-publish of a just-approved clip. Returns the Zernio
     post_id on success, or None when it didn't fire (disabled, wrong mode,
@@ -1927,6 +1989,9 @@ async def maybe_autopublish_on_approve(
         if not get_settings().zernio_api_key:
             return None
         tenant = await TenantsRepo(db).get(tenant_id)
+        if not autopilot_allowed_tier(tenant.tier if tenant else None):
+            log.info("autopublish.tier_not_allowed", tenant_id=tenant_id)
+            return None
         profile_id = tenant.zernio_profile_id if tenant else None
         if not profile_id:
             return None
@@ -1982,6 +2047,10 @@ async def maybe_autopublish_on_approve(
         log.warning(
             "autopublish.failed", tenant_id=tenant_id, clip_id=clip_id, error=str(e)
         )
+        if raise_errors:
+            # The background approve job (api/_autopublish_job.py) records
+            # the failure where Publicar's failed list shows it.
+            raise
         return None
 
 
@@ -2014,6 +2083,9 @@ async def autopublish_hands_free_sweep(
         if not settings.zernio_api_key or not base_url:
             return 0
         tenant = await TenantsRepo(db).get(tenant_id)
+        if not autopilot_allowed_tier(tenant.tier if tenant else None):
+            log.info("autopublish.handsfree.tier_not_allowed", tenant_id=tenant_id)
+            return 0
         profile_id = tenant.zernio_profile_id if tenant else None
         if not profile_id:
             return 0
@@ -3118,20 +3190,23 @@ async def zernio_failed_json(
 ) -> Response:
     """Failed posts for this tenant, each with its per-platform error +
     Spanish hint. Powers the clickable FAILED counter list."""
+    from chalybclip.api._autopublish_job import failed_placeholders
     from chalybclip.integrations.zernio.errors import summarize_failed_platforms
 
+    # Auto-publish-on-approve jobs that failed before reaching Zernio.
+    local_failed = await failed_placeholders(db, tenant_id)
     tenant = await TenantsRepo(db).get(tenant_id)
     profile_id = tenant.zernio_profile_id if tenant else None
     settings = get_settings()
     if not profile_id or not settings.zernio_api_key:
-        return JSONResponse({"ok": True, "failed": []})
+        return JSONResponse({"ok": True, "failed": local_failed})
     client = _build_client()
     try:
         rows = await client.list_failed(profile_id=profile_id)
     except ZernioError as e:
         _log.warning("zernio.failed.list_failed tenant=%s err=%s", tenant_id, e)
-        return JSONResponse({"ok": False, "failed": []}, status_code=502)
-    failed = [
+        return JSONResponse({"ok": False, "failed": local_failed}, status_code=502)
+    failed = local_failed + [
         {
             "post_id": p.get("_id") or p.get("id"),
             "content": (p.get("content") or "")[:80],
@@ -3145,6 +3220,7 @@ async def zernio_failed_json(
 
 @router.post("/retry/{post_id}")
 async def zernio_retry_one(
+    request: Request,
     post_id: str,
     tenant_id: str = Depends(tenant_binder),
     _: None = Depends(require_full_scope),
@@ -3152,6 +3228,14 @@ async def zernio_retry_one(
     db: Database = Depends(get_db),
 ) -> Response:
     """Reintentar one failed post (POST /posts/{id}/retry)."""
+    from chalybclip.api._autopublish_job import is_placeholder, retry_autopublish
+
+    if is_placeholder(post_id):
+        # An auto-publish-on-approve job that failed before Zernio: re-run it.
+        out = await retry_autopublish(
+            request=request, db=db, tenant_id=tenant_id, placeholder=post_id
+        )
+        return JSONResponse(out, status_code=200 if out["ok"] else 409)
     client = _build_client()
     try:
         result = await client.retry_post(post_id)
@@ -3371,6 +3455,14 @@ async def zernio_reprocess_one(
     db: Database = Depends(get_db),
 ) -> Response:
     """Reprocesar un post fallido (re-render + URL nueva + re-agendar)."""
+    from chalybclip.api._autopublish_job import is_placeholder
+
+    if is_placeholder(post_id):
+        # An auto-publish job, not a post: Reintentar re-runs it.
+        return JSONResponse(
+            {"ok": False, "error": "Usa Reintentar para la publicación automática."},
+            status_code=409,
+        )
     row = await ZernioPublishesRepo(db).get_by_post_id(post_id)
     if row is None or row.tenant_id != tenant_id:
         return JSONResponse(

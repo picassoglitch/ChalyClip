@@ -93,6 +93,10 @@ class InProcessJobDispatcher(JobDispatcher):
                 reason="a pipeline run for this stream is already queued or "
                        "running in this process",
             )
+            # This launch's admission will never run — release its hold.
+            from .usage import settle_kickoff
+
+            await settle_kickoff(kickoff, "cancelled")
             return
         register(stream_id)
         if background_tasks is not None:

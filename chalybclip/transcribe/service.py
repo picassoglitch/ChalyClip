@@ -235,11 +235,12 @@ async def _record_transcribe_cost(
     # Token T4 — also report this provider's usage to Chalyb so the
     # balance reflects ALL spend, not just Claude. Native amount =
     # transcript seconds (kind="transcription.seconds"); cost = the real
-    # USD micros computed above. Fire-and-forget, same as the LLM path.
+    # USD micros computed above. Queued in the durable outbox (drained in
+    # the background), tagged with the run's reservation.
     try:
-        from chalybclip.integrations.chalyb.reporter import schedule_usage
+        from chalybclip.integrations.chalyb.outbox import enqueue_usage
 
-        schedule_usage(
+        await enqueue_usage(
             db,
             tenant_id=tenant_id,
             kind="transcription.seconds",

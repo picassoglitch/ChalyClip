@@ -27,6 +27,16 @@ _PG_BASELINE_PATH = Path(__file__).parent / "pg_baseline.sql"
 _PG_BASELINE_VERSION_RE = re.compile(r"through v(\d+)", re.IGNORECASE)
 
 
+# Migrations that can't be portable SQL (e.g. a PK change) ship a Postgres twin
+# `NNN_<name>.pg.sql`; Postgres runs the twin, SQLite and the baseline the plain file.
+_PG_SUFFIX = ".pg.sql"
+
+
+def _pg_variant(path: Path) -> Path:
+    twin = path.with_name(path.name[: -len(".sql")] + _PG_SUFFIX)
+    return twin if twin.exists() else path
+
+
 class MigrationError(ChalybClipError):
     """Migration runner failure."""
 
@@ -51,6 +61,8 @@ def _discover_migrations(directory: Path) -> list[tuple[int, str, Path]]:
     """Sorted (version, name, path) for every well-named .sql in `directory`."""
     out: list[tuple[int, str, Path]] = []
     for candidate in sorted(directory.glob("*.sql")):
+        if candidate.name.endswith(_PG_SUFFIX):
+            continue  # a Postgres-only twin, picked by _pg_variant()
         m = _MIGRATION_RE.match(candidate.name)
         if not m:
             raise MigrationError(
@@ -124,7 +136,7 @@ async def _apply_pg(db: Database, available: list[tuple[int, str, Path]]) -> int
         if version <= current:
             continue
         try:
-            await conn.executescript(path.read_text(encoding="utf-8"))
+            await conn.executescript(_pg_variant(path).read_text(encoding="utf-8"))
             await _stamp_pg_version(conn, version)
         except Exception as e:
             raise MigrationError(

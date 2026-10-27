@@ -17,6 +17,7 @@ from fastapi import Request, Response, status
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from chalybclip.api.hub_api import authenticate_hub_request, is_hub_path
 from chalybclip.db import ApiTokensRepo, Database
 from chalybclip.tenancy import hash_token
 
@@ -66,6 +67,9 @@ _PUBLIC_PREFIXES: tuple[str, ...] = (
     # callbacks can't carry our cookie; each handler verifies its own
     # HMAC signature (see routers/zernio_webhooks.py).
     "/api/webhooks/",
+    # Hub media links (<video>/<img> src): each URL carries its own HMAC
+    # signature bound to tenant + resource + expiry (api/hub_media.py).
+    "/api/hub/media/",
 )
 _COOKIE_NAME = "chalybclip_token"
 
@@ -97,9 +101,11 @@ def _verify_render_signature(request: Request) -> str | None:
     try:
         from chalybclip.api.routers.internal import _verify_signed_params
 
+        # 1800 s: what cookieless renders sign for (zernio._publish_clip, growth engine);
+        # at 900 every such render was refused (303 to login).
         _verify_signed_params(
             resource_id=parts[2], tenant=tenant, exp=int(exp), sig=sig,
-            max_ttl_s=900,
+            max_ttl_s=1800,
         )
     except Exception:  # invalid / expired sig → fall back to cookie auth
         return None
@@ -140,8 +146,15 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
         # (mint_signed_render_url) instead of a cookie. A valid signature
         # binds the tenant and skips the bearer/cookie requirement — scoped
         # to one clip's render page, short TTL. No valid sig → normal auth.
-        signed_tenant = _verify_render_signature(request)
-        if signed_tenant is not None:
+        # Hub API (/api/hub/v1): the hub's launch token is the ONLY credential accepted;
+        # tenant resolution (incl. auto-provision) mirrors /auth/sso.
+        hub_call = is_hub_path(path)
+        signed_tenant = None if hub_call else _verify_render_signature(request)
+        if hub_call:
+            refused = await authenticate_hub_request(request, self._db)
+            if refused is not None:
+                return refused
+        elif signed_tenant is not None:
             request.state.tenant_id = signed_tenant
             request.state.token_scope = "read"
         else:
@@ -225,7 +238,11 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
             from chalybclip.settings import get_settings
             raw = (get_settings().admin_tenant_ids or "").strip()
             admin_ids = {p.strip() for p in raw.split(",") if p.strip()}
-            request.state.is_admin = token_row.tenant_id in admin_ids
+            # A signed render URL authenticates without a token row (and with
+            # read scope only) — never treat it as an operator session.
+            request.state.is_admin = (
+                signed_tenant is None and request.state.tenant_id in admin_ids
+            )
         except Exception:  # noqa: BLE001 — best-effort
             request.state.is_admin = False
 

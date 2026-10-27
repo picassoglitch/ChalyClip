@@ -111,10 +111,9 @@ async def _build_ass_for_clip(
     highlight = captions_cfg.get("highlight_color") or "#ffd84a"
     position = captions_cfg.get("position") or "lower_third"
     font_size_key = captions_cfg.get("font_size") or "medium"
-    # Match the CSS scale * the base size. CSS base is 4.231cqw on a
-    # 1080-px-wide container = ~46 px. Scale to absolute pixels and
-    # scale by the operator's size pick.
-    base_size = int(width * 0.0423)
+    # One overlay unit = min(1% of width, 0.5625% of height): the same --u the
+    # overlay CSS uses (_overlay_styles.html), so 9:16 stays exactly 1% of width.
+    base_size = int(min(width, height * 0.5625) * 0.0423)
     scale = {"small": 0.78, "medium": 1.0, "large": 1.24, "xl": 1.5}.get(
         font_size_key, 1.0,
     )
@@ -186,6 +185,18 @@ async def render_clip_in_background(
     from chalybclip.resources import heavy_slot
     from chalybclip.tenancy import bound_tenant
 
+    # Hub renders carry no operator cookie, so sign /render like auto-publish does;
+    # 900 s suffices because the page is opened once at render start.
+    if not auth_cookie_value and not auth_query:
+        import contextlib
+
+        with contextlib.suppress(RuntimeError):
+            from chalybclip.api.routers.internal import sign_render_query
+
+            auth_query = sign_render_query(
+                clip_id=clip_id, tenant_id=tenant_id, ttl_seconds=900
+            )
+
     db = Database(db_path)
     await db.connect()
     # Render Migration R5 — outer guard. ANY unhandled exception below
@@ -220,6 +231,28 @@ async def render_clip_in_background(
                     "render_clip.progress_write_failed clip=%s pct=%s",
                     clip_id, pct,
                 )
+
+        # Horizontal/square render from their own base video (clip.formats); cache paths
+        # don't change, so download, approve and publish all follow the clip's format.
+        from chalybclip.clip.formats import clip_format, ensure_format_base, render_dims
+        from chalybclip.db import StreamsRepo
+
+        with bound_tenant(tenant_id):
+            _fmt_clip = await ClipsRepo(db).get(clip_id)
+        fmt = clip_format(_fmt_clip) if _fmt_clip is not None else "vertical"
+        if fmt != "vertical" and _fmt_clip is not None:
+            with bound_tenant(tenant_id):
+                _stream = await StreamsRepo(db).get(_fmt_clip.stream_id)
+            base = await ensure_format_base(
+                clip=_fmt_clip,
+                fmt=fmt,
+                tenant_id=tenant_id,
+                source_video=Path(_stream.source_video_path) if _stream else None,
+            )
+            if base is None:
+                raise RuntimeError(f"format {fmt} not available for this clip")
+            audio_source_path = base
+            width, height = render_dims(fmt, width, height)
 
         # Render Migration T2 — try the hybrid ffmpeg + overlay-alpha
         # path first (~10-30s for a typical 35s clip). On any failure

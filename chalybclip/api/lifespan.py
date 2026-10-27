@@ -6,6 +6,7 @@ background loops at boot:
   * webhook dispatch      every 30s   per active tenant
   * metrics ingest        every 1h    per active tenant
   * retention sweep       every 24h   all tenants (runs shortly after boot)
+  * usage outbox drain    every 30s   all tenants (runs at boot)
 
 The legacy publish_jobs drain was removed (Etapa A): publishing now goes
 through Zernio, not the per-platform worker. `publish_interval_s` is kept
@@ -253,6 +254,25 @@ async def _recovery_loop(
             _log.warning("recovery_loop_iteration_failed", error=str(e))
 
 
+async def _usage_outbox_loop(db: Database, interval_s: float) -> None:
+    """Deliver queued usage events + reservation settles to Chalyb.
+
+    Drains once right at boot (events a previous process queued but never
+    delivered — deploy, crash, scale-to-zero), then every `interval_s`.
+    Runs also drain at job end and enqueues kick a drain, so this loop is
+    mostly retries with backoff and stragglers."""
+    from chalybclip.integrations.chalyb.outbox import drain_outbox
+
+    while True:
+        try:
+            await drain_outbox(db)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            _log.warning("usage_outbox_loop_iteration_failed", error=str(e))
+        await asyncio.sleep(interval_s)
+
+
 async def _disk_watchdog_loop(
     db: Database,
     output_dir: Path,
@@ -332,6 +352,13 @@ async def background_drains_lifespan(
         ),
         asyncio.create_task(
             _zernio_pending_sweep(db), name="chalybclip-zernio-pending-sweep"
+        ),
+        asyncio.create_task(
+            _usage_outbox_loop(
+                db,
+                float(getattr(get_settings(), "usage_outbox_interval_s", 30.0) or 30.0),
+            ),
+            name="chalybclip-usage-outbox-loop",
         ),
     ]
     # The channel-poll + recovery loops need the pipeline dispatcher + output

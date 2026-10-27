@@ -193,6 +193,153 @@ async def auto_trim_around_integrity(
     }
 
 
+class TrimRejectedError(ClipError):
+    """A manual trim the clip can't take. `reason` is a stable machine code
+    (bad_bounds | outside_window | too_short | too_long | no_footage)."""
+
+    def __init__(self, reason: str, message: str) -> None:
+        super().__init__(message)
+        self.reason = reason
+
+
+MANUAL_TRIM_MIN_S = 5.0
+"""Same floor auto-trim uses (`min_window_s`): shorter won't carry a moment."""
+
+
+def manual_trim_window(
+    clip: object, *, source_available: bool, stream_duration_s: float | None
+) -> tuple[float, float]:
+    """Where a manual trim may place the clip, in stream seconds.
+
+    With the source VOD on disk: anywhere in the stream. Without it: inside
+    the footage the clip still has — its pristine cut (original bounds when
+    it was trimmed, kept as `clip.original.mp4`), else its current bounds."""
+    if source_available and stream_duration_s:
+        return 0.0, float(stream_duration_s)
+    lo = getattr(clip, "original_start_s", None)
+    hi = getattr(clip, "original_end_s", None)
+    if lo is None or hi is None:
+        return float(clip.start_s), float(clip.end_s)  # type: ignore[attr-defined]
+    return float(lo), float(hi)
+
+
+async def manual_trim(
+    db: Database,
+    *,
+    clip_id: str,
+    start_s: float,
+    end_s: float,
+) -> dict[str, object]:
+    """Set the clip's bounds by hand (stream seconds), re-cutting the MP4.
+
+    Validated here, not in the caller: bounds inside `manual_trim_window`,
+    length between MANUAL_TRIM_MIN_S and ClipConfig.max_clip_duration_s.
+    Same bookkeeping as auto-trim: the first trim stashes the pristine MP4
+    and keeps the first original bounds, so Deshacer (`revert_trim`)
+    restores the cut either way. Cached exports are invalidated.
+    """
+    import math
+
+    from chalybclip.config import ClipConfig
+
+    clips_repo = ClipsRepo(db)
+    clip = await clips_repo.get(clip_id)
+    if clip is None:
+        raise ClipError(f"clip {clip_id!r} not found")
+    if not (math.isfinite(start_s) and math.isfinite(end_s)) or end_s <= start_s:
+        raise TrimRejectedError("bad_bounds", "El final tiene que ir después del inicio.")
+    stream = await StreamsRepo(db).get(clip.stream_id)
+    source_video = Path(stream.source_video_path) if stream is not None else None
+    has_source = source_video is not None and source_video.is_file()
+    lo, hi = manual_trim_window(
+        clip,
+        source_available=has_source,
+        stream_duration_s=stream.duration_s if stream is not None else None,
+    )
+    eps = 0.05
+    if start_s < lo - eps or end_s > hi + eps:
+        raise TrimRejectedError(
+            "outside_window",
+            f"El recorte tiene que quedar entre {lo:.1f} s y {hi:.1f} s.",
+        )
+    start_s, end_s = max(lo, start_s), min(hi, end_s)
+    duration = end_s - start_s
+    if duration < MANUAL_TRIM_MIN_S:
+        raise TrimRejectedError(
+            "too_short", f"El clip tiene que durar al menos {MANUAL_TRIM_MIN_S:.0f} s."
+        )
+    max_s = float(ClipConfig().max_clip_duration_s)
+    if duration > max_s + eps:
+        raise TrimRejectedError("too_long", f"El clip puede durar como máximo {max_s:.0f} s.")
+    if abs(start_s - clip.start_s) < 0.01 and abs(end_s - clip.end_s) < 0.01:
+        return {"outcome": "noop", "start_s": clip.start_s, "end_s": clip.end_s}
+
+    clip_mp4 = Path(clip.path)
+    if clip.original_start_s is None:
+        _save_pretrim_original(clip_mp4)
+    pristine = _pretrim_original_path(clip_mp4)
+    p_lo = clip.original_start_s if clip.original_start_s is not None else clip.start_s
+    p_hi = clip.original_end_s if clip.original_end_s is not None else clip.end_s
+
+    if p_lo - eps <= start_s and end_s <= p_hi + eps and pristine.is_file():
+        # Inside the pristine cut: slice the stashed 9:16 copy, no source.
+        _slice_into(
+            src=pristine, local_start_s=start_s - p_lo, duration_s=duration, out=clip_mp4
+        )
+    elif has_source and source_video is not None:
+        _recut_clip_mp4(
+            source_video=source_video, out_path=clip_mp4, start_s=start_s, duration_s=duration
+        )
+    elif clip.start_s - eps <= start_s and end_s <= clip.end_s + eps and clip_mp4.is_file():
+        _slice_into(
+            src=clip_mp4, local_start_s=start_s - clip.start_s, duration_s=duration, out=clip_mp4
+        )
+    else:
+        raise TrimRejectedError(
+            "no_footage",
+            "Ya no tenemos el video original para extender este clip.",
+        )
+
+    await clips_repo.set_trim_bounds(
+        clip_id,
+        start_s=start_s,
+        end_s=end_s,
+        duration_s=duration,
+        new_path=str(clip_mp4),
+        original_start_s=p_lo,
+        original_end_s=p_hi,
+    )
+    _invalidate_export_cache(clip_mp4.parent)
+    _log.info(
+        "clip.manual_trim",
+        clip_id=clip_id,
+        old_bounds=(clip.start_s, clip.end_s),
+        new_bounds=(start_s, end_s),
+    )
+    return {"outcome": "trimmed", "start_s": start_s, "end_s": end_s, "duration_s": duration}
+
+
+def _slice_into(*, src: Path, local_start_s: float, duration_s: float, out: Path) -> None:
+    """Sample-accurate slice of `src` into `out` (atomic; `src` may be `out`)."""
+    from chalybclip.config import ClipConfig
+
+    from .service import _ffmpeg_fast_cut
+
+    tmp = out.with_suffix(".trim.tmp.mp4")
+    try:
+        _ffmpeg_fast_cut(
+            video_path=src,
+            start_s=max(0.0, local_start_s),
+            duration_s=duration_s,
+            out_path=tmp,
+            cfg=ClipConfig(),
+        )
+        tmp.replace(out)
+    finally:
+        if tmp.exists():
+            tmp.unlink()
+
+
 async def revert_trim(
     db: Database,
     *,

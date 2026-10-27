@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 import structlog
 
 from chalybclip.integrations.storage import (
+    clip_landscape_key,
     clip_media_key,
     clip_thumbnail_key,
 )
@@ -69,6 +70,15 @@ async def offload_clip_artifacts(
                 thumbnail,
                 clip_thumbnail_key(tenant_id, clip_id),
                 "image/jpeg",
+            ),
+            # The full-frame cut the horizontal/square formats come from
+            # (chalybclip.clip.formats); absent for clips cut before it.
+            (
+                Path(str(getattr(clip, "path", "") or "")).parent / "clip_landscape.mp4"
+                if getattr(clip, "path", None)
+                else None,
+                clip_landscape_key(tenant_id, clip_id),
+                "video/mp4",
             ),
         ]
         for local, key, content_type in targets:

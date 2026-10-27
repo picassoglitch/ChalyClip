@@ -20,11 +20,11 @@ import pytest
 import respx
 
 from chalybclip.db import Database, TenantsRepo, apply_migrations
-from chalybclip.integrations.chalyb import reporter as reporter_mod
+from chalybclip.integrations.chalyb import outbox as outbox_mod
+from chalybclip.integrations.chalyb.outbox import enqueue_usage
 from chalybclip.integrations.chalyb.reporter import (
     report_llm_usage,
     report_usage,
-    schedule_usage,
 )
 from chalybclip.settings import get_settings
 
@@ -138,27 +138,24 @@ async def test_zero_amount_zero_cost_is_skipped(db: Database, chalyb_env) -> Non
 
 
 @respx.mock
-async def test_db_close_drains_scheduled_report(db: Database, chalyb_env) -> None:
+async def test_db_close_drains_kicked_report(db: Database, chalyb_env) -> None:
     """Shutdown-ordering regression (Modal worker, 2026-07-15): the run's
-    teardown closed the DB while a scheduled usage report was still in its
-    HTTP leg, so the report's follow-up writes (balance cache, report
-    status) died with "pool is closed" and were silently lost. close() must
-    drain the scheduled report first."""
+    teardown closed the DB while a usage report was still in its HTTP leg,
+    so the follow-up writes (balance cache, report status) died with "pool
+    is closed". The outbox's background kick is registered with the DB, so
+    close() waits for it."""
     tid = await _tenant(db)
     route = respx.post(_URL).mock(return_value=_ok_response())
 
-    before = set(reporter_mod._BACKGROUND_TASKS)
-    schedule_usage(
+    await enqueue_usage(
         db, tenant_id=tid, kind="llm.tokens", amount=37,
         cost_usd_micros=1_000, source_id="lc_drain", occurred_at_iso=_now(),
         provider="openllm", operation="variants",
     )
-    spawned = set(reporter_mod._BACKGROUND_TASKS) - before
-    assert len(spawned) == 1
-    task = spawned.pop()
+    task = outbox_mod._KICKS.get(id(db))
+    assert task is not None
 
-    # Teardown immediately — pre-fix this closed the backend under the
-    # in-flight report task instead of waiting for it.
+    # Teardown immediately — close() must drain the kick first.
     await db.close()
     assert task.done()
     assert route.called

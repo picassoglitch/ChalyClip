@@ -158,6 +158,23 @@ def _parse_rowcount(status: str) -> int:
     return int(m.group(1)) if m else 0
 
 
+
+def pool_options(dsn: str) -> dict[str, Any]:
+    """asyncpg options for this DSN.
+
+    Supabase's transaction pooler (port 6543) hands each transaction to any
+    server connection, so asyncpg's named prepared-statement cache must be
+    off there. The session pooler (5432) caps clients at the pool size (15),
+    which a few API + worker instances exceed under a burst (EMAXCONNSESSION).
+    """
+    from urllib.parse import urlsplit
+
+    try:
+        port = urlsplit(dsn).port
+    except ValueError:
+        port = None
+    return {"statement_cache_size": 0} if port == 6543 else {}
+
 class _PgCursor:
     """aiosqlite-cursor-shaped view over a buffered asyncpg result."""
 
@@ -343,7 +360,7 @@ class Database:
                 # server connections per app instance so a request storm can't
                 # exhaust the Postgres connection budget.
                 self._pool = await asyncpg.create_pool(
-                    self._dsn, min_size=1, max_size=10,
+                    self._dsn, min_size=1, max_size=10, **pool_options(self._dsn),
                 )
         return self._pool
 

@@ -38,6 +38,7 @@ from chalybclip.integrations.chalyb import (
     verify_sso_token,
 )
 from chalybclip.integrations.chalyb.service import mint_session_token_for_tenant
+from chalybclip.integrations.chalyb.sso_tenant import provision_sso_tenant, sync_sso_claims
 from chalybclip.settings import get_settings
 
 router = APIRouter(tags=["chalyb"])
@@ -495,36 +496,9 @@ async def sso_finalize(
         # no way to tell if it was a DB issue, a schema mismatch, or
         # something else.
         try:
-            from chalybclip.db import PersonasRepo, TenantsRepo
-            from chalybclip.tenancy import bound_tenant
-            await TenantsRepo(db).create(
-                tenant_id=payload.tenant_id,
-                name=payload.email or payload.tenant_id,
-            )
-            # Slice O.30 — seed `default` persona to mirror the
-            # /api/admin/tenants provisioning path. Without this a
-            # first-time SSO leaves /dashboard/personas empty and the
-            # first upload crashes on `unknown persona 'default'`.
-            # Non-fatal: seed failure doesn't block login.
-            try:
-                with bound_tenant(payload.tenant_id):
-                    await PersonasRepo(db).create(
-                        persona_id="default",
-                        name="Default",
-                        primary_language="en",
-                        target_languages=["en", "es"],
-                        voice_prompt=(
-                            "You are writing short-form social media captions "
-                            "for a content creator. Write tight, punchy captions "
-                            "that earn the swipe. Lead with a hook — no soft "
-                            "openers. Avoid corporate language and emoji "
-                            "stuffing. Match the energy of the source clip. "
-                            "Output the caption and nothing else."
-                        ),
-                        routing_tags=["general"],
-                    )
-            except Exception:  # noqa: BLE001 — non-fatal seed
-                pass
+            # Shared with /api/hub/v1 (sso_tenant.py): tenant row + the
+            # Slice O.30 `default` persona seed.
+            await provision_sso_tenant(db, payload)
             session_raw_token = await mint_session_token_for_tenant(
                 db, tenant_id=payload.tenant_id
             )
@@ -540,54 +514,9 @@ async def sso_finalize(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-    # Sync tier on every login. Best-effort: if Chalyb's effective tier
-    # for this user changed since last visit (admin upgrade, MP payment,
-    # downgrade), the tenant row reflects it on the next page render.
-    # Failures are non-blocking — the user still gets to log in.
-    if payload.tier:
-        try:
-            await sync_tenant_tier(db, tenant_id=payload.tenant_id, tier=payload.tier)
-        except Exception:  # noqa: BLE001 — never break login on a tier sync
-            pass
-
-    # Auto-link the Zernio profile (so the Publish Center tabs appear
-    # without the streamer pasting a profileId). Chalyb provisions the
-    # Zernio profile per user and sends its id in the token. Only set
-    # it when the tenant has NONE — never clobber a manual link/unlink
-    # the operator made in the dashboard.
-    if payload.zernio_profile_id:
-        try:
-            from chalybclip.db import TenantsRepo
-            _zt = await TenantsRepo(db).get(payload.tenant_id)
-            if _zt is not None and not _zt.zernio_profile_id:
-                await TenantsRepo(db).set_zernio_profile(
-                    payload.tenant_id, profile_id=payload.zernio_profile_id,
-                )
-        except Exception:  # never break login on the auto-link
-            pass
-
-    # Sync external_user_id on every login (B2 reconciliation layer).
-    # CLI-era tenants land here with external_user_id = NULL, which silently
-    # breaks the usage reporter (it skips tenants without an external id).
-    # A STALE link is worse than a missing one: balance fetches and usage
-    # reports run against the wrong Chalyb profile, so the chip shows
-    # someone else's ledger (e.g. a test account's 2M grant) while chalyb
-    # shows the user's real balance. The SSO payload is signed by chalyb —
-    # the source of truth for which platform user owns this tenant — so we
-    # overwrite on mismatch, not just backfill on NULL.
-    try:
-        from chalybclip.db import TenantsRepo
-        _tenant = await TenantsRepo(db).get(payload.tenant_id)
-        if (
-            _tenant is not None
-            and payload.user_id
-            and _tenant.external_user_id != payload.user_id
-        ):
-            await TenantsRepo(db).set_external_user_id(
-                payload.tenant_id, payload.user_id
-            )
-    except Exception:  # noqa: BLE001 — non-blocking; reporter just stays silent until next login
-        pass
+    # Tier sync, Zernio auto-link, external_user_id reconciliation (non-blocking);
+    # shared with /api/hub/v1 so hub calls resolve the tenant like this login (sso_tenant.py).
+    await sync_sso_claims(db, payload)
 
     # Pull the live balance from Chalyb in the background — chalyb's
     # ledger is the single source of truth and SSO is the guaranteed

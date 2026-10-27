@@ -320,6 +320,25 @@ async def _recover_one_tenant(
         row = streams_by_id.get(d.stream_id)
         if row is None:
             continue
+        # A re-dispatch is a fresh run on the hub's books (the dead run's reservation
+        # expires on its TTL). Hub down → retry next sweep; refused → surface why, stop.
+        from chalybclip.integrations.chalyb.admission import AdmissionRefused
+        from chalybclip.jobs.usage import admit_job, fail_stream_for_refusal
+
+        try:
+            admission = await admit_job(
+                db, tenant_id=tenant_id, stream_id=row.id,
+                source_minutes=float(row.duration_s or 0) / 60.0,
+            )
+        except AdmissionRefused as refusal:
+            if refusal.reason == "hub_unavailable":
+                _log.warning("recovery.admission_unavailable", stream_id=row.id)
+                continue
+            await fail_stream_for_refusal(
+                db, tenant_id=tenant_id, stream_id=row.id, refusal=refusal
+            )
+            await StreamsRepo(db).set_status(row.id, status="failed")
+            continue
         await EventsRepo(db).emit(
             type=RECOVERY_DISPATCHED,
             payload={"stream_id": d.stream_id, "vod_url": row.vod_url},
@@ -331,6 +350,7 @@ async def _recover_one_tenant(
             persona_id=persona_id,
             output_dir=output_dir,
             task_registry=task_registry,
+            admission=admission,
         )
         recovered.append(d.stream_id)
         _log.info(
@@ -350,6 +370,7 @@ async def _dispatch_recovery(
     persona_id: str,
     output_dir: Path,
     task_registry: set[asyncio.Task[None]] | None,
+    admission: object | None = None,
 ) -> None:
     """Build a PipelineKickoff from the stream row and schedule it.
 
@@ -377,7 +398,7 @@ async def _dispatch_recovery(
         stream=stub,
         persona_id=persona_id,
         output_dir=output_dir,
-    )
+    ).with_admission(admission)
     # background_tasks=None → the in-process dispatcher awaits the runner;
     # wrap in a task so this sweep doesn't block on the full pipeline.
     task = asyncio.create_task(

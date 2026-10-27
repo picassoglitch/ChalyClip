@@ -35,6 +35,24 @@ class PipelineKickoff:
     # does the ingest itself instead of reading the web box's disk.
     source_object_key: str | None = None
     title: str | None = None
+    # Consumption contract: this run's admission (jobs.usage.admit_job); lane picks the
+    # shared worker or a one-shot Cloud Run Job. None for unadmitted runs (tests, CLI).
+    usage_job_id: str | None = None
+    reservation_id: str | None = None
+    lane: str = "standard"
+
+    def with_admission(self, admission: object | None) -> PipelineKickoff:
+        """Copy carrying a `JobAdmission`'s ids (None → unchanged)."""
+        if admission is None:
+            return self
+        from dataclasses import replace
+
+        return replace(
+            self,
+            usage_job_id=getattr(admission, "job_id", None),
+            reservation_id=getattr(admission, "reservation_id", None),
+            lane=str(getattr(admission, "lane", "standard") or "standard"),
+        )
 
 
 # The "actual runner" type — a coroutine that does the real work.

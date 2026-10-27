@@ -32,6 +32,10 @@ import httpx
 import structlog
 
 from chalybclip.errors import ChalybClipError
+from chalybclip.integrations.gcp_identity import (
+    CloudRunIdTokenAuth,
+    is_cloud_run_url,
+)
 from chalybclip.integrations.modal_http import (
     ModalPollDeadlineError,
     poll_until_terminal,
@@ -72,6 +76,7 @@ class ModalJobDispatcher(JobDispatcher):
         timeout_s: float | None = None,
         poll_interval_s: float = _POLL_INTERVAL_S,
         fallback: JobDispatcher | None = None,
+        auth: httpx.Auth | None = None,
     ) -> None:
         from chalybclip.settings import get_settings
 
@@ -91,6 +96,12 @@ class ModalJobDispatcher(JobDispatcher):
                 "infra/modal_pipeline_app.py`) and CHALYBCLIP_MODAL_TOKEN, "
                 "or set CHALYBCLIP_JOB_DISPATCHER=in_process."
             )
+        # The Cloud Run worker is IAM-locked to this service's account; the
+        # body token alone gets a 403 from Cloud Run before the app sees it.
+        self._auth = auth or (
+            CloudRunIdTokenAuth(self._endpoint_url)
+            if is_cloud_run_url(self._endpoint_url) else None
+        )
         self._timeout_s = float(
             timeout_s
             if timeout_s is not None
@@ -152,6 +163,9 @@ class ModalJobDispatcher(JobDispatcher):
                 reason="a pipeline run for this stream is already queued or "
                        "running (locally or on the worker)",
             )
+            from .usage import settle_kickoff
+
+            await settle_kickoff(kickoff, "cancelled")
             return
         register(stream_id)
         task = asyncio.create_task(self._run_remote(kickoff))
@@ -183,6 +197,11 @@ class ModalJobDispatcher(JobDispatcher):
             if kickoff.source_object_key:
                 payload["source_object_key"] = kickoff.source_object_key
                 payload["title"] = kickoff.title
+            # The worker's runner meters + settles against this admission.
+            if kickoff.usage_job_id or kickoff.reservation_id:
+                payload["usage_job_id"] = kickoff.usage_job_id
+                payload["reservation_id"] = kickoff.reservation_id
+                payload["lane"] = kickoff.lane
             _log.info(
                 "jobs.modal.dispatch",
                 stream_id=stream_id,
@@ -192,7 +211,9 @@ class ModalJobDispatcher(JobDispatcher):
                     if "//" in self._endpoint_url else "?"
                 ),
             )
-            async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT_S) as client:
+            async with httpx.AsyncClient(
+                timeout=_REQUEST_TIMEOUT_S, auth=self._auth
+            ) as client:
                 resp = await client.post(self._endpoint_url, json=payload)
                 resp = await poll_until_terminal(
                     client=client,
@@ -222,16 +243,14 @@ class ModalJobDispatcher(JobDispatcher):
                 error=str(e),
             )
         except httpx.HTTPStatusError as e:
-            if e.response.status_code == 404 and "/jobs/" in str(e.request.url):
-                # The poll landed on a worker instance that doesn't hold
-                # this job (the job ledger is per-instance and Cloud Run can
-                # scale out). The run itself is fine and writes its own
-                # step / failure events to the shared DB — same as a poll
-                # deadline: stop tracking, don't mark it failed.
-                _log.warning(
+            status_code = e.response.status_code
+            if status_code in (401, 403, 404) and "/jobs/" in str(e.request.url):
+                # Wrong worker instance (per-instance ledger) or a refused poll token:
+                # the run is fine and reports itself, so stop tracking, don't fail it.
+                (_log.warning if status_code == 404 else _log.error)(
                     "jobs.modal.poll_lost",
                     stream_id=stream_id,
-                    status=404,
+                    status=status_code,
                 )
                 return
             body = (e.response.text or "")[:300]
@@ -265,7 +284,13 @@ class ModalJobDispatcher(JobDispatcher):
     ) -> None:
         """Best-effort `pipeline.failed` event so the dashboard's progress
         card explains the dead run instead of spinning. Mirrors the shape
-        `default_pipeline_runner` writes for in-process failures."""
+        `default_pipeline_runner` writes for in-process failures. Also
+        settles the run's reservation as failed: a worker that never started
+        the runner never will. (If it did start, its own settle got there
+        first and this one is a no-op.)"""
+        from .usage import settle_kickoff
+
+        await settle_kickoff(kickoff, "failed")
         try:
             from chalybclip.db import Database
             from chalybclip.events import emit
