@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
+from typing import Any
 
 import pytest
+
+from chalybclip.errors import ChalybClipError
 
 from chalybclip.llm import estimator
 from chalybclip.llm.config import LLMConfig, load_llm_config
@@ -44,5 +48,48 @@ def test_estimate_llm_cost_uses_the_loaded_config() -> None:
     assert est.llm_cost_usd_micros == round(est.total_tokens * 0.40)
 
 
-def test_nothing_routed_reserves_no_llm_spend() -> None:
-    assert estimator.blended_usd_per_mtok(LLMConfig()) == 0.0
+OPUS_5_5_BLEND = 0.75 * 20.0 + 0.25 * 4.0  # $16/MTok, the premium fallback
+
+
+def _bad_yaml() -> LLMConfig:
+    raise ChalybClipError("failed to parse config/llm.yaml")
+
+
+def _invalid_yaml() -> LLMConfig:
+    return LLMConfig.model_validate({"retry": {"max_attempts": 0}})
+
+
+def _unreadable() -> LLMConfig:
+    raise PermissionError("config/llm.yaml")
+
+
+@pytest.mark.parametrize("loader", [_bad_yaml, _invalid_yaml, _unreadable])
+def test_unreadable_config_reserves_at_the_premium_rate_and_logs(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, loader: Any
+) -> None:
+    monkeypatch.setattr(estimator, "get_llm_config", loader)
+    with caplog.at_level(logging.ERROR, logger="chalybclip.llm.estimator"):
+        assert estimator.blended_usd_per_mtok() == pytest.approx(OPUS_5_5_BLEND)
+    record = next(r for r in caplog.records if "llm.estimate_config_unreadable" in r.message)
+    assert record.exc_info is not None
+
+
+def test_nothing_routed_reserves_at_the_premium_rate_not_zero(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(logging.WARNING, logger="chalybclip.llm.estimator"):
+        assert estimator.blended_usd_per_mtok(LLMConfig()) == pytest.approx(OPUS_5_5_BLEND)
+    assert any("llm.estimate_nothing_routed" in r.message for r in caplog.records)
+
+
+def test_unpriced_standard_model_logs_price_unknown(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    yaml_path = tmp_path / "llm.yaml"
+    yaml_path.write_text(
+        EXAMPLE.read_text("utf-8").replace("standard: claude-haiku-5-5", "standard: claude-x-9"),
+        "utf-8",
+    )
+    with caplog.at_level(logging.ERROR, logger="chalybclip.llm.estimator"):
+        estimator.blended_usd_per_mtok(load_llm_config(yaml_path))
+    assert any("llm.price_unknown" in r.message for r in caplog.records)

@@ -30,12 +30,17 @@ asymmetry doesn't pay off for our current scale.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
+
+from pydantic import ValidationError
 
 from chalybclip.errors import ChalybClipError
 
 from .config import LLMConfig, get_llm_config
-from .prices import CONSERVATIVE_RATES
+from .prices import TokenRates, lookup_rates
+
+_log = logging.getLogger("chalybclip.llm.estimator")
 
 # Empirical multipliers — measured across ~30 ChalyClip pipeline runs in
 # Q1-Q2 2026. These are 80th-percentile values so we overestimate slightly;
@@ -59,6 +64,20 @@ DEFAULT_HOOKS_PER_CLIP = 3             # hook writer default fanout
 # Token T3: the estimate is priced at the routed `standard` model's rates,
 # weighted 3:1 toward output because captions/hooks generation dominates spend.
 _OUTPUT_WEIGHT = 0.75
+# When the config can't say what runs, reserve at the committed premium model:
+# over-reserving beats under-, but the priciest family would be ~100x over.
+FALLBACK_MODEL = "claude-opus-5-5"
+
+
+def _blend(rates: TokenRates) -> float:
+    return _OUTPUT_WEIGHT * rates.output + (1 - _OUTPUT_WEIGHT) * rates.input
+
+
+def _fallback_rate() -> float:
+    rates = lookup_rates("anthropic", FALLBACK_MODEL)
+    if rates is None:  # prices.py ships with it and a test pins it
+        raise LookupError(f"no committed price for {FALLBACK_MODEL}")
+    return _blend(rates)
 
 
 def standard_model(config: LLMConfig) -> tuple[str, str] | None:
@@ -73,14 +92,21 @@ def blended_usd_per_mtok(config: LLMConfig | None = None) -> float:
     """USD per 1M estimated tokens, from the loaded LLM config (a YAML rollback follows)."""
     try:
         cfg = config if config is not None else get_llm_config()
-    except ChalybClipError:  # unreadable llm.yaml: over-reserve rather than 500 the estimate
-        rates = CONSERVATIVE_RATES
-        return _OUTPUT_WEIGHT * rates.output + (1 - _OUTPUT_WEIGHT) * rates.input
+    except (ChalybClipError, ValidationError, OSError):
+        _log.error("llm.estimate_config_unreadable fallback=%s", FALLBACK_MODEL, exc_info=True)
+        return _fallback_rate()
     routed = standard_model(cfg)
     if routed is None:
-        return 0.0  # nothing routed: no LLM spend to reserve
-    rates, _known = cfg.rates_for(*routed)  # unknown paid models get the conservative rate
-    return _OUTPUT_WEIGHT * rates.output + (1 - _OUTPUT_WEIGHT) * rates.input
+        _log.warning("llm.estimate_nothing_routed fallback=%s", FALLBACK_MODEL)
+        return _fallback_rate()
+    rates, known = cfg.rates_for(*routed)
+    if not known:
+        _log.error(
+            "llm.price_unknown provider=%s model=%s — estimated at the conservative rate; "
+            "add it to chalybclip/llm/prices.py",
+            *routed,
+        )
+    return _blend(rates)
 
 
 @dataclass(frozen=True)

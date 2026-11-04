@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -142,8 +143,9 @@ async def test_thinking_blocks_before_the_json_are_ignored() -> None:
 @pytest.mark.parametrize(
     ("reply", "match"),
     [
-        (_reply([_text("[1, 2]")], output_tokens=99), "not a JSON object"),
-        (_reply([], output_tokens=99), "not a JSON object"),
+        (_reply([_text("[1, 2]")], output_tokens=99), r"not a JSON object .*'\[1, 2\]'"),
+        (_reply([_text("oops {")], output_tokens=99), r"invalid JSON.*'oops \{'"),
+        (_reply([], output_tokens=99), "invalid JSON"),
     ],
 )
 async def test_unusable_reply_is_retryable_and_billed(reply: SimpleNamespace, match: str) -> None:
@@ -288,3 +290,64 @@ async def test_overload_and_every_5xx_are_retryable(status: int, retryable: bool
             tenant_id="t", model="claude-haiku-5-5", system="s", user="u", schema=Verdict
         )
     assert isinstance(ei.value, RetryableLLMError) is retryable
+
+
+async def test_bad_json_error_chains_the_decode_error() -> None:
+    provider, _ = _provider(_reply([_text("x" * 900)]))
+    with pytest.raises(RetryableLLMError) as ei:
+        await provider.complete(
+            tenant_id="t", model="claude-haiku-5-5", system="s", user="u", schema=Verdict
+        )
+    assert isinstance(ei.value.__cause__, json.JSONDecodeError)
+    assert "x" * 500 in str(ei.value) and "x" * 501 not in str(ei.value)
+
+
+async def test_retryable_statuses_come_from_config() -> None:
+    provider, _ = _provider()
+    provider._config = provider._config.model_copy(update={"retryable_status_codes": [418]})
+    for status, retryable in ((418, True), (529, False)):
+        provider._client = SimpleNamespace(messages=_Raising(_status_error(status)))  # type: ignore[assignment]
+        with pytest.raises(LLMError) as ei:
+            await provider.complete(
+                tenant_id="t", model="claude-haiku-5-5", system="s", user="u", schema=Verdict
+            )
+        assert isinstance(ei.value, RetryableLLMError) is retryable
+
+
+def test_router_hands_its_retry_codes_to_the_provider() -> None:
+    from tests.llm._fixtures import make_llm_config
+
+    seen: list[list[int]] = []
+    cfg = make_llm_config()
+    cfg = cfg.model_copy(
+        update={"retry": cfg.retry.model_copy(update={"retryable_status_codes": [503]})}
+    )
+
+    def factory(name: str, pcfg: ProviderConfig, _key: str) -> None:
+        seen.append(pcfg.retryable_status_codes)
+
+    LLMRouter(cfg, api_keys={"anthropic": "x"}, provider_factory=factory)._get_provider("anthropic")
+    assert seen == [[503]]
+
+
+def test_default_retry_codes_cover_overload_and_every_5xx() -> None:
+    codes = set(ProviderConfig(models=ProviderModelsConfig(standard="m")).retryable_status_codes)
+    assert {408, 409, 429, 500, 503, 529, 599} <= codes and 400 not in codes
+
+
+async def test_dropped_effort_warns_once_per_model(caplog: pytest.LogCaptureFixture) -> None:
+    from chalybclip.llm import anthropic_provider
+
+    anthropic_provider._effort_dropped_for.discard("claude-haiku-4-5")
+    provider, _ = _provider(*(_reply([_text({"score": 0.5, "reason": "a"})]) for _ in range(2)))
+    with caplog.at_level(logging.WARNING, logger="chalybclip.llm.anthropic"):
+        for _ in range(2):
+            await provider.complete(
+                tenant_id="t",
+                model="claude-haiku-4-5",
+                system="s",
+                user="u",
+                schema=Verdict,
+                effort="low",
+            )
+    assert sum("llm.effort_dropped" in r.message for r in caplog.records) == 1

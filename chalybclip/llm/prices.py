@@ -45,6 +45,8 @@ class TokenRates:
         if self.long_prompt_tokens is None or prompt_tokens <= self.long_prompt_tokens:
             return self
         long_in = self.long_input if self.long_input is not None else self.input
+        # Cache rates stay unset on purpose: Anthropic prices cache reads/writes as
+        # multiples (0.1x / 1.25x) of whichever input rate card applies.
         return TokenRates(
             input=long_in,
             output=self.long_output if self.long_output is not None else self.output,

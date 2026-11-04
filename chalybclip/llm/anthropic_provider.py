@@ -17,6 +17,7 @@ from __future__ import annotations
 import base64
 import functools
 import json
+import logging
 from typing import Any
 
 import anthropic
@@ -34,15 +35,14 @@ from .provider import (
     TruncatedOutputError,
 )
 
-# Plus every 5xx, 529 overloaded_error included: the SDK no longer retries on its own.
-_RETRYABLE_STATUSES = frozenset({408, 409, 429})
+_log = logging.getLogger("chalybclip.llm.anthropic")
+_effort_dropped_for: set[str] = set()
 
 
 @functools.cache
 def output_format_for(schema: type[BaseModel]) -> dict[str, Any]:
-    """`output_config.format` for a schema. The SDK's transform drops the
-    keywords the API can't enforce (min/max, lengths) into the description and
-    sets `additionalProperties: false`; the router re-validates them."""
+    """`output_config.format` for a schema; constraints the API can't enforce move
+    into descriptions, and the router re-validates them."""
     return {"type": "json_schema", "schema": anthropic.transform_schema(schema)}
 
 
@@ -138,8 +138,14 @@ class AnthropicProvider(LLMProvider):
         model: str, schema: type[BaseModel], effort: Effort | None
     ) -> dict[str, Any]:
         config: dict[str, Any] = {"format": output_format_for(schema)}
-        if effort is not None and supports_effort(model):
-            config["effort"] = effort
+        if effort is not None:
+            if supports_effort(model):
+                config["effort"] = effort
+            elif model not in _effort_dropped_for:
+                _effort_dropped_for.add(model)
+                _log.warning(
+                    "llm.effort_dropped model=%s effort=%s (model rejects effort)", model, effort
+                )
         return config
 
     async def _send(
@@ -163,7 +169,7 @@ class AnthropicProvider(LLMProvider):
             )
         except anthropic.APIStatusError as e:
             status = getattr(e, "status_code", None)
-            if status in _RETRYABLE_STATUSES or (status is not None and status >= 500):
+            if status in self._config.retryable_status_codes:
                 raise RetryableLLMError(f"anthropic {status}: {e}", status_code=status) from e
             raise LLMError(f"anthropic {status}: {e}") from e
         except (anthropic.APIConnectionError, anthropic.APITimeoutError) as e:
@@ -171,12 +177,8 @@ class AnthropicProvider(LLMProvider):
 
 
 def _parse_message(message: anthropic.types.Message, *, model: str) -> ProviderResult:
-    """Pull the JSON object out of Claude's structured-output reply.
-
-    A reply cut off at `max_tokens` raises TruncatedOutputError (not retried).
-    A refusal raises RefusalError (not retried); text that isn't a JSON object
-    raises RetryableLLMError. All carry this attempt's usage so the router
-    bills the tokens."""
+    """Pull the JSON object out of a structured-output reply. Every error carries this
+    attempt's usage; only non-JSON text is retryable (max_tokens and refusals are not)."""
     usage = message.usage
     result = ProviderResult(
         output={},
@@ -211,11 +213,16 @@ def _parse_message(message: anthropic.types.Message, *, model: str) -> ProviderR
     )
     try:
         structured = json.loads(text)
-    except json.JSONDecodeError:
-        structured = None
+    except json.JSONDecodeError as e:
+        raise RetryableLLMError(
+            f"anthropic reply is not a JSON object (invalid JSON, stop_reason={stop}, "
+            f"{len(text)} chars): {text[:500]!r}",
+            usage=result,
+        ) from e
     if not isinstance(structured, dict):
         raise RetryableLLMError(
-            f"anthropic reply is not a JSON object (stop_reason={stop}, {len(text)} chars)",
+            f"anthropic reply is not a JSON object (stop_reason={stop}, {len(text)} chars): "
+            f"{text[:500]!r}",
             usage=result,
         )
     return result.model_copy(update={"output": structured})

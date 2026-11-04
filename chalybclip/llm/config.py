@@ -6,18 +6,26 @@ Kept separate from `chalybclip.config` because LLM config is its own YAML file
 
 from __future__ import annotations
 
+import logging
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from chalybclip.errors import ChalybClipError
 
 from .prices import CONSERVATIVE_RATES, TokenRates, lookup_rates
 
+_log = logging.getLogger("chalybclip.llm.config")
+
 Quality = Literal["standard", "premium"]
+
+
+def default_retryable_status_codes() -> list[int]:
+    """408, 409, 429 and every 5xx (529 overloaded_error included)."""
+    return [408, 409, 429, *range(500, 600)]
 
 
 class ProviderModelsConfig(BaseModel):
@@ -64,6 +72,8 @@ class ProviderConfig(BaseModel):
     # Response cap per call; adaptive thinking on Opus 5/5.5 counts against it.
     # 16K is the documented non-streaming default (fits the SDK's HTTP timeout).
     max_output_tokens: int = Field(default=16_000, gt=0)
+    # The router overwrites this with `retry.retryable_status_codes` when it builds the provider.
+    retryable_status_codes: list[int] = Field(default_factory=default_retryable_status_codes)
     # openai_compatible only: send response_format={"type":"json_object"}.
     # Disable for runtimes that reject the parameter.
     json_mode: bool = True
@@ -88,8 +98,8 @@ class RetryConfig(BaseModel):
     max_attempts: int = Field(default=3, ge=1)
     initial_backoff_s: float = Field(default=1.0, ge=0.0)
     backoff_multiplier: float = Field(default=4.0, ge=1.0)
-    retryable_status_codes: list[int] = Field(default_factory=lambda: [429, 500, 502, 503, 504])
-    # Wall-time cap per router call, in multiples of the provider's timeout_s: room
+    retryable_status_codes: list[int] = Field(default_factory=default_retryable_status_codes)
+    # Wall-time cap per provider in the chain, in multiples of its timeout_s: room
     # for one retry on standard; premium gets one attempt (it runs inside API requests).
     deadline_timeouts: dict[Quality, float] = Field(default_factory=_default_deadlines)
 
@@ -124,6 +134,21 @@ class LLMConfig(BaseModel):
     retry: RetryConfig = Field(default_factory=RetryConfig)
     circuit_breaker: CircuitBreakerConfig = Field(default_factory=CircuitBreakerConfig)
     pricing: dict[str, dict[str, ModelPricing]] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _warn_on_masked_long_prompt_tier(self) -> LLMConfig:
+        # A flat YAML price silently drops prices.py's >100K-prompt tier (under-billing).
+        for provider, models in self.pricing.items():
+            for model in models:
+                committed = lookup_rates(provider, model)
+                if committed is not None and committed.long_prompt_tokens is not None:
+                    _log.warning(
+                        "llm.pricing_masks_long_tier provider=%s model=%s: the YAML price "
+                        "ignores the long-prompt tier in chalybclip/llm/prices.py",
+                        provider,
+                        model,
+                    )
+        return self
 
     def model_for(self, provider: str, quality: Quality) -> str:
         """Resolve `(provider, quality)` to a concrete model name."""

@@ -87,6 +87,8 @@ class CallLogRow(BaseModel):
     status: str = "ok"
     error: str | None = None
     attempts: int = 1
+    # The deadline cancelled an attempt mid-request: its tokens are unknown and unbilled.
+    in_flight_cancelled: bool = False
 
 
 def _default_provider_factory(
@@ -176,6 +178,7 @@ class LLMRouter:
             schema=schema,
             quality=quality,
             invoke_provider=invoke,
+            prompt_tokens_est=_estimate_prompt_tokens(system, user),
         )
 
     async def complete_multimodal(
@@ -219,6 +222,7 @@ class LLMRouter:
             schema=schema,
             quality=quality,
             invoke_provider=invoke,
+            prompt_tokens_est=_estimate_prompt_tokens(system, user, n_images=len(images)),
         )
 
     async def _invoke(
@@ -229,6 +233,7 @@ class LLMRouter:
         schema: type[T],
         quality: Quality | None,
         invoke_provider: ProviderInvoker,
+        prompt_tokens_est: int = 0,
     ) -> T:
         """Run the provider chain for a single call (text or multimodal)."""
         rule = self._config.routing.get(purpose)
@@ -251,7 +256,6 @@ class LLMRouter:
                 raise
 
         provider_chain = [rule.primary, *rule.fallbacks]
-        deadline = self._deadline(rule.primary, effective_quality)
         last_error: Exception | None = None
         # Collect every provider's failure reason so the final error message
         # surfaces the real first failure (e.g. anthropic key missing) instead
@@ -284,6 +288,8 @@ class LLMRouter:
                 chain_errors.append(f"{provider_name}: {reason}")
                 continue
             model = self._config.model_for(provider_name, effective_quality)
+            # Each provider in the chain gets its own deadline from its own timeout_s.
+            deadline = self._deadline(provider_name, effective_quality)
 
             try:
                 validated, attempts, spent = await self._call_with_retries(
@@ -296,6 +302,15 @@ class LLMRouter:
                 # output, a reply with no usable JSON) — bill them.
                 failed_spent: list[ProviderResult] = getattr(e, "spent", None) or []
                 failed_usage = _sum_usage(failed_spent)
+                in_flight_cancelled = bool(getattr(e, "in_flight_cancelled", False))
+                if in_flight_cancelled:
+                    await self._report_unbilled_timeout(
+                        tenant_id=tenant_id,
+                        purpose=purpose,
+                        provider=provider_name,
+                        model=model,
+                        prompt_tokens_est=prompt_tokens_est,
+                    )
                 await self._log(
                     tenant_id=tenant_id,
                     purpose=purpose,
@@ -309,6 +324,7 @@ class LLMRouter:
                     status="error",
                     error=f"{type(e).__name__}: {e}",
                     attempts=getattr(e, "attempts", 1),
+                    in_flight_cancelled=in_flight_cancelled,
                 )
                 last_error = e
                 chain_errors.append(f"{provider_name}: {type(e).__name__}: {e}")
@@ -417,7 +433,7 @@ class LLMRouter:
                 continue
             except TimeoutError:
                 # The in-flight attempt was cancelled at the deadline; its tokens are unknown.
-                last_err = _deadline_error(last_err)
+                last_err = _deadline_error(last_err, in_flight_cancelled=True)
                 break
             except LLMError as e:
                 # Non-retryable: stop here, but keep what earlier attempts cost
@@ -436,8 +452,28 @@ class LLMRouter:
             raise last_err
         raise LLMError("retry loop exited without success or error")
 
+    async def _report_unbilled_timeout(
+        self, *, tenant_id: str, purpose: str, provider: str, model: str, prompt_tokens_est: int
+    ) -> None:
+        """Estimate of an attempt cut at the deadline, for finance to reconcile; not billed."""
+        cfg = self._config.providers.get(provider)
+        max_output = cfg.max_output_tokens if cfg is not None else 0
+        rates, _known = self._config.rates_for(provider, model)
+        est = cost_micros(rates, input_tokens=prompt_tokens_est, output_tokens=max_output)
+        payload = {
+            "purpose": purpose,
+            "provider": provider,
+            "model": model,
+            "in_flight_cancelled": True,
+            "est_input_tokens": prompt_tokens_est,
+            "max_output_tokens": max_output,
+            "est_cost_usd_micros": est,
+        }
+        _router_log.warning("llm.unbilled_timeout %s", json.dumps(payload, sort_keys=True))
+        await self._emit_event(tenant_id=tenant_id, type_="llm.unbilled_timeout", payload=payload)
+
     def _deadline(self, provider: str, quality: Quality) -> float | None:
-        """Loop-clock deadline for one router call, from the primary's timeout_s."""
+        """Loop-clock deadline for one provider in the chain, from its own timeout_s."""
         cfg = self._config.providers.get(provider)
         if cfg is None:
             return None
@@ -464,6 +500,9 @@ class LLMRouter:
             if cfg is None or (cfg.api_key_required and not api_key):
                 self._providers[name] = None
             else:
+                cfg = cfg.model_copy(
+                    update={"retryable_status_codes": self._config.retry.retryable_status_codes}
+                )
                 self._providers[name] = self._provider_factory(name, cfg, api_key)
         return self._providers[name]
 
@@ -506,6 +545,7 @@ class LLMRouter:
         status: str = "ok",
         error: str | None = None,
         attempts: int = 1,
+        in_flight_cancelled: bool = False,
     ) -> None:
         """Write one cost-tracking row to the JSONL breadcrumb and the DB.
 
@@ -532,6 +572,7 @@ class LLMRouter:
             status=status,
             error=error,
             attempts=attempts,
+            in_flight_cancelled=in_flight_cancelled,
         )
 
         if self._call_log_path is not None:
@@ -634,9 +675,23 @@ class LLMRouter:
             pass
 
 
-def _deadline_error(cause: Exception | None) -> LLMError:
+def _deadline_error(cause: Exception | None, *, in_flight_cancelled: bool = False) -> LLMError:
     detail = f" (last error: {type(cause).__name__}: {cause})" if cause is not None else ""
-    return LLMError(f"LLM call exceeded its wall-time deadline{detail}")
+    flag = " in_flight_cancelled=true" if in_flight_cancelled else ""
+    err = LLMError(f"LLM call exceeded its wall-time deadline{detail}{flag}")
+    err.__cause__ = cause
+    err.in_flight_cancelled = in_flight_cancelled  # type: ignore[attr-defined]
+    return err
+
+
+# Rough prompt size for the unbilled-timeout estimate only (never billed): ~4 chars
+# per token, ~1.2K tokens per 720p frame.
+_CHARS_PER_TOKEN = 4
+_TOKENS_PER_IMAGE = 1_200
+
+
+def _estimate_prompt_tokens(system: str, user: str, *, n_images: int = 0) -> int:
+    return (len(system) + len(user)) // _CHARS_PER_TOKEN + n_images * _TOKENS_PER_IMAGE
 
 
 def _sum_usage(results: list[ProviderResult]) -> ProviderResult:

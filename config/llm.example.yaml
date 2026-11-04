@@ -103,7 +103,7 @@ retry:
   max_attempts: 3
   initial_backoff_s: 1.0
   backoff_multiplier: 4.0
-  retryable_status_codes: [429, 500, 502, 503, 504]
+  # retryable_status_codes defaults to 408, 409, 429 and every 5xx (529 overloaded included).
 
 circuit_breaker:
   error_rate_threshold: 0.20                    # >20% errors over window -> trip
