@@ -34,7 +34,13 @@ from pydantic import BaseModel
 from chalybclip.errors import LLMError
 
 from .config import Effort, ProviderConfig
-from .provider import LLMProvider, MultimodalImage, ProviderResult, RetryableLLMError
+from .provider import (
+    LLMProvider,
+    MultimodalImage,
+    ProviderResult,
+    RetryableLLMError,
+    reply_fingerprint,
+)
 
 _RETRYABLE_STATUSES = frozenset({408, 409, 429, 500, 502, 503, 504})
 _THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
@@ -156,7 +162,8 @@ class OpenAICompatibleProvider(LLMProvider):
         if structured is None:
             # Reasoning ramble / refusal / truncation — worth another attempt.
             raise RetryableLLMError(
-                f"open-llm returned non-JSON content: {text[:200]!r}"
+                f"open-llm returned non-JSON content ({reply_fingerprint(text)})",
+                raw_reply=text,
             )
 
         usage = data.get("usage") or {}

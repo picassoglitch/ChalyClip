@@ -15,9 +15,10 @@ the next entry in the chain.
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any, Literal, Protocol
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from chalybclip.errors import LLMError
 
@@ -47,6 +48,28 @@ class RetryableLLMError(LLMError):
         # The model's reply can echo user transcripts (PII): kept for debugging,
         # never formatted into the message, which reaches the logs (rule 10).
         self.raw_reply = raw_reply
+
+
+def reply_fingerprint(text: str) -> str:
+    """Length + sha256 prefix: identifies a model reply in logs without its content."""
+    return f"{len(text)} chars, sha256={hashlib.sha256(text.encode('utf-8')).hexdigest()[:12]}"
+
+
+class SchemaMismatchError(LLMError):
+    """The reply parsed but failed the schema. The message names only field locations and
+    error types; the pydantic error (which quotes model output) stays on `validation_error`."""
+
+    def __init__(self, schema: type[BaseModel], error: ValidationError, raw_output: Any):
+        problems = ", ".join(
+            f"{'.'.join(str(p) for p in item['loc']) or '<root>'}:{item['type']}"
+            for item in error.errors(include_input=False, include_url=False)
+        )
+        super().__init__(
+            f"{schema.__name__} validation failed ({error.error_count()} errors: {problems}; "
+            f"{reply_fingerprint(repr(raw_output))})"
+        )
+        self.validation_error = error
+        self.raw_output = raw_output
 
 
 class TruncatedOutputError(LLMError):

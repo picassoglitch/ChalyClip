@@ -9,6 +9,7 @@ from .provider import (
     ProviderResult,
     RefusalError,
     RetryableLLMError,
+    SchemaMismatchError,
     TruncatedOutputError,
 )
 from .router import CallLogRow, LLMRouter
@@ -45,6 +46,7 @@ __all__ = [
     "RescoreVerdict",
     "RetryableLLMError",
     "RoutingRule",
+    "SchemaMismatchError",
     "ThumbnailPickVerdict",
     "TruncatedOutputError",
     "Variant",

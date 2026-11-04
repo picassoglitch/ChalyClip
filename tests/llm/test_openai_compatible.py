@@ -179,3 +179,28 @@ def test_extract_json_tolerates_think_blocks_fences_and_prose() -> None:
     ) == {"a": 1}
     assert _extract_json_object("no json here") is None
     assert _extract_json_object('[1, 2, 3]') is None  # object required
+
+
+_PII = "Juan Pérez, tel 555-0101, vive en Calle Falsa 123"
+
+
+def test_non_json_error_and_log_row_hold_no_reply_content(tmp_path) -> None:
+    log = tmp_path / "llm_calls.jsonl"
+    router = LLMRouter(_config(), api_keys={}, call_log_path=log)
+    with respx.mock() as mock:
+        mock.post(f"{_BASE}/chat/completions").mock(
+            return_value=httpx.Response(200, json=_completion(_PII))
+        )
+        with pytest.raises(LLMError) as ei:
+            asyncio.run(
+                router.complete(
+                    tenant_id="t", purpose="hook_generation",
+                    system="s", user="u", schema=TinySchema,
+                )
+            )
+    row = log.read_text("utf-8")
+    for leaked in ("Juan", "555-0101", "Falsa"):
+        assert leaked not in str(ei.value) and leaked not in row
+    cause = ei.value.__cause__
+    assert isinstance(cause, RetryableLLMError) and cause.raw_reply == _PII
+    assert f"{len(_PII)} chars, sha256=" in str(cause)

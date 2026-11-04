@@ -32,7 +32,13 @@ from chalybclip.errors import BudgetExceeded, LLMError
 
 from .config import Effort, LLMConfig, ProviderConfig, Quality
 from .prices import cost_micros
-from .provider import LLMProvider, MultimodalImage, ProviderResult, RetryableLLMError
+from .provider import (
+    LLMProvider,
+    MultimodalImage,
+    ProviderResult,
+    RetryableLLMError,
+    SchemaMismatchError,
+)
 
 if TYPE_CHECKING:
     from chalybclip.db import Database
@@ -426,7 +432,7 @@ class LLMRouter:
             except ValidationError as e:
                 # Treat schema violations as retryable - the LLM may produce a
                 # better-formed object on the next attempt.
-                last_err = e
+                last_err = SchemaMismatchError(schema, e, result.output)
                 if attempt < retry.max_attempts and not await self._backoff(attempt, deadline):
                     last_err = _deadline_error(last_err)
                     break

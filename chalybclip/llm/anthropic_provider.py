@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import base64
 import functools
-import hashlib
 import json
 import logging
 from typing import Any
@@ -34,6 +33,7 @@ from .provider import (
     RefusalError,
     RetryableLLMError,
     TruncatedOutputError,
+    reply_fingerprint,
 )
 
 _log = logging.getLogger("chalybclip.llm.anthropic")
@@ -222,10 +222,9 @@ def _parse_message(message: anthropic.types.Message, *, model: str) -> ProviderR
 
 
 def _not_json(text: str, *, stop: str | None, usage: ProviderResult, why: str) -> RetryableLLMError:
-    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
     return RetryableLLMError(
         f"anthropic reply is not a JSON object ({why}, stop_reason={stop}, "
-        f"{len(text)} chars, sha256={digest})",
+        f"{reply_fingerprint(text)})",
         usage=usage,
         raw_reply=text,
     )
