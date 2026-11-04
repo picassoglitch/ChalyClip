@@ -37,12 +37,16 @@ class RetryableLLMError(LLMError):
         *,
         status_code: int | None = None,
         usage: ProviderResult | None = None,
+        raw_reply: str | None = None,
     ):
         super().__init__(message)
         self.status_code = status_code
         # Tokens the failed attempt still consumed (e.g. a response with no
         # usable JSON). The router bills them like any other attempt.
         self.usage = usage
+        # The model's reply can echo user transcripts (PII): kept for debugging,
+        # never formatted into the message, which reaches the logs (rule 10).
+        self.raw_reply = raw_reply
 
 
 class TruncatedOutputError(LLMError):

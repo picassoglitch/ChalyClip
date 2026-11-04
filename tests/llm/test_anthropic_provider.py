@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from pathlib import Path
@@ -143,9 +144,9 @@ async def test_thinking_blocks_before_the_json_are_ignored() -> None:
 @pytest.mark.parametrize(
     ("reply", "match"),
     [
-        (_reply([_text("[1, 2]")], output_tokens=99), r"not a JSON object .*'\[1, 2\]'"),
-        (_reply([_text("oops {")], output_tokens=99), r"invalid JSON.*'oops \{'"),
-        (_reply([], output_tokens=99), "invalid JSON"),
+        (_reply([_text("[1, 2]")], output_tokens=99), r"not a JSON object \(list,"),
+        (_reply([_text("oops {")], output_tokens=99), r"not a JSON object \(invalid JSON,"),
+        (_reply([], output_tokens=99), r"not a JSON object \(invalid JSON,"),
     ],
 )
 async def test_unusable_reply_is_retryable_and_billed(reply: SimpleNamespace, match: str) -> None:
@@ -292,14 +293,20 @@ async def test_overload_and_every_5xx_are_retryable(status: int, retryable: bool
     assert isinstance(ei.value, RetryableLLMError) is retryable
 
 
-async def test_bad_json_error_chains_the_decode_error() -> None:
-    provider, _ = _provider(_reply([_text("x" * 900)]))
+async def test_bad_json_error_keeps_the_reply_out_of_the_message() -> None:
+    reply = 'Juan Pérez dijo su teléfono 555-0101 {"score":'
+    provider, _ = _provider(_reply([_text(reply)]))
     with pytest.raises(RetryableLLMError) as ei:
         await provider.complete(
             tenant_id="t", model="claude-haiku-5-5", system="s", user="u", schema=Verdict
         )
-    assert isinstance(ei.value.__cause__, json.JSONDecodeError)
-    assert "x" * 500 in str(ei.value) and "x" * 501 not in str(ei.value)
+    err = ei.value
+    assert isinstance(err.__cause__, json.JSONDecodeError)
+    for leaked in ("Juan", "555-0101", "score"):
+        assert leaked not in str(err) and leaked not in repr(err)
+    digest = hashlib.sha256(reply.encode("utf-8")).hexdigest()[:12]
+    assert f"sha256={digest}" in str(err) and f"{len(reply)} chars" in str(err)
+    assert err.raw_reply == reply  # for debugging, outside the message
 
 
 async def test_retryable_statuses_come_from_config() -> None:

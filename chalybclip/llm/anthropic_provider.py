@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import base64
 import functools
+import hashlib
 import json
 import logging
 from typing import Any
@@ -214,15 +215,17 @@ def _parse_message(message: anthropic.types.Message, *, model: str) -> ProviderR
     try:
         structured = json.loads(text)
     except json.JSONDecodeError as e:
-        raise RetryableLLMError(
-            f"anthropic reply is not a JSON object (invalid JSON, stop_reason={stop}, "
-            f"{len(text)} chars): {text[:500]!r}",
-            usage=result,
-        ) from e
+        raise _not_json(text, stop=stop, usage=result, why="invalid JSON") from e
     if not isinstance(structured, dict):
-        raise RetryableLLMError(
-            f"anthropic reply is not a JSON object (stop_reason={stop}, {len(text)} chars): "
-            f"{text[:500]!r}",
-            usage=result,
-        )
+        raise _not_json(text, stop=stop, usage=result, why=type(structured).__name__)
     return result.model_copy(update={"output": structured})
+
+
+def _not_json(text: str, *, stop: str | None, usage: ProviderResult, why: str) -> RetryableLLMError:
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+    return RetryableLLMError(
+        f"anthropic reply is not a JSON object ({why}, stop_reason={stop}, "
+        f"{len(text)} chars, sha256={digest})",
+        usage=usage,
+        raw_reply=text,
+    )
