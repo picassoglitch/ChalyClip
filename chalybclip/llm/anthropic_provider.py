@@ -27,6 +27,7 @@ from chalybclip.errors import LLMError
 
 from .config import Effort, ProviderConfig
 from .provider import (
+    ContextWindowExceededError,
     LLMProvider,
     MultimodalImage,
     ProviderResult,
@@ -204,6 +205,12 @@ def _parse_message(message: anthropic.types.Message, *, model: str) -> ProviderR
         # would truncate again, so fail once and bill it.
         raise TruncatedOutputError(
             f"anthropic reply hit max_tokens ({result.output_tokens} output tokens)",
+            usage=result,
+        )
+    if stop == "model_context_window_exceeded":
+        # Prompt + output filled the context window: a retry of the same prompt fills it again.
+        raise ContextWindowExceededError(
+            f"anthropic reply hit the context window ({result.input_tokens} input tokens)",
             usage=result,
         )
 

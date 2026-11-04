@@ -4,6 +4,7 @@ from .config import LLMConfig, ProviderConfig, Quality, RoutingRule, load_llm_co
 from .frame_cache import FrameCache
 from .frame_store import FrameStore, MemoryFrameStore
 from .provider import (
+    ContextWindowExceededError,
     LLMProvider,
     MultimodalImage,
     ProviderResult,
@@ -27,6 +28,7 @@ from .schemas import (
 
 __all__ = [
     "CallLogRow",
+    "ContextWindowExceededError",
     "CropBoxVerdict",
     "FaceEmotionVerdict",
     "FrameCache",

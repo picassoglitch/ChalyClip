@@ -7,9 +7,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 
 from chalybclip.errors import ChalybClipError
-
 from chalybclip.llm import estimator
 from chalybclip.llm.config import LLMConfig, load_llm_config
 
@@ -22,7 +22,7 @@ def _example() -> LLMConfig:
 
 def test_committed_config_estimates_at_haiku_5_5() -> None:
     cfg = _example()
-    assert estimator.standard_model(cfg) == ("anthropic", "claude-haiku-5-5")
+    assert estimator.standard_models(cfg) == [("anthropic", "claude-haiku-5-5")]
     # 0.75 x $0.50 + 0.25 x $0.10
     assert estimator.blended_usd_per_mtok(cfg) == pytest.approx(0.40)
 
@@ -36,7 +36,7 @@ def test_yaml_rollback_to_haiku_4_5_raises_the_estimate_with_it(tmp_path: Path) 
         "utf-8",
     )
     cfg = load_llm_config(rollback)
-    assert estimator.standard_model(cfg) == ("anthropic", "claude-haiku-4-5")
+    assert estimator.standard_models(cfg) == [("anthropic", "claude-haiku-4-5")]
     # 0.75 x $5 + 0.25 x $1, the pre-swap $4 blend.
     assert estimator.blended_usd_per_mtok(cfg) == pytest.approx(4.0)
     est = estimator.estimate_pipeline_run(duration_seconds=3600, llm_config=cfg)
@@ -93,3 +93,22 @@ def test_unpriced_standard_model_logs_price_unknown(
     with caplog.at_level(logging.ERROR, logger="chalybclip.llm.estimator"):
         estimator.blended_usd_per_mtok(load_llm_config(yaml_path))
     assert any("llm.price_unknown" in r.message for r in caplog.records)
+
+
+def test_all_free_routing_reserves_nothing_for_llm() -> None:
+    data = yaml.safe_load(EXAMPLE.read_text("utf-8"))
+    for name, rule in data["routing"].items():
+        if rule["default_quality"] == "standard":
+            rule["primary"] = "openllm_vision" if "vision" in name else "openllm"
+    cfg = LLMConfig.model_validate(data)
+    assert {p for p, _ in estimator.standard_models(cfg)} == {"openllm", "openllm_vision"}
+    assert estimator.blended_usd_per_mtok(cfg) == 0.0
+
+
+def test_one_paid_standard_purpose_sets_the_rate() -> None:
+    data = yaml.safe_load(EXAMPLE.read_text("utf-8"))
+    for name, rule in data["routing"].items():
+        if rule["default_quality"] == "standard" and name != "hook_generation":
+            rule["primary"] = "openllm"
+    cfg = LLMConfig.model_validate(data)
+    assert estimator.blended_usd_per_mtok(cfg) == pytest.approx(0.40)  # hooks on Haiku 5.5

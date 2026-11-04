@@ -61,7 +61,7 @@ DEFAULT_CLIPS_PER_HOUR = 8             # cut step normally produces 6-10/hour
 DEFAULT_VARIANTS_PER_CLIP = 5          # config default n_variants
 DEFAULT_HOOKS_PER_CLIP = 3             # hook writer default fanout
 
-# Token T3: the estimate is priced at the routed `standard` model's rates,
+# Token T3: the estimate is priced at the routed `standard` models' rates,
 # weighted 3:1 toward output because captions/hooks generation dominates spend.
 _OUTPUT_WEIGHT = 0.75
 # When the config can't say what runs, reserve at the committed premium model:
@@ -80,12 +80,15 @@ def _fallback_rate() -> float:
     return _blend(rates)
 
 
-def standard_model(config: LLMConfig) -> tuple[str, str] | None:
-    """(provider, model) the standard purposes route to: the first standard rule's primary."""
+def standard_models(config: LLMConfig) -> list[tuple[str, str]]:
+    """(provider, model) of every standard purpose's primary, deduplicated, in routing order."""
+    found: list[tuple[str, str]] = []
     for rule in config.routing.values():
         if rule.default_quality == "standard" and rule.primary in config.providers:
-            return rule.primary, config.model_for(rule.primary, "standard")
-    return None
+            pair = (rule.primary, config.model_for(rule.primary, "standard"))
+            if pair not in found:
+                found.append(pair)
+    return found
 
 
 def blended_usd_per_mtok(config: LLMConfig | None = None) -> float:
@@ -95,18 +98,24 @@ def blended_usd_per_mtok(config: LLMConfig | None = None) -> float:
     except (ChalybClipError, ValidationError, OSError):
         _log.error("llm.estimate_config_unreadable fallback=%s", FALLBACK_MODEL, exc_info=True)
         return _fallback_rate()
-    routed = standard_model(cfg)
-    if routed is None:
+    routed = standard_models(cfg)
+    if not routed:
         _log.warning("llm.estimate_nothing_routed fallback=%s", FALLBACK_MODEL)
         return _fallback_rate()
-    rates, known = cfg.rates_for(*routed)
-    if not known:
-        _log.error(
-            "llm.price_unknown provider=%s model=%s — estimated at the conservative rate; "
-            "add it to chalybclip/llm/prices.py",
-            *routed,
-        )
-    return _blend(rates)
+    # The phase heuristics don't map 1:1 to purposes, so reserve at the priciest
+    # standard model in use; free providers only win when every purpose is free.
+    blends = []
+    for provider, model in routed:
+        rates, known = cfg.rates_for(provider, model)
+        if not known:
+            _log.error(
+                "llm.price_unknown provider=%s model=%s — estimated at the conservative rate; "
+                "add it to chalybclip/llm/prices.py",
+                provider,
+                model,
+            )
+        blends.append(_blend(rates))
+    return max(blends)
 
 
 @dataclass(frozen=True)

@@ -111,6 +111,10 @@ class TruncatedOutputError(LLMError):
         self.usage = usage
 
 
+class ContextWindowExceededError(TruncatedOutputError):
+    """Stopped at `model_context_window_exceeded`: like max_tokens, billed once, not retried."""
+
+
 class RefusalError(LLMError):
     """The model declined (`stop_reason: refusal`). Not retried, since the same
     request is declined again, but billed: `usage` has the tokens."""
