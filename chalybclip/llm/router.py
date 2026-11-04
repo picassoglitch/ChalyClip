@@ -30,7 +30,7 @@ from pydantic import BaseModel, ValidationError
 
 from chalybclip.errors import BudgetExceeded, LLMError
 
-from .config import LLMConfig, ProviderConfig, Quality
+from .config import Effort, LLMConfig, ProviderConfig, Quality
 from .prices import cost_micros
 from .provider import LLMProvider, MultimodalImage, ProviderResult, RetryableLLMError
 
@@ -43,7 +43,7 @@ T = TypeVar("T", bound=BaseModel)
 _router_log = logging.getLogger("chalybclip.llm.router")
 
 ProviderFactory = Callable[[str, ProviderConfig, str], LLMProvider | None]
-ProviderInvoker = Callable[[LLMProvider, str], Awaitable[ProviderResult]]
+ProviderInvoker = Callable[[LLMProvider, str, Effort | None], Awaitable[ProviderResult]]
 
 # ---- billing circuit breaker -------------------------------------------
 # A billing failure (credit balance exhausted, monthly usage cap hit) is not
@@ -158,13 +158,16 @@ class LLMRouter:
             quality: Override the routing rule's `default_quality`.
         """
 
-        async def invoke(provider: LLMProvider, model: str) -> ProviderResult:
+        async def invoke(
+            provider: LLMProvider, model: str, effort: Effort | None
+        ) -> ProviderResult:
             return await provider.complete(
                 tenant_id=tenant_id,
                 model=model,
                 system=system,
                 user=user,
                 schema=schema,
+                effort=effort,
             )
 
         return await self._invoke(
@@ -197,7 +200,9 @@ class LLMRouter:
         if not images:
             raise LLMError("complete_multimodal requires at least one image")
 
-        async def invoke(provider: LLMProvider, model: str) -> ProviderResult:
+        async def invoke(
+            provider: LLMProvider, model: str, effort: Effort | None
+        ) -> ProviderResult:
             return await provider.complete_multimodal(
                 tenant_id=tenant_id,
                 model=model,
@@ -205,6 +210,7 @@ class LLMRouter:
                 user=user,
                 images=images,
                 schema=schema,
+                effort=effort,
             )
 
         return await self._invoke(
@@ -245,6 +251,7 @@ class LLMRouter:
                 raise
 
         provider_chain = [rule.primary, *rule.fallbacks]
+        deadline = self._deadline(rule.primary, effective_quality)
         last_error: Exception | None = None
         # Collect every provider's failure reason so the final error message
         # surfaces the real first failure (e.g. anthropic key missing) instead
@@ -281,7 +288,8 @@ class LLMRouter:
             try:
                 validated, attempts, spent = await self._call_with_retries(
                     schema=schema,
-                    invoke=functools.partial(invoke_provider, provider, model),
+                    invoke=functools.partial(invoke_provider, provider, model, rule.effort),
+                    deadline=deadline,
                 )
             except (LLMError, ValidationError) as e:
                 # Failed attempts still consumed tokens (schema-invalid
@@ -369,6 +377,7 @@ class LLMRouter:
         *,
         schema: type[T],
         invoke: Callable[[], Awaitable[ProviderResult]],
+        deadline: float | None = None,
     ) -> tuple[T, int, list[ProviderResult]]:
         """Drive a single provider through `RetryConfig.max_attempts`.
 
@@ -379,9 +388,15 @@ class LLMRouter:
         retry = self._config.retry
         last_err: Exception | None = None
         spent: list[ProviderResult] = []
+        loop = asyncio.get_running_loop()
         for attempt in range(1, retry.max_attempts + 1):
+            remaining = None if deadline is None else deadline - loop.time()
+            if remaining is not None and remaining <= 0:
+                last_err = _deadline_error(last_err)
+                attempt -= 1  # this attempt never started
+                break
             try:
-                result = await invoke()
+                result = await asyncio.wait_for(invoke(), remaining)
                 spent.append(result)
                 validated = schema.model_validate(result.output)
                 return validated, attempt, spent
@@ -390,17 +405,19 @@ class LLMRouter:
                     spent.append(e.usage)
                 last_err = e
                 if attempt < retry.max_attempts:
-                    backoff = retry.initial_backoff_s * (retry.backoff_multiplier ** (attempt - 1))
-                    await asyncio.sleep(backoff)
+                    await self._backoff(attempt, deadline)
                 continue
             except ValidationError as e:
                 # Treat schema violations as retryable - the LLM may produce a
                 # better-formed object on the next attempt.
                 last_err = e
                 if attempt < retry.max_attempts:
-                    backoff = retry.initial_backoff_s * (retry.backoff_multiplier ** (attempt - 1))
-                    await asyncio.sleep(backoff)
+                    await self._backoff(attempt, deadline)
                 continue
+            except TimeoutError:
+                # The in-flight attempt was cancelled at the deadline; its tokens are unknown.
+                last_err = _deadline_error(last_err)
+                break
             except LLMError as e:
                 # Non-retryable: stop here, but keep what earlier attempts cost
                 # (and this one's, when the provider reports it).
@@ -413,10 +430,27 @@ class LLMRouter:
 
         # Annotate so the caller can record attempts in the failure log row.
         if last_err is not None:
-            last_err.attempts = retry.max_attempts  # type: ignore[attr-defined]
+            last_err.attempts = attempt  # type: ignore[attr-defined]
             last_err.spent = spent  # type: ignore[attr-defined]
             raise last_err
         raise LLMError("retry loop exited without success or error")
+
+    def _deadline(self, provider: str, quality: Quality) -> float | None:
+        """Loop-clock deadline for one router call, from the primary's timeout_s."""
+        cfg = self._config.providers.get(provider)
+        if cfg is None:
+            return None
+        factor = self._config.retry.deadline_timeouts.get(quality)
+        if factor is None:
+            return None
+        return asyncio.get_running_loop().time() + cfg.timeout_s * factor
+
+    async def _backoff(self, attempt: int, deadline: float | None) -> None:
+        retry = self._config.retry
+        delay = retry.initial_backoff_s * (retry.backoff_multiplier ** (attempt - 1))
+        if deadline is not None:
+            delay = min(delay, max(0.0, deadline - asyncio.get_running_loop().time()))
+        await asyncio.sleep(delay)
 
     def _get_provider(self, name: str) -> LLMProvider | None:
         if name not in self._providers:
@@ -590,6 +624,11 @@ class LLMRouter:
                 await emit(self._db, type_, payload)
         except Exception:
             pass
+
+
+def _deadline_error(cause: Exception | None) -> LLMError:
+    detail = f" (last error: {type(cause).__name__}: {cause})" if cause is not None else ""
+    return LLMError(f"LLM call exceeded its wall-time deadline{detail}")
 
 
 def _sum_usage(results: list[ProviderResult]) -> ProviderResult:

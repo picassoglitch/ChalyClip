@@ -183,19 +183,35 @@ async def test_router_bills_a_truncated_attempt_once(tmp_path: Path) -> None:
     assert row["cost_usd_micros"] > 0
 
 
-async def test_effort_is_sent_only_for_models_configured_with_it() -> None:
+async def test_effort_is_sent_only_to_models_that_accept_it() -> None:
     provider, fake = _provider(
         _reply([_text({"score": 0.5, "reason": "a"})]),
         _reply([_text({"score": 0.5, "reason": "b"})]),
+        _reply([_text({"score": 0.5, "reason": "c"})]),
     )
-    provider._config = provider._config.model_copy(update={"effort": {"claude-haiku-5-5": "low"}})
-    for model in ("claude-haiku-5-5", "claude-haiku-4-5"):
-        await provider.complete(tenant_id="t", model=model, system="s", user="u", schema=Verdict)
-    haiku55, haiku45 = fake.calls
+    for model, effort in (
+        ("claude-haiku-5-5", "low"),
+        ("claude-haiku-4-5", "low"),
+        ("claude-opus-5-5", None),
+    ):
+        await provider.complete(
+            tenant_id="t", model=model, system="s", user="u", schema=Verdict, effort=effort
+        )
+    haiku55, haiku45, opus55 = fake.calls
     assert haiku55["output_config"]["effort"] == "low"
     assert "effort" not in haiku45["output_config"]  # Haiku 4.5 rejects effort
+    assert "effort" not in opus55["output_config"]  # unset keeps the model default
     for call in fake.calls:
         assert not {"thinking", "temperature", "top_p", "top_k"} & call.keys()
+
+
+def test_sdk_client_does_not_retry_on_its_own() -> None:
+    provider, _ = _provider()
+    assert AnthropicProvider(api_key="k", config=provider._config)._client.max_retries == 0
+
+
+EXTRACTION = ("viral_detection", "vision_rescore", "clip_scoring")
+CREATIVE = ("hook_generation", "logo_generation", "variant_generation_visual", "agent_decision")
 
 
 def test_committed_example_config_targets_the_5_5_family() -> None:
@@ -208,4 +224,6 @@ def test_committed_example_config_targets_the_5_5_family() -> None:
         "claude-opus-5-5",
     )
     assert anthropic_cfg.timeout_s >= 300
-    assert anthropic_cfg.effort == {"claude-haiku-5-5": "low"}
+    assert {p: cfg.routing[p].effort for p in EXTRACTION} == dict.fromkeys(EXTRACTION, "low")
+    assert {p: cfg.routing[p].effort for p in CREATIVE} == dict.fromkeys(CREATIVE)
+    assert set(EXTRACTION + CREATIVE) == set(cfg.routing)  # a new purpose must pick a side

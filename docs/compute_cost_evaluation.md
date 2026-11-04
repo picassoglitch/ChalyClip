@@ -61,18 +61,19 @@ the provider the Dockerfile already defaults to.
 
 | Option | Cost per VOD | Notes |
 | --- | --- | --- |
-| **Anthropic `claude-haiku-4-5`** (`anthropic` provider, already wired, cost-tracked) | **~$0.03** ($1 / $5 per Mtok) | Best structured-output reliability of the options; the router's pricing table meters it. Premium purposes on `claude-opus-5` ($5 / $25) are two calls per run at most. |
+| **Anthropic `claude-haiku-5-5`** (`anthropic` provider, already wired, cost-tracked) | **~$0.003** ($0.10 / $0.50 per Mtok; $0.50 / $2.50 above a 100K-token prompt) | Best structured-output reliability of the options; `chalybclip/llm/prices.py` meters it. Premium purposes on `claude-opus-5-5` ($4 / $20, cache reads $0.20) are two calls per run at most. Was `claude-haiku-4-5` at ~$0.03 until the Phase 0.4 swap (docs/smart_edit_plan.md). |
 | Hosted open model through the `openllm` provider (Groq, OpenRouter) | ~$0.005 | Config-only switch (`CHALYBCLIP_OPENLLM_BASE_URL` + `OPENLLM_API_KEY`). Weaker JSON discipline; the router retries. |
 | Ollama on a Cloud Run GPU | ~$0.40+ | Dozens of short calls per run keep the GPU instance alive for most of the pipeline; the worst option for sporadic traffic. |
 
-**Pick: Anthropic Haiku 4.5 for `standard`, Opus 5 for `premium`.** The
-difference to the cheapest hosted open model is two cents per VOD; the
-difference in hook quality is the product.
+**Pick: Anthropic Haiku 5.5 for `standard`, Opus 5.5 for `premium`.** It now
+costs less per VOD than the cheapest hosted open model; the difference in
+hook quality is the product.
 
 ### Vision LLM
 
-Haiku 4.5 accepts images, so the same provider covers the multimodal
-purposes: a 720p frame is ~1.2k tokens, so 60 frames per VOD ≈ **$0.07**. If
+Haiku 5.5 accepts images, so the same provider covers the multimodal
+purposes: a 720p frame is ~1.2k tokens, so 60 frames per VOD ≈ **$0.007**
+(it was ~$0.07 on Haiku 4.5). If
 that ever matters, the vision purposes can be pointed at a hosted open VLM
 via `openllm_vision`, or left to their deterministic fallbacks.
 
@@ -97,8 +98,9 @@ work, and only starts to pay for itself somewhere past 500 VOD-hours/month.
 ## 5. What was changed to implement this
 
 - `config/llm.example.yaml` (the router's default when `config/llm.yaml` is
-  absent): every purpose routes to `anthropic`; `premium` is `claude-opus-5`
-  with its pricing entry. The `openllm*` providers stay defined, unused.
+  absent): every purpose routes to `anthropic`; `standard` is `claude-haiku-5-5`
+  and `premium` is `claude-opus-5-5`, both priced by `chalybclip/llm/prices.py`.
+  The `openllm*` providers stay defined, unused.
 - Hub Terraform (`picassoglitch/chalyb`, `infra/terraform`): the worker is
   4 vCPU / 8 GiB; `CHALYBCLIP_TRANSCRIBE_PROVIDER=assemblyai`; two new shared
   secrets, `assemblyai-api-key` and `anthropic-api-key`, injected as

@@ -49,6 +49,7 @@ class FakeProvider(LLMProvider):
         system: str,
         user: str,
         schema: type[BaseModel],
+        effort: str | None = None,
     ) -> ProviderResult:
         self.calls.append(
             {
@@ -58,6 +59,7 @@ class FakeProvider(LLMProvider):
                 "system": system,
                 "user": user,
                 "schema": schema.__name__,
+                "effort": effort,
             }
         )
         return self._next()
@@ -71,6 +73,7 @@ class FakeProvider(LLMProvider):
         user: str,
         images: list[MultimodalImage],
         schema: type[BaseModel],
+        effort: str | None = None,
     ) -> ProviderResult:
         self.calls.append(
             {
@@ -82,6 +85,7 @@ class FakeProvider(LLMProvider):
                 "images": list(images),
                 "n_images": len(images),
                 "schema": schema.__name__,
+                "effort": effort,
             }
         )
         return self._next()

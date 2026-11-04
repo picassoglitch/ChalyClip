@@ -32,6 +32,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .prices import lookup_rates
 
 # Empirical multipliers — measured across ~30 ChalyClip pipeline runs in
 # Q1-Q2 2026. These are 80th-percentile values so we overestimate slightly;
@@ -52,14 +53,20 @@ DEFAULT_CLIPS_PER_HOUR = 8             # cut step normally produces 6-10/hour
 DEFAULT_VARIANTS_PER_CLIP = 5          # config default n_variants
 DEFAULT_HOOKS_PER_CLIP = 3             # hook writer default fanout
 
-# Token T3 — to express the estimate in the SAME unit Chalyb actually
-# deducts (real USD cost across all providers), convert the LLM token
-# estimate to cost with a blended rate. Output tokens dominate the
-# pipeline's LLM spend (captions/hooks generation), so we lean toward
-# the standard model's output price (claude-haiku-4-5 @ $5/Mtok out,
-# $1/Mtok in) — ~$4/Mtok blended is a deliberately conservative
-# upper-bound, matching the estimator's "no más de ~X" framing.
-_LLM_BLENDED_USD_PER_MTOK = 4.0
+# Token T3: the estimate is priced at the `standard` model's committed rates,
+# weighted 3:1 toward output because captions/hooks generation dominates spend.
+ESTIMATE_MODEL = "claude-haiku-5-5"  # keep in step with config/llm.example.yaml
+_OUTPUT_WEIGHT = 0.75
+
+
+def _blended_usd_per_mtok() -> float:
+    rates = lookup_rates("anthropic", ESTIMATE_MODEL)
+    if rates is None:  # an id prices.py doesn't know: fail loud in tests, not silent at 0
+        raise LookupError(f"no committed price for {ESTIMATE_MODEL}")
+    return _OUTPUT_WEIGHT * rates.output + (1 - _OUTPUT_WEIGHT) * rates.input
+
+
+_LLM_BLENDED_USD_PER_MTOK = _blended_usd_per_mtok()
 
 
 @dataclass(frozen=True)

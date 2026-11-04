@@ -53,18 +53,18 @@ providers:
       input_tokens_per_minute: 400000
       output_tokens_per_minute: 80000
     # Opus 5.5 always thinks, and a call can run past 30 s; the SDK uses this per HTTP attempt.
-    timeout_s: 300
+    timeout_s: 300                              # router caps a call at 2x (standard) / 1x (premium)
     max_output_tokens: 16000                    # thinking counts against it; 16K stays non-streaming-safe
-    effort:
-      claude-haiku-5-5: low                     # standard purposes are extraction/scoring; default is medium
 
 # Routing rules per "purpose" (the use case of the call).
 # The router resolves: purpose -> quality -> provider -> model.
+# `effort: low` on extraction/scoring purposes; creative ones keep the model default.
 routing:
   vision_rescore:                               # frame-based rescore of detect candidates
     default_quality: standard
     primary: anthropic
     fallbacks: []
+    effort: low
 
   variant_generation_visual:                    # Phase 2+, multimodal
     default_quality: standard
@@ -75,6 +75,7 @@ routing:
     default_quality: standard
     primary: anthropic
     fallbacks: []
+    effort: low
 
   agent_decision:                               # alter-ego auto-approval reasoning
     default_quality: premium
@@ -85,6 +86,7 @@ routing:
     default_quality: standard
     primary: anthropic
     fallbacks: []
+    effort: low
 
   logo_generation:                              # AI-generated SVG brand mark (voice-markers §3.3.a)
     default_quality: premium

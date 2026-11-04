@@ -21,6 +21,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from chalybclip.errors import LLMError
 
+from .config import Effort
+
 
 class RetryableLLMError(LLMError):
     """A transient provider failure: 429, 5xx, network/timeout.
@@ -91,6 +93,7 @@ class LLMProvider(Protocol):
         system: str,
         user: str,
         schema: type[BaseModel],
+        effort: Effort | None = None,
     ) -> ProviderResult: ...
 
     async def complete_multimodal(
@@ -102,4 +105,5 @@ class LLMProvider(Protocol):
         user: str,
         images: list[MultimodalImage],
         schema: type[BaseModel],
+        effort: Effort | None = None,
     ) -> ProviderResult: ...

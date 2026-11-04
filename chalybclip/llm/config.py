@@ -64,9 +64,6 @@ class ProviderConfig(BaseModel):
     # Response cap per call; adaptive thinking on Opus 5/5.5 counts against it.
     # 16K is the documented non-streaming default (fits the SDK's HTTP timeout).
     max_output_tokens: int = Field(default=16_000, gt=0)
-    # anthropic only: `output_config.effort` per exact model id. Haiku/Opus 5.5
-    # default to medium; models without effort support (Haiku 4.5) must stay unlisted.
-    effort: dict[str, Effort] = Field(default_factory=dict)
     # openai_compatible only: send response_format={"type":"json_object"}.
     # Disable for runtimes that reject the parameter.
     json_mode: bool = True
@@ -78,6 +75,13 @@ class RoutingRule(BaseModel):
     default_quality: Quality = "standard"
     primary: str
     fallbacks: list[str] = Field(default_factory=list)
+    # Thinking depth for this purpose (anthropic `output_config.effort`). Unset
+    # keeps the model default; models without effort support never receive it.
+    effort: Effort | None = None
+
+
+def _default_deadlines() -> dict[Quality, float]:
+    return {"standard": 2.0, "premium": 1.0}
 
 
 class RetryConfig(BaseModel):
@@ -85,6 +89,9 @@ class RetryConfig(BaseModel):
     initial_backoff_s: float = Field(default=1.0, ge=0.0)
     backoff_multiplier: float = Field(default=4.0, ge=1.0)
     retryable_status_codes: list[int] = Field(default_factory=lambda: [429, 500, 502, 503, 504])
+    # Wall-time cap per router call, in multiples of the provider's timeout_s: room
+    # for one retry on standard; premium gets one attempt (it runs inside API requests).
+    deadline_timeouts: dict[Quality, float] = Field(default_factory=_default_deadlines)
 
 
 class CircuitBreakerConfig(BaseModel):

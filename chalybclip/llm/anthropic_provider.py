@@ -24,7 +24,7 @@ from pydantic import BaseModel
 
 from chalybclip.errors import LLMError
 
-from .config import ProviderConfig
+from .config import Effort, ProviderConfig
 from .provider import (
     LLMProvider,
     MultimodalImage,
@@ -44,6 +44,25 @@ def output_format_for(schema: type[BaseModel]) -> dict[str, Any]:
     return {"type": "json_schema", "schema": anthropic.transform_schema(schema)}
 
 
+# Families that accept `output_config.effort`; Haiku 4.5, Sonnet 4.5 and older 400 on it.
+_EFFORT_FAMILIES = (
+    "claude-opus-4-5",
+    "claude-opus-4-6",
+    "claude-opus-4-7",
+    "claude-opus-4-8",
+    "claude-opus-5",
+    "claude-sonnet-4-6",
+    "claude-sonnet-5",
+    "claude-haiku-5",
+    "claude-fable-5",
+    "claude-mythos-5",
+)
+
+
+def supports_effort(model: str) -> bool:
+    return model.startswith(_EFFORT_FAMILIES)
+
+
 class AnthropicProvider(LLMProvider):
     """Concrete Anthropic provider implementing the `LLMProvider` protocol."""
 
@@ -53,6 +72,8 @@ class AnthropicProvider(LLMProvider):
             api_key=api_key,
             base_url=config.base_url or None,
             timeout=config.timeout_s,
+            # The router owns retries; SDK retries multiplied them (3 x 3 x timeout_s).
+            max_retries=0,
         )
 
     async def complete(
@@ -63,6 +84,7 @@ class AnthropicProvider(LLMProvider):
         system: str,
         user: str,
         schema: type[BaseModel],
+        effort: Effort | None = None,
     ) -> ProviderResult:
         del tenant_id  # used by the router for logging, not the SDK call
         message = await self._send(
@@ -70,6 +92,7 @@ class AnthropicProvider(LLMProvider):
             system=system,
             messages=[{"role": "user", "content": user}],
             schema=schema,
+            effort=effort,
         )
         return _parse_message(message, model=model)
 
@@ -82,6 +105,7 @@ class AnthropicProvider(LLMProvider):
         user: str,
         images: list[MultimodalImage],
         schema: type[BaseModel],
+        effort: Effort | None = None,
     ) -> ProviderResult:
         del tenant_id
         # Image blocks first, then the text prompt - matches Anthropic's
@@ -103,13 +127,16 @@ class AnthropicProvider(LLMProvider):
             system=system,
             messages=[{"role": "user", "content": content}],
             schema=schema,
+            effort=effort,
         )
         return _parse_message(message, model=model)
 
-    def _output_config(self, model: str, schema: type[BaseModel]) -> dict[str, Any]:
+    @staticmethod
+    def _output_config(
+        model: str, schema: type[BaseModel], effort: Effort | None
+    ) -> dict[str, Any]:
         config: dict[str, Any] = {"format": output_format_for(schema)}
-        effort = self._config.effort.get(model)
-        if effort is not None:
+        if effort is not None and supports_effort(model):
             config["effort"] = effort
         return config
 
@@ -120,6 +147,7 @@ class AnthropicProvider(LLMProvider):
         system: str,
         messages: list[dict[str, Any]],
         schema: type[BaseModel],
+        effort: Effort | None,
     ) -> anthropic.types.Message:
         try:
             # The SDK's overloads use TypedDicts for message content and
@@ -129,7 +157,7 @@ class AnthropicProvider(LLMProvider):
                 max_tokens=self._config.max_output_tokens,
                 system=system,
                 messages=messages,
-                output_config=self._output_config(model, schema),
+                output_config=self._output_config(model, schema, effort),
             )
         except anthropic.APIStatusError as e:
             status = getattr(e, "status_code", None)

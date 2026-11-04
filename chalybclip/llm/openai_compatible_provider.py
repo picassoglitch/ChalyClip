@@ -33,7 +33,7 @@ from pydantic import BaseModel
 
 from chalybclip.errors import LLMError
 
-from .config import ProviderConfig
+from .config import Effort, ProviderConfig
 from .provider import LLMProvider, MultimodalImage, ProviderResult, RetryableLLMError
 
 _RETRYABLE_STATUSES = frozenset({408, 409, 429, 500, 502, 503, 504})
@@ -67,8 +67,10 @@ class OpenAICompatibleProvider(LLMProvider):
         system: str,
         user: str,
         schema: type[BaseModel],
+        effort: Effort | None = None,
     ) -> ProviderResult:
-        del tenant_id  # cost attribution happens in the router
+        # Cost attribution happens in the router; OpenAI-compatible runtimes have no effort knob.
+        del tenant_id, effort
         return await self._chat(
             model=model,
             system=system,
@@ -85,8 +87,9 @@ class OpenAICompatibleProvider(LLMProvider):
         user: str,
         images: list[MultimodalImage],
         schema: type[BaseModel],
+        effort: Effort | None = None,
     ) -> ProviderResult:
-        del tenant_id
+        del tenant_id, effort  # no effort knob on OpenAI-compatible runtimes
         content: list[dict[str, Any]] = [
             {
                 "type": "image_url",
