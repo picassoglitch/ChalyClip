@@ -46,13 +46,17 @@ providers:
     api_key_env: ANTHROPIC_API_KEY
     base_url: https://api.anthropic.com
     models:
-      standard: claude-haiku-4-5                # fast + cheap, vision-capable; ~$0.03/VOD for text
-      premium: claude-opus-5                    # the two `premium` purposes only (logo, agent decisions)
+      standard: claude-haiku-5-5                # fast + cheap, vision-capable; $0.10/$0.50 per MTok
+      premium: claude-opus-5-5                  # the two `premium` purposes only (logo, agent decisions)
     rate_limits:
       requests_per_minute: 1000
       input_tokens_per_minute: 400000
       output_tokens_per_minute: 80000
-    timeout_s: 30
+    # Opus 5.5 always thinks, and a call can run past 30 s; the SDK uses this per HTTP attempt.
+    timeout_s: 300
+    max_output_tokens: 16000                    # thinking counts against it; 16K stays non-streaming-safe
+    effort:
+      claude-haiku-5-5: low                     # standard purposes are extraction/scoring; default is medium
 
 # Routing rules per "purpose" (the use case of the call).
 # The router resolves: purpose -> quality -> provider -> model.
@@ -104,8 +108,8 @@ circuit_breaker:
   window_s: 300
   recovery_s: 300
 
-# Cost tracking — used to compute cost_usd_micros per call.
-# Open models have no pricing entry: unlisted (provider, model) pairs cost 0.
+# Cost tracking: entries here override chalybclip/llm/prices.py per model.
+# The 5.5 models stay unlisted so Haiku 5.5's >100K-prompt tier keeps applying.
 pricing:
   anthropic:
     claude-haiku-4-5:

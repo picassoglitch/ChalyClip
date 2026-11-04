@@ -39,7 +39,16 @@ class RetryableLLMError(LLMError):
         super().__init__(message)
         self.status_code = status_code
         # Tokens the failed attempt still consumed (e.g. a response with no
-        # tool_use block). The router bills them like any other attempt.
+        # usable JSON). The router bills them like any other attempt.
+        self.usage = usage
+
+
+class TruncatedOutputError(LLMError):
+    """The reply hit `max_tokens` before the JSON closed. Not retried (the same
+    request would truncate again), but its tokens were billed: `usage` has them."""
+
+    def __init__(self, message: str, *, usage: ProviderResult | None = None):
+        super().__init__(message)
         self.usage = usage
 
 

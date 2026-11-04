@@ -59,12 +59,29 @@ def test_cache_tokens_are_priced_at_anthropic_multipliers() -> None:
         ("claude-sonnet-4-5", 3.0, 15.0),
         ("claude-opus-5", 5.0, 25.0),
         ("claude-opus-4-7", 5.0, 25.0),
+        ("claude-haiku-5-5", 0.10, 0.50),
+        ("claude-opus-5-5", 4.0, 20.0),
     ],
 )
 def test_committed_prices_cover_referenced_models(model: str, rin: float, rout: float) -> None:
     rates = lookup_rates("anthropic", model)
     assert rates is not None
     assert (rates.input, rates.output) == (rin, rout)
+
+
+def test_haiku_5_5_long_prompt_tier_bills_every_token_at_the_higher_rate() -> None:
+    rates = lookup_rates("anthropic", "claude-haiku-5-5")
+    assert rates is not None
+    at_limit = cost_micros(rates, input_tokens=100_000, output_tokens=1_000)
+    assert at_limit == round(100_000 * 0.10 + 1_000 * 0.50)
+    # Cache reads count toward the 100K threshold.
+    over = cost_micros(rates, input_tokens=60_000, output_tokens=1_000, cache_read_tokens=50_000)
+    assert over == round(60_000 * 0.50 + 1_000 * 2.50 + 50_000 * 0.05)
+
+
+def test_opus_5_5_cache_reads_at_20_cents() -> None:
+    rates = lookup_rates("anthropic", "claude-opus-5-5")
+    assert rates is not None and rates.cache_read_rate == 0.20
 
 
 def test_unknown_paid_model_uses_conservative_rate() -> None:
@@ -111,10 +128,13 @@ def test_committed_example_config_prices_its_models() -> None:
 
 
 def _message(*, tool: bool, **usage: int) -> SimpleNamespace:
-    content = [SimpleNamespace(type="tool_use", input={"answer": "x"})] if tool else [
-        SimpleNamespace(type="text", text="oops")
-    ]
-    return SimpleNamespace(content=content, usage=SimpleNamespace(**usage))
+    # `tool` = a usable structured-output reply (JSON text), else unparseable text.
+    text = '{"answer": "x"}' if tool else "oops"
+    return SimpleNamespace(
+        content=[SimpleNamespace(type="text", text=text)],
+        stop_reason="end_turn",
+        usage=SimpleNamespace(**usage),
+    )
 
 
 def test_anthropic_parse_reads_cache_tokens() -> None:
@@ -127,7 +147,7 @@ def test_anthropic_parse_reads_cache_tokens() -> None:
     assert res.output == {"answer": "x"}
 
 
-def test_anthropic_missing_tool_use_still_reports_usage() -> None:
+def test_anthropic_unparseable_reply_still_reports_usage() -> None:
     with pytest.raises(RetryableLLMError) as ei:
         _parse_message(_message(
             tool=False, input_tokens=300, output_tokens=40,

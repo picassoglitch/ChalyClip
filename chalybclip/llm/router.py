@@ -285,7 +285,7 @@ class LLMRouter:
                 )
             except (LLMError, ValidationError) as e:
                 # Failed attempts still consumed tokens (schema-invalid
-                # output, a response with no tool_use block) — bill them.
+                # output, a reply with no usable JSON) — bill them.
                 failed_usage = _sum_usage(getattr(e, "spent", None) or [])
                 await self._log(
                     tenant_id=tenant_id,
@@ -402,7 +402,11 @@ class LLMRouter:
                     await asyncio.sleep(backoff)
                 continue
             except LLMError as e:
-                # Non-retryable: stop here, but keep what earlier attempts cost.
+                # Non-retryable: stop here, but keep what earlier attempts cost
+                # (and this one's, when the provider reports it).
+                usage = getattr(e, "usage", None)
+                if isinstance(usage, ProviderResult):
+                    spent.append(usage)
                 e.attempts = attempt  # type: ignore[attr-defined]
                 e.spent = spent  # type: ignore[attr-defined]
                 raise

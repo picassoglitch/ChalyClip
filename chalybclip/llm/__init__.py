@@ -3,7 +3,13 @@
 from .config import LLMConfig, ProviderConfig, Quality, RoutingRule, load_llm_config
 from .frame_cache import FrameCache
 from .frame_store import FrameStore, MemoryFrameStore
-from .provider import LLMProvider, MultimodalImage, ProviderResult, RetryableLLMError
+from .provider import (
+    LLMProvider,
+    MultimodalImage,
+    ProviderResult,
+    RetryableLLMError,
+    TruncatedOutputError,
+)
 from .router import CallLogRow, LLMRouter
 from .schemas import (
     CropBoxVerdict,
@@ -38,6 +44,7 @@ __all__ = [
     "RetryableLLMError",
     "RoutingRule",
     "ThumbnailPickVerdict",
+    "TruncatedOutputError",
     "Variant",
     "VariantBatch",
     "load_llm_config",

@@ -40,6 +40,7 @@ class RateLimitsConfig(BaseModel):
 
 
 ProviderKind = Literal["anthropic", "openai_compatible"]
+Effort = Literal["low", "medium", "high", "xhigh", "max"]
 
 
 class ProviderConfig(BaseModel):
@@ -60,6 +61,12 @@ class ProviderConfig(BaseModel):
     models: ProviderModelsConfig
     rate_limits: RateLimitsConfig = Field(default_factory=RateLimitsConfig)
     timeout_s: float = Field(default=30.0, gt=0.0)
+    # Response cap per call; adaptive thinking on Opus 5/5.5 counts against it.
+    # 16K is the documented non-streaming default (fits the SDK's HTTP timeout).
+    max_output_tokens: int = Field(default=16_000, gt=0)
+    # anthropic only: `output_config.effort` per exact model id. Haiku/Opus 5.5
+    # default to medium; models without effort support (Haiku 4.5) must stay unlisted.
+    effort: dict[str, Effort] = Field(default_factory=dict)
     # openai_compatible only: send response_format={"type":"json_object"}.
     # Disable for runtimes that reject the parameter.
     json_mode: bool = True
