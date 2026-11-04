@@ -32,7 +32,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .prices import lookup_rates
+from chalybclip.errors import ChalybClipError
+
+from .config import LLMConfig, get_llm_config
+from .prices import CONSERVATIVE_RATES
 
 # Empirical multipliers — measured across ~30 ChalyClip pipeline runs in
 # Q1-Q2 2026. These are 80th-percentile values so we overestimate slightly;
@@ -53,20 +56,31 @@ DEFAULT_CLIPS_PER_HOUR = 8             # cut step normally produces 6-10/hour
 DEFAULT_VARIANTS_PER_CLIP = 5          # config default n_variants
 DEFAULT_HOOKS_PER_CLIP = 3             # hook writer default fanout
 
-# Token T3: the estimate is priced at the `standard` model's committed rates,
+# Token T3: the estimate is priced at the routed `standard` model's rates,
 # weighted 3:1 toward output because captions/hooks generation dominates spend.
-ESTIMATE_MODEL = "claude-haiku-5-5"  # keep in step with config/llm.example.yaml
 _OUTPUT_WEIGHT = 0.75
 
 
-def _blended_usd_per_mtok() -> float:
-    rates = lookup_rates("anthropic", ESTIMATE_MODEL)
-    if rates is None:  # an id prices.py doesn't know: fail loud in tests, not silent at 0
-        raise LookupError(f"no committed price for {ESTIMATE_MODEL}")
+def standard_model(config: LLMConfig) -> tuple[str, str] | None:
+    """(provider, model) the standard purposes route to: the first standard rule's primary."""
+    for rule in config.routing.values():
+        if rule.default_quality == "standard" and rule.primary in config.providers:
+            return rule.primary, config.model_for(rule.primary, "standard")
+    return None
+
+
+def blended_usd_per_mtok(config: LLMConfig | None = None) -> float:
+    """USD per 1M estimated tokens, from the loaded LLM config (a YAML rollback follows)."""
+    try:
+        cfg = config if config is not None else get_llm_config()
+    except ChalybClipError:  # unreadable llm.yaml: over-reserve rather than 500 the estimate
+        rates = CONSERVATIVE_RATES
+        return _OUTPUT_WEIGHT * rates.output + (1 - _OUTPUT_WEIGHT) * rates.input
+    routed = standard_model(cfg)
+    if routed is None:
+        return 0.0  # nothing routed: no LLM spend to reserve
+    rates, _known = cfg.rates_for(*routed)  # unknown paid models get the conservative rate
     return _OUTPUT_WEIGHT * rates.output + (1 - _OUTPUT_WEIGHT) * rates.input
-
-
-_LLM_BLENDED_USD_PER_MTOK = _blended_usd_per_mtok()
 
 
 @dataclass(frozen=True)
@@ -114,6 +128,7 @@ def estimate_pipeline_run(
     persona_count: int = 1,
     n_variants: int | None = None,
     n_hooks_per_clip: int | None = None,
+    llm_config: LLMConfig | None = None,
 ) -> PipelineEstimate:
     """Estimate the LLM token cost for a single pipeline run.
 
@@ -202,7 +217,7 @@ def estimate_pipeline_run(
     # Token T3 — cost view. LLM cost from the token estimate at a blended
     # rate; transcription cost is real (near-deterministic in duration).
     # cost_micros = tokens × usd_per_mtok (the /1e6 and ×1e6 cancel).
-    llm_cost_um = int(round(total * _LLM_BLENDED_USD_PER_MTOK))
+    llm_cost_um = int(round(total * blended_usd_per_mtok(llm_config)))
     transcription_cost_um = 0
     try:
         from chalybclip.transcribe.providers.assemblyai import cost_micros_for

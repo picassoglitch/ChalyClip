@@ -29,11 +29,13 @@ from .provider import (
     LLMProvider,
     MultimodalImage,
     ProviderResult,
+    RefusalError,
     RetryableLLMError,
     TruncatedOutputError,
 )
 
-_RETRYABLE_STATUSES = frozenset({408, 409, 429, 500, 502, 503, 504})
+# Plus every 5xx, 529 overloaded_error included: the SDK no longer retries on its own.
+_RETRYABLE_STATUSES = frozenset({408, 409, 429})
 
 
 @functools.cache
@@ -161,7 +163,7 @@ class AnthropicProvider(LLMProvider):
             )
         except anthropic.APIStatusError as e:
             status = getattr(e, "status_code", None)
-            if status in _RETRYABLE_STATUSES:
+            if status in _RETRYABLE_STATUSES or (status is not None and status >= 500):
                 raise RetryableLLMError(f"anthropic {status}: {e}", status_code=status) from e
             raise LLMError(f"anthropic {status}: {e}") from e
         except (anthropic.APIConnectionError, anthropic.APITimeoutError) as e:
@@ -172,8 +174,9 @@ def _parse_message(message: anthropic.types.Message, *, model: str) -> ProviderR
     """Pull the JSON object out of Claude's structured-output reply.
 
     A reply cut off at `max_tokens` raises TruncatedOutputError (not retried).
-    A refusal or text that isn't a JSON object raises RetryableLLMError. Both
-    carry this attempt's usage so the router bills the tokens."""
+    A refusal raises RefusalError (not retried); text that isn't a JSON object
+    raises RetryableLLMError. All carry this attempt's usage so the router
+    bills the tokens."""
     usage = message.usage
     result = ProviderResult(
         output={},
@@ -187,7 +190,11 @@ def _parse_message(message: anthropic.types.Message, *, model: str) -> ProviderR
     if stop == "refusal":
         details = getattr(message, "stop_details", None)
         category = getattr(details, "category", None)
-        raise RetryableLLMError(f"anthropic refused (category={category})", usage=result)
+        # No server-side `fallbacks` (decision 2026-11-03): refusals are rare on logo/agent
+        # prompts, and a fallback bills at message.model's rates, which the router doesn't read yet.
+        raise RefusalError(
+            f"anthropic refused (category={category})", category=category, usage=result
+        )
 
     if stop == "max_tokens":
         # Thinking counts against max_tokens too; retrying the same request

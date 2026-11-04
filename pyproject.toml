@@ -11,7 +11,7 @@ dependencies = [
     # LLM provider — Anthropic only. OpenAI was kept as a fallback option
     # in earlier phases but removed in favor of a single-vendor surface;
     # the router still supports N providers if a future config re-adds one.
-    "anthropic>=0.40.0",
+    "anthropic>=2.4.0",
 
     # VOD ingest
     "yt-dlp>=2024.10.0",

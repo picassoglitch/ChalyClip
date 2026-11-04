@@ -7,6 +7,7 @@ from .provider import (
     LLMProvider,
     MultimodalImage,
     ProviderResult,
+    RefusalError,
     RetryableLLMError,
     TruncatedOutputError,
 )
@@ -40,6 +41,7 @@ __all__ = [
     "ProviderConfig",
     "ProviderResult",
     "Quality",
+    "RefusalError",
     "RescoreVerdict",
     "RetryableLLMError",
     "RoutingRule",

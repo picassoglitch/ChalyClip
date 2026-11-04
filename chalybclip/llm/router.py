@@ -294,7 +294,8 @@ class LLMRouter:
             except (LLMError, ValidationError) as e:
                 # Failed attempts still consumed tokens (schema-invalid
                 # output, a reply with no usable JSON) — bill them.
-                failed_usage = _sum_usage(getattr(e, "spent", None) or [])
+                failed_spent: list[ProviderResult] = getattr(e, "spent", None) or []
+                failed_usage = _sum_usage(failed_spent)
                 await self._log(
                     tenant_id=tenant_id,
                     purpose=purpose,
@@ -303,7 +304,7 @@ class LLMRouter:
                     quality=effective_quality,
                     usage=failed_usage,
                     cost_usd_micros=self._compute_cost_micros(
-                        provider=provider_name, model=model, usage=failed_usage,
+                        provider=provider_name, model=model, spent=failed_spent
                     ),
                     status="error",
                     error=f"{type(e).__name__}: {e}",
@@ -341,9 +342,7 @@ class LLMRouter:
             # Every attempt's tokens, not just the one that validated: a
             # retry after a schema violation paid for both responses.
             usage = _sum_usage(spent)
-            cost = self._compute_cost_micros(
-                provider=provider_name, model=model, usage=usage,
-            )
+            cost = self._compute_cost_micros(provider=provider_name, model=model, spent=spent)
             await self._log(
                 tenant_id=tenant_id,
                 purpose=purpose,
@@ -404,15 +403,17 @@ class LLMRouter:
                 if e.usage is not None:
                     spent.append(e.usage)
                 last_err = e
-                if attempt < retry.max_attempts:
-                    await self._backoff(attempt, deadline)
+                if attempt < retry.max_attempts and not await self._backoff(attempt, deadline):
+                    last_err = _deadline_error(last_err)
+                    break
                 continue
             except ValidationError as e:
                 # Treat schema violations as retryable - the LLM may produce a
                 # better-formed object on the next attempt.
                 last_err = e
-                if attempt < retry.max_attempts:
-                    await self._backoff(attempt, deadline)
+                if attempt < retry.max_attempts and not await self._backoff(attempt, deadline):
+                    last_err = _deadline_error(last_err)
+                    break
                 continue
             except TimeoutError:
                 # The in-flight attempt was cancelled at the deadline; its tokens are unknown.
@@ -445,12 +446,14 @@ class LLMRouter:
             return None
         return asyncio.get_running_loop().time() + cfg.timeout_s * factor
 
-    async def _backoff(self, attempt: int, deadline: float | None) -> None:
+    async def _backoff(self, attempt: int, deadline: float | None) -> bool:
+        """Sleep before the next attempt; False (no sleep) when the deadline comes first."""
         retry = self._config.retry
         delay = retry.initial_backoff_s * (retry.backoff_multiplier ** (attempt - 1))
-        if deadline is not None:
-            delay = min(delay, max(0.0, deadline - asyncio.get_running_loop().time()))
+        if deadline is not None and delay >= deadline - asyncio.get_running_loop().time():
+            return False
         await asyncio.sleep(delay)
+        return True
 
     def _get_provider(self, name: str) -> LLMProvider | None:
         if name not in self._providers:
@@ -465,24 +468,29 @@ class LLMRouter:
         return self._providers[name]
 
     def _compute_cost_micros(
-        self, *, provider: str, model: str, usage: ProviderResult
+        self, *, provider: str, model: str, spent: list[ProviderResult]
     ) -> int:
         """Real USD micros incl. prompt-cache reads/writes. An unpriced
         model of a paid provider bills at the conservative (highest) rate
         and logs an error — never silently 0."""
         rates, known = self._config.rates_for(provider, model)
-        if not known and _usage_total(usage) > 0:
+        if not known and any(_usage_total(u) > 0 for u in spent):
             _router_log.error(
                 "llm.price_unknown provider=%s model=%s — billed at the "
                 "conservative rate; add it to chalybclip/llm/prices.py",
                 provider, model,
             )
-        return cost_micros(
-            rates,
-            input_tokens=usage.input_tokens,
-            output_tokens=usage.output_tokens,
-            cache_read_tokens=usage.cache_read_tokens,
-            cache_write_tokens=usage.cache_write_tokens,
+        # Each attempt is its own request: a long-prompt tier applies per request,
+        # never to the sum of retries.
+        return sum(
+            cost_micros(
+                rates,
+                input_tokens=u.input_tokens,
+                output_tokens=u.output_tokens,
+                cache_read_tokens=u.cache_read_tokens,
+                cache_write_tokens=u.cache_write_tokens,
+            )
+            for u in spent
         )
 
     async def _log(

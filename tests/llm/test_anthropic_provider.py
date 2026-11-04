@@ -7,6 +7,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+import anthropic
+import httpx2
 import pytest
 from pydantic import BaseModel, Field
 
@@ -14,6 +16,7 @@ from chalybclip.errors import LLMError
 from chalybclip.llm import (
     LLMRouter,
     MultimodalImage,
+    RefusalError,
     RetryableLLMError,
     TruncatedOutputError,
     VariantBatch,
@@ -141,7 +144,6 @@ async def test_thinking_blocks_before_the_json_are_ignored() -> None:
     [
         (_reply([_text("[1, 2]")], output_tokens=99), "not a JSON object"),
         (_reply([], output_tokens=99), "not a JSON object"),
-        (_reply([_text("")], stop="refusal", output_tokens=99), "refused"),
     ],
 )
 async def test_unusable_reply_is_retryable_and_billed(reply: SimpleNamespace, match: str) -> None:
@@ -227,3 +229,62 @@ def test_committed_example_config_targets_the_5_5_family() -> None:
     assert {p: cfg.routing[p].effort for p in EXTRACTION} == dict.fromkeys(EXTRACTION, "low")
     assert {p: cfg.routing[p].effort for p in CREATIVE} == dict.fromkeys(CREATIVE)
     assert set(EXTRACTION + CREATIVE) == set(cfg.routing)  # a new purpose must pick a side
+
+
+async def test_refusal_is_typed_billed_and_not_retried(tmp_path: Path) -> None:
+    from tests.llm._fixtures import make_llm_config
+
+    refusal = _reply([_text("")], stop="refusal", input_tokens=500, output_tokens=99)
+    refusal.stop_details = SimpleNamespace(category="cyber")
+    provider, fake = _provider(refusal)
+    router = LLMRouter(
+        make_llm_config(purpose="p"),
+        api_keys={"anthropic": "x"},
+        call_log_path=tmp_path / "c.jsonl",
+        provider_factory=lambda name, _c, _k: provider if name == "anthropic" else None,
+    )
+    with pytest.raises(LLMError, match="refused"):
+        await router.complete(tenant_id="t", purpose="p", system="s", user="u", schema=Verdict)
+    assert len(fake.calls) == 1
+    row = json.loads((tmp_path / "c.jsonl").read_text("utf-8"))
+    assert (row["input_tokens"], row["output_tokens"]) == (500, 99)
+    assert "RefusalError" in row["error"]
+
+
+async def test_refusal_error_carries_category() -> None:
+    reply = _reply([_text("")], stop="refusal", output_tokens=9)
+    reply.stop_details = SimpleNamespace(category="bio")
+    provider, _ = _provider(reply)
+    with pytest.raises(RefusalError) as ei:
+        await provider.complete(
+            tenant_id="t", model="claude-opus-5-5", system="s", user="u", schema=Verdict
+        )
+    assert not isinstance(ei.value, RetryableLLMError)
+    assert ei.value.category == "bio" and ei.value.usage is not None
+
+
+def _status_error(status: int) -> anthropic.APIStatusError:
+    request = httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
+    response = httpx2.Response(status, request=request)
+    return anthropic.APIStatusError(f"status {status}", response=response, body=None)
+
+
+class _Raising:
+    def __init__(self, error: Exception) -> None:
+        self.error = error
+
+    async def create(self, **_kw: Any) -> None:
+        raise self.error
+
+
+@pytest.mark.parametrize(
+    ("status", "retryable"), [(529, True), (500, True), (503, True), (429, True), (400, False)]
+)
+async def test_overload_and_every_5xx_are_retryable(status: int, retryable: bool) -> None:
+    provider, _ = _provider()
+    provider._client = SimpleNamespace(messages=_Raising(_status_error(status)))  # type: ignore[assignment]
+    with pytest.raises(LLMError) as ei:
+        await provider.complete(
+            tenant_id="t", model="claude-haiku-5-5", system="s", user="u", schema=Verdict
+        )
+    assert isinstance(ei.value, RetryableLLMError) is retryable

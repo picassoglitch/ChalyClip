@@ -5,6 +5,7 @@ usage event."""
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from types import SimpleNamespace
@@ -270,3 +271,36 @@ def test_cache_read_rates_follow_anthropic_list_prices():
     assert lookup_rates("anthropic", "claude-sonnet-5-5").cache_read_rate == 0.20
     assert lookup_rates("anthropic", "claude-haiku-4-5").cache_read_rate == 0.10
     assert lookup_rates("anthropic", "claude-opus-5-5").cache_write_rate == 5.00
+
+
+@pytest.mark.parametrize("final", ["ok", "error"])
+async def test_long_prompt_tier_is_priced_per_attempt_not_on_the_retry_sum(
+    tmp_path: Path, final: str
+) -> None:
+    """Two 60K-prompt Haiku 5.5 attempts: each is under the 100K tier, so the
+    row is 2 x (60,000 x $0.10 + 2,000 x $0.50) = 14,000 µ$, not 70,000."""
+    fake = _CacheFake("anthropic")
+    fake.queue_raw(
+        ProviderResult(output={"wrong": 1}, input_tokens=60_000, output_tokens=2_000, model="m")
+    )
+    second = {"answer": "ok"} if final == "ok" else {"wrong": 2}
+    fake.queue_raw(
+        ProviderResult(output=second, input_tokens=60_000, output_tokens=2_000, model="m")
+    )
+    cfg = make_llm_config(standard_model="claude-haiku-5-5", retry_attempts=2)
+    cfg = cfg.model_copy(update={"pricing": {}})  # bill from prices.py
+    log = tmp_path / "calls.jsonl"
+    router = LLMRouter(
+        cfg, api_keys={"anthropic": "k"}, provider_factory=_factory(fake), call_log_path=log
+    )
+    call = router.complete(
+        tenant_id="ten_a", purpose="variant_generation", system="s", user="u", schema=Answer
+    )
+    if final == "ok":
+        await call
+    else:
+        with pytest.raises(LLMError):
+            await call
+    row = json.loads(log.read_text("utf-8").splitlines()[-1])
+    assert (row["input_tokens"], row["output_tokens"]) == (120_000, 4_000)
+    assert row["cost_usd_micros"] == 14_000

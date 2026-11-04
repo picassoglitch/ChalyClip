@@ -54,6 +54,18 @@ class TruncatedOutputError(LLMError):
         self.usage = usage
 
 
+class RefusalError(LLMError):
+    """The model declined (`stop_reason: refusal`). Not retried, since the same
+    request is declined again, but billed: `usage` has the tokens."""
+
+    def __init__(
+        self, message: str, *, category: str | None = None, usage: ProviderResult | None = None
+    ):
+        super().__init__(message)
+        self.category = category
+        self.usage = usage
+
+
 class ProviderResult(BaseModel):
     """Raw structured output + token counts returned by a provider call."""
 
