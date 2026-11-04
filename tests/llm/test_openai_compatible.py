@@ -204,3 +204,29 @@ def test_non_json_error_and_log_row_hold_no_reply_content(tmp_path) -> None:
     cause = ei.value.__cause__
     assert isinstance(cause, RetryableLLMError) and cause.raw_reply == _PII
     assert f"{len(_PII)} chars, sha256=" in str(cause)
+
+
+@pytest.mark.parametrize(
+    ("codes", "status", "retryable"),
+    [
+        (None, 529, True),  # default: every 5xx, overload included
+        (None, 501, True),
+        ([418], 418, True),
+        ([418], 503, False),  # config, not a hardcoded list, decides
+    ],
+)
+def test_retryable_statuses_come_from_config(codes, status, retryable) -> None:
+    cfg = _config().providers["openllm"]
+    if codes is not None:
+        cfg = cfg.model_copy(update={"retryable_status_codes": codes})
+    provider = OpenAICompatibleProvider(api_key="", config=cfg)
+    with respx.mock() as mock:
+        mock.post(f"{_BASE}/chat/completions").mock(
+            return_value=httpx.Response(status, text=_PII)
+        )
+        with pytest.raises(LLMError) as ei:
+            asyncio.run(
+                provider.complete(tenant_id="t", model="m", system="s", user="u", schema=TinySchema)
+            )
+    assert isinstance(ei.value, RetryableLLMError) is retryable
+    assert "Juan" not in str(ei.value) and f"{len(_PII)} chars, sha256=" in str(ei.value)

@@ -152,9 +152,17 @@ async def main() -> int:
         return 2
 
     cfg = load_llm_config(ROOT / "config" / "llm.example.yaml")
+    # One attempt with 512 output tokens: a single Opus call can't overshoot the $0.10 cap.
+    anth_update: dict[str, object] = {"max_output_tokens": 512}
     if args.base_url:
-        anth = cfg.providers["anthropic"].model_copy(update={"base_url": args.base_url})
-        cfg = cfg.model_copy(update={"providers": {**cfg.providers, "anthropic": anth}})
+        anth_update["base_url"] = args.base_url
+    anth = cfg.providers["anthropic"].model_copy(update=anth_update)
+    cfg = cfg.model_copy(
+        update={
+            "providers": {**cfg.providers, "anthropic": anth},
+            "retry": cfg.retry.model_copy(update={"max_attempts": 1}),
+        }
+    )
     log = Path(tempfile.mkdtemp(prefix="llm-smoke-")) / "llm_calls.jsonl"
     router = LLMRouter(cfg, call_log_path=log)
     print(

@@ -188,19 +188,18 @@ async def test_deadline_error_chains_the_last_attempt_error() -> None:
 async def test_each_fallback_gets_its_own_deadline(tmp_path: Path) -> None:
     config = make_llm_config(retry_attempts=1, fallbacks=["openai"])
     providers = {
-        name: cfg.model_copy(update={"timeout_s": 0.05}) for name, cfg in config.providers.items()
+        name: cfg.model_copy(update={"timeout_s": 0.2}) for name, cfg in config.providers.items()
     }
     config = config.model_copy(update={"providers": providers})
-    slow = _SlowProvider(0.08)  # primary: cut at 2 x 0.05 s
+    slow = _SlowProvider(1.0)  # primary: cut at 2 x 0.2 s
     fallback = FakeProvider("openai")
     fallback.queue_success({"answer": "ok"})
 
     async def late_fallback(**kw: object) -> ProviderResult:
-        await asyncio.sleep(0.07)  # past the primary's window, inside its own
+        await asyncio.sleep(0.25)  # past the primary's window, inside its own
         return await FakeProvider.complete(fallback, **kw)  # type: ignore[arg-type]
 
     fallback.complete = late_fallback  # type: ignore[method-assign]
-    slow.delay_s = 0.2
     router = LLMRouter(
         config,
         api_keys={"anthropic": "x", "openai": "y"},
