@@ -135,6 +135,8 @@ class ZernioPostStatus:
     post_id: str
     status: str
     platforms: Any = field(default=None)
+    # Owning Zernio profile; the only ownership proof for a post we never recorded.
+    profile_id: str | None = field(default=None)
 
 
 def _unwrap_post(body: dict[str, Any]) -> dict[str, Any]:
@@ -142,6 +144,14 @@ def _unwrap_post(body: dict[str, Any]) -> dict[str, Any]:
     `post` or the body itself when Zernio returns it flat."""
     nested = body.get("post")
     return nested if isinstance(nested, dict) else body
+
+
+def _profile_id_of(post: dict[str, Any]) -> str | None:
+    """`profileId` as a string, tolerating the nested `{_id: ...}` form."""
+    pid = post.get("profileId")
+    if isinstance(pid, dict):
+        pid = pid.get("_id") or pid.get("id")
+    return pid if isinstance(pid, str) and pid else None
 
 
 class ZernioClient:
@@ -1231,6 +1241,7 @@ class ZernioClient:
             post_id=str(post.get("_id") or post.get("id") or post_id),
             status=str(post.get("status") or "unknown"),
             platforms=post.get("platforms"),
+            profile_id=_profile_id_of(post),
         )
 
     async def delete_post(self, post_id: str) -> None:

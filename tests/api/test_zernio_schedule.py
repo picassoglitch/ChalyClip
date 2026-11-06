@@ -284,6 +284,12 @@ async def test_cancel_published_post_is_409(
     zernio_env: None, client: httpx.AsyncClient, alice: dict[str, str]
 ) -> None:
     with respx.mock() as mock:
+        # Unrecorded post: ownership is proven by its Zernio profileId.
+        mock.get(f"{_ZBASE}/posts/post_pub").mock(
+            return_value=httpx.Response(
+                200, json={"_id": "post_pub", "status": "published", "profileId": "prof_alice"}
+            )
+        )
         mock.delete(f"{_ZBASE}/posts/post_pub").mock(
             return_value=httpx.Response(400, json={"error": "cannot delete published"})
         )

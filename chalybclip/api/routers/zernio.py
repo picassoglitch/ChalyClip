@@ -52,6 +52,7 @@ from chalybclip.integrations.zernio import (
     ZernioAccount,
     ZernioClient,
     ZernioError,
+    ZernioPostStatus,
     create_profile_for_tenant,
 )
 from chalybclip.publish.hub import PublishOptions, build_per_platform_payload
@@ -585,11 +586,39 @@ async def _post_owner(db: Database, post_id: str) -> str | None:
     return await HubPublishJobsRepo(db).get_tenant_for_post(post_id)
 
 
-async def _require_post_not_foreign(db: Database, tenant_id: str, post_id: str) -> None:
-    """404 when our records say the post belongs to ANOTHER tenant."""
+async def _owned_post(db: Database, tenant_id: str, post_id: str) -> ZernioPostStatus | None:
+    """404 unless the caller owns the post. Recorded posts are checked against
+    our records (returns None); an unrecorded one is fetched and must carry
+    the caller's Zernio profileId (returns the fetched post). A failed fetch
+    raises ZernioError, so nothing about the post is shown or acted on."""
     owner = await _post_owner(db, post_id)
-    if owner is not None and owner != tenant_id:
+    if owner is not None:
+        if owner != tenant_id:
+            raise HTTPException(status_code=404, detail="not found")
+        return None
+    profile_id = await _tenant_profile_id(db, tenant_id)
+    if not profile_id:
         raise HTTPException(status_code=404, detail="not found")
+    post = await _build_client().get_post(post_id)
+    if post.profile_id is not None:
+        owned = post.profile_id == profile_id
+    else:
+        # No profileId on the post: fall back to its target accounts.
+        owned = bool(_post_account_ids(post) & set(await _tenant_account_ids(db, tenant_id)))
+    if not owned:
+        raise HTTPException(status_code=404, detail="not found")
+    return post
+
+
+def _post_account_ids(post: ZernioPostStatus) -> set[str]:
+    ids: set[str] = set()
+    for p in post.platforms if isinstance(post.platforms, list) else []:
+        acct = p.get("accountId") if isinstance(p, dict) else None
+        if isinstance(acct, dict):
+            acct = acct.get("_id") or acct.get("id")
+        if isinstance(acct, str) and acct:
+            ids.add(acct)
+    return ids
 
 
 async def _tenant_profile_id(db: Database, tenant_id: str) -> str | None:
@@ -4012,16 +4041,21 @@ async def zernio_cancel_scheduled(
     # company-wide, so without this any tenant could delete any other
     # tenant's scheduled post by id. 404 (not 403) to match the rest of
     # the dashboard's don't-advertise-existence convention. A post with
-    # no local row (scheduled directly on Zernio) stays cancellable —
-    # we have nothing to check it against.
+    # no local row must carry this tenant's Zernio profileId.
     pubs = ZernioPublishesRepo(db)
     row = await pubs.get_by_post_id(post_id)
     if row is not None and row.tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail="not found")
-    # Hub/ChalyOBS publishes have no zernio_publishes row — check their
-    # hub_publish_jobs owner too, or another tenant's hub post stays
-    # deletable by id.
-    await _require_post_not_foreign(db, tenant_id, post_id)
+    # Hub/ChalyOBS publishes (hub_publish_jobs) and unrecorded posts too.
+    try:
+        await _owned_post(db, tenant_id, post_id)
+    except ZernioError as e:
+        if e.status_code == 404:
+            raise HTTPException(status_code=404, detail="not found") from e
+        return JSONResponse(
+            {"ok": False, "error": "No pudimos verificar el post. Intenta de nuevo."},
+            status_code=502,
+        )
     client = _build_client()
     try:
         await client.delete_post(post_id)
@@ -4878,13 +4912,12 @@ async def zernio_job_detail(
     local record (see _local_post_status); only a genuine 404 with no
     local row surfaces an operator-facing "no longer available" state.
     """
-    await _require_post_not_foreign(db, tenant_id, post_id)
     client = _build_client()
     overall_status = "UNKNOWN"
     per_platform: Any = None
     fetch_error: str | None = None
     try:
-        status = await client.get_post(post_id)
+        status = await _owned_post(db, tenant_id, post_id) or await client.get_post(post_id)
         overall_status = (status.status or "UNKNOWN").upper()
         per_platform = status.platforms
     except ZernioError as e:
@@ -4935,10 +4968,9 @@ async def zernio_status(
     webhook-fed local record first; a genuine 404 with no local row
     settles the poller (200 + terminal UNAVAILABLE) so the page stops
     refreshing instead of looping on a 502 forever."""
-    await _require_post_not_foreign(db, tenant_id, post_id)
     client = _build_client()
     try:
-        status = await client.get_post(post_id)
+        status = await _owned_post(db, tenant_id, post_id) or await client.get_post(post_id)
     except ZernioError as e:
         _log.warning(
             "zernio.status.failed tenant=%s post_id=%s status=%s err=%s",
