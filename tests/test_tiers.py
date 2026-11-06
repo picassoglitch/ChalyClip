@@ -95,11 +95,11 @@ def test_account_limit_pro_is_one() -> None:
     assert zernio_account_limit(PRO) == 1
 
 
-def test_account_limit_all_access_unlimited_incl_partner_alias() -> None:
-    """all_access (VIP) is unlimited (None) — and the partner alias
+def test_account_limit_all_access_is_three_incl_partner_alias() -> None:
+    """all_access (VIP) connects up to 3 — and the partner alias
     resolves to the same."""
-    assert zernio_account_limit(ALL_ACCESS) is None
-    assert zernio_account_limit("partner") is None
+    assert zernio_account_limit(ALL_ACCESS) == 3
+    assert zernio_account_limit("partner") == 3
 
 
 def test_account_limit_free_and_unknown_are_zero() -> None:

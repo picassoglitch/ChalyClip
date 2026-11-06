@@ -100,6 +100,7 @@ async def test_connect_facebook_is_headless_with_platform_in_redirect(
     zernio_env: None, client: httpx.AsyncClient, alice: dict[str, str]
 ) -> None:
     with respx.mock(assert_all_called=True) as mock:
+        mock.get(f"{_ZBASE}/accounts").mock(return_value=httpx.Response(200, json={"accounts": []}))  # VIP cap check: 0 of 3
         route = mock.get(f"{_ZBASE}/connect/facebook").mock(
             return_value=httpx.Response(200, json={"authUrl": "https://fb/oauth"})
         )
@@ -125,6 +126,7 @@ async def test_connect_tiktok_standard_mode_no_headless(
     zernio_env: None, client: httpx.AsyncClient, alice: dict[str, str]
 ) -> None:
     with respx.mock(assert_all_called=True) as mock:
+        mock.get(f"{_ZBASE}/accounts").mock(return_value=httpx.Response(200, json={"accounts": []}))  # VIP cap check: 0 of 3
         route = mock.get(f"{_ZBASE}/connect/tiktok").mock(
             return_value=httpx.Response(200, json={"authUrl": "https://tt/oauth"})
         )

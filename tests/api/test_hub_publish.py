@@ -221,7 +221,7 @@ async def test_overview_shapes_dashboard_context(
     assert body["ok"] is True and body["configured"] is True
     assert body["profile"] == {"id": "prof_alice", "name": "Alice"}
     assert body["accounts"] == [{"platform": "tiktok", "account_id": "acc_tt"}]
-    assert body["account_limit"] is None  # all_access
+    assert body["account_limit"] == 3  # all_access
     assert [c["id"] for c in body["publishable"]] == [clip_id]
     assert body["publishable"][0]["title"] == "Gran jugada"
     assert body["publishable_total"] == 1
@@ -255,6 +255,7 @@ async def test_connect_redirects_to_hub_landing(
     alice: str,
 ) -> None:
     with respx.mock(assert_all_called=True) as mock:
+        mock.get(f"{_ZBASE}/accounts").mock(return_value=_accounts())  # VIP cap check: 0 of 3
         route = mock.get(f"{_ZBASE}/connect/facebook").mock(
             return_value=httpx.Response(200, json={"authUrl": "https://zernio.com/oauth/x"}),
         )
@@ -314,6 +315,7 @@ async def test_connect_bare_domain_matches_www(
     alice: str,
 ) -> None:
     with respx.mock(assert_all_called=True) as mock:
+        mock.get(f"{_ZBASE}/accounts").mock(return_value=_accounts())  # VIP cap check: 0 of 3
         mock.get(f"{_ZBASE}/connect/tiktok").mock(
             return_value=httpx.Response(200, json={"authUrl": "https://zernio.com/x"}),
         )
@@ -359,6 +361,30 @@ async def test_connect_pro_account_cap_is_needs_plan(
     err = _err(r, 402, "needs_plan")
     assert err["reason"] == "account_limit"
     assert "1" in err["message"]
+
+
+async def test_connect_vip_account_cap_is_three(
+    client: httpx.AsyncClient,
+    env: None,
+    alice: str,
+) -> None:
+    with respx.mock() as mock:
+        mock.get(f"{_ZBASE}/accounts").mock(
+            return_value=_accounts(
+                ("acc_tt", "tiktok", "prof_alice"),
+                ("acc_ig", "instagram", "prof_alice"),
+                ("acc_yt", "youtube", "prof_alice"),
+            ),
+        )
+        r = await client.post(
+            "/api/hub/v1/publish/connect",
+            headers=_hub(alice),
+            json={"platform": "facebook", "return_url": f"{_HUB}/app/clips/publicar/conectado"},
+        )
+    err = _err(r, 402, "needs_plan")
+    assert err["reason"] == "account_limit"
+    assert "3 cuentas" in err["message"]
+    assert "VIP" not in err["message"], "VIP is already the top plan"
 
 
 # ---- error shaping + redirect → JSON ----

@@ -45,13 +45,12 @@ TOP_TIERS: Final[frozenset[str]] = frozenset({ALL_ACCESS})
 PAID_TIERS: Final[frozenset[str]] = frozenset({PRO, ALL_ACCESS})
 
 # Connected-social-account cap per tier for the Zernio publish surface.
-# `pro` CAN publish, but with exactly ONE connected account; `all_access`
-# (VIP) is unlimited (None). `free` connects nothing — publishing stays
-# behind the paid gate.
+# Zernio bills per connected account, outside credits (owner 2026-11-06:
+# Pro 1, VIP 3). `free` connects nothing. None would mean unlimited.
 ZERNIO_ACCOUNT_LIMITS: Final[dict[str, int | None]] = {
     FREE: 0,
     PRO: 1,
-    ALL_ACCESS: None,
+    ALL_ACCESS: 3,
 }
 
 

@@ -227,7 +227,7 @@ def _tiktok_settings() -> dict[str, Any]:
 def _account_limit(request: Request) -> int | None:
     """Connected-account cap for the requesting tenant's tier.
 
-    pro = 1, all_access (VIP) = None (unlimited). The tier was
+    pro = 1, all_access (VIP) = 3. The tier was
     normalized by the auth middleware; tiers.zernio_account_limit holds
     the per-tier numbers (single source of truth)."""
     from chalybclip.tiers import zernio_account_limit
@@ -236,13 +236,24 @@ def _account_limit(request: Request) -> int | None:
     return zernio_account_limit(tier)
 
 
+def _upgrade_hint(limit: int) -> str:
+    """" o pásate a VIP…" only when VIP connects more than this plan."""
+    from chalybclip.tiers import ALL_ACCESS, zernio_account_limit
+
+    top = zernio_account_limit(ALL_ACCESS)
+    if top is not None and top <= limit:
+        return ""
+    more = "las que quieras" if top is None else f"hasta {top}"
+    return f", o pásate a VIP para conectar {more}"
+
+
 def _account_limit_message(limit: int) -> str:
     """Operator-facing copy for hitting the per-tier account cap."""
     # User-facing (shown in the publish UI) — Spanish, like the rest of it.
     return (
         f"Tu plan permite {limit} cuenta"
         f"{'' if limit == 1 else 's'} conectada{'' if limit == 1 else 's'}. "
-        f"Desconecta una primero, o pásate a VIP para conectar las que quieras."
+        f"Desconecta una primero{_upgrade_hint(limit)}."
     )
 
 
@@ -386,7 +397,7 @@ async def _publish_clip(
             detail=(
                 f"Tu plan publica con {limit} cuenta"
                 f"{'' if limit == 1 else 's'} conectada{'' if limit == 1 else 's'} — "
-                f"quita las plataformas de más o pásate a VIP."
+                f"quita las plataformas de más{_upgrade_hint(limit)}."
             ),
         )
 
@@ -1030,7 +1041,7 @@ async def connect_auth_url_response(
     profile_id = await _require_profile(db, tenant_id)
     client = _build_client()
 
-    # Per-tier connected-account cap: pro = 1, all_access = unlimited.
+    # Per-tier connected-account cap: pro = 1, all_access = 3.
     # Counted against Zernio (the source of truth for connections), and
     # checked BEFORE minting the OAuth URL so the operator gets a clear
     # paywall message instead of a dead OAuth round-trip.
