@@ -11,7 +11,7 @@ import httpx
 import pytest
 import respx
 
-from chalybclip.db import Database, TenantsRepo, apply_migrations
+from chalybclip.db import Database, TenantsRepo
 from chalybclip.db.usage_repos import UsageOutboxRepo
 from chalybclip.integrations.chalyb.outbox import (
     bind_reservation,
@@ -21,6 +21,7 @@ from chalybclip.integrations.chalyb.outbox import (
     reset_reservation,
 )
 from chalybclip.settings import get_settings
+from tests._db_backend import migrated_database
 
 _USAGE = "https://chalyb.test/api/engines/chalybclip/usage"
 _SETTLE = "https://chalyb.test/api/engines/chalybclip/usage/settle"
@@ -36,12 +37,10 @@ def _later(hours: int = 2) -> _dt.datetime:
 
 @pytest.fixture
 async def db(tmp_path) -> Database:
-    d = Database(tmp_path / "t.db")
-    await apply_migrations(d)
-    try:
+    # SQLite by default; real Postgres when CHALYBCLIP_TEST_PG_DSN is set,
+    # so the conditional-UPDATE claim is proven on the production engine.
+    async for d in migrated_database(tmp_path, name="t.db"):
         yield d
-    finally:
-        await d.close()
 
 
 @pytest.fixture
