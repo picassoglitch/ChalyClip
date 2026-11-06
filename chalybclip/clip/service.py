@@ -53,7 +53,8 @@ from .encoders import (
     pick_video_encoder_args,
 )
 from .frame_pool import ClipFrameBatch, sample_clip_frames
-from .models import Clip, ClipManifest, SmartCropBox
+from .models import Clip, ClipManifest, ReframeTrack, SmartCropBox
+from .reframe import compute_reframe_track, reframe_track_to_ffmpeg_filter
 from .smart_crop import (
     compute_smart_crop_box,
     compute_smart_crop_box_from_frames,
@@ -373,6 +374,15 @@ def _cut_one_sync(
         video_path=stream.source_video_path,
         start_s=start, end_s=end, batch=batch, allow_reopen=False,
     )
+    # Active-speaker tracking crop (opt-in). Only computed when the framing
+    # pass already judged the subject to move enough to warrant tracking —
+    # every other clip skips the dense decode, so the cost lands only where
+    # it buys a visibly better crop. Any failure returns None → the static
+    # `smart_box` path renders exactly as before.
+    reframe_track = _safe_reframe_track(
+        video_path=stream.source_video_path,
+        start_s=start, end_s=end, framing_verdict=framing_verdict,
+    )
     thumbnail_path, raw_jpeg = _safe_thumbnail(
         video_path=stream.source_video_path,
         start_s=start, end_s=end,
@@ -395,6 +405,7 @@ def _cut_one_sync(
             smart_box=smart_box,
             brand_kit=kit,
             framing_verdict=framing_verdict,
+            reframe_track=reframe_track,
         )
         # Keep the full-frame cut: horizontal / square formats derive
         # from it after the source VOD is gone (chalybclip.clip.formats).
@@ -527,6 +538,41 @@ def _safe_smart_crop(
         return None
     except Exception as e:  # noqa: BLE001 — never break cut on a cv2 quirk
         _log.warning("smart_crop.skipped", reason=str(e))
+        return None
+
+
+def _safe_reframe_track(
+    *,
+    video_path: Path,
+    start_s: float,
+    end_s: float,
+    framing_verdict: FramingVerdict | None,
+) -> ReframeTrack | None:
+    """Compute a dynamic reframe track, but only when it's both wanted and
+    safe to.
+
+    Gated twice: (a) the operator opted in via `reframe_tracking_enabled`,
+    and (b) the framing pass flagged THIS clip `mobile_crop_tracking` (the
+    subject moves enough that a static crop would lose them). Returns None
+    otherwise — and on ANY error — so the renderer falls back to the static
+    crop. Reframe is an enhancement; it must never fail a cut.
+    """
+    from chalybclip.settings import get_settings
+
+    settings = get_settings()
+    if not getattr(settings, "reframe_tracking_enabled", False):
+        return None
+    if getattr(framing_verdict, "recommended_output", None) != "mobile_crop_tracking":
+        return None
+    try:
+        return compute_reframe_track(
+            video_path,
+            start_s=start_s,
+            end_s=end_s,
+            target_fps=float(getattr(settings, "reframe_sample_fps", 3.0)),
+        )
+    except Exception as e:  # never break a cut on reframe
+        _log.warning("reframe_track.skipped", reason=str(e))
         return None
 
 
@@ -772,6 +818,7 @@ def _ffmpeg_reformat_9_16(
     smart_box: SmartCropBox | None = None,
     brand_kit: object | None = None,
     framing_verdict: "FramingVerdict | None" = None,
+    reframe_track: ReframeTrack | None = None,
 ) -> None:
     """Reformat the cut window into the export aspect ratio.
 
@@ -795,12 +842,44 @@ def _ffmpeg_reformat_9_16(
     Failures to resolve a font or read kit attributes are silent — the
     clip still renders, just without the overlay.
     """
+    # Active-speaker reframe (static). By default a horizontal source
+    # letterboxes (the branch below), which wastes ~60% of the vertical
+    # frame even on a centered talking head. When the operator has enabled
+    # reframe tracking AND the framing pass judged this clip a safe *static*
+    # crop AND we have a smart crop box, fill the 9:16 frame with that face
+    # crop instead — the same crop path a vertical/square source already
+    # takes. `full_screen_horizontal` and `reject_crop` verdicts stay on the
+    # letterbox path: there is no safe fill for two far-apart speakers or an
+    # uncroppable spread. The flag is read via get_settings() (lazy import,
+    # matching _safe_reframe_track) and defensively — a settings build
+    # without the field, or the flag OFF, is byte-identical to the legacy
+    # letterbox behavior. The dynamic reframe_track branch is untouched.
+    from chalybclip.settings import get_settings
+
+    reframe_static_fill = (
+        bool(getattr(get_settings(), "reframe_tracking_enabled", False))
+        and smart_box is not None
+        and framing_verdict is not None
+        and getattr(framing_verdict, "source_orientation", None) == "horizontal"
+        and getattr(framing_verdict, "recommended_output", None) == "mobile_crop_static"
+    )
+
     is_horizontal = (
-        framing_verdict is not None
+        not reframe_static_fill
+        and framing_verdict is not None
         and getattr(framing_verdict, "source_orientation", None) == "horizontal"
     )
 
-    if is_horizontal:
+    if reframe_track is not None and reframe_track.is_dynamic:
+        # Active-speaker tracking crop — a MOVING 9:16 column that pans to
+        # follow the speaker the framing pass flagged as moving. Takes
+        # precedence over the horizontal-letterbox branch below: for a
+        # moving talking head, a full-frame tracking crop beats a
+        # letterboxed band that wastes ~60% of the vertical frame.
+        vf = reframe_track_to_ffmpeg_filter(
+            reframe_track, output_w=cfg.output_width, output_h=cfg.output_height
+        )
+    elif is_horizontal:
         # Slice G.4c (refined) — black-letterbox with a modest 20% zoom.
         # Operator feedback after the initial blurred-letterbox ship:
         # the foreground was too small + the blurred bars drew the eye

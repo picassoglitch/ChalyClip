@@ -2449,6 +2449,18 @@ async def clip_detail(
             }
         )
 
+    # Active-speaker reframe is a GLOBAL engine flag. The per-clip framing
+    # verdict (candidate.evidence.framing.recommended_output) only RECOMMENDS
+    # a tracking crop; this flag tells the operator whether the render path
+    # actually follows the speaker or falls back to a static crop — the
+    # before/after intent. getattr so a Settings without the field still
+    # renders.
+    from chalybclip.settings import get_settings
+
+    reframe_tracking_enabled = bool(
+        getattr(get_settings(), "reframe_tracking_enabled", False)
+    )
+
     return templates.TemplateResponse(
         request,
         "clip_detail.html",
@@ -2475,6 +2487,10 @@ async def clip_detail(
             # data-face-zone="top|mid|lower" so the hook + captions
             # avoid the face. None when framing wasn't run.
             "face_zone": face_zone,
+            # Active-speaker reframe status (global engine flag). Lets the
+            # framing panel show whether a "recorte que sigue la cara"
+            # verdict will actually be applied or falls back to a static crop.
+            "reframe_tracking_enabled": reframe_tracking_enabled,
             # Slice L.6 — AI auto-decisions (hook needed / subtitles
             # needed / caption position / face vs gameplay priority /
             # reaction-wins-over-captions). Drives the ✨ intel lines
@@ -5232,9 +5248,17 @@ async def site_settings_view(
     """Admin-only site settings form. 404 for non-admins."""
     if not getattr(request.state, "is_admin", False):
         raise HTTPException(status_code=404, detail="not found")
+    from chalybclip.settings import get_settings
+
     values = await PlatformSettingsRepo(db).get_many(
         [_LANDING_PRICE_ES_KEY, _LANDING_PRICE_EN_KEY]
     )
+    # Active-speaker reframe (tracking crop) is a GLOBAL engine flag the
+    # render path reads at cut time — not a per-tenant DB setting — so it is
+    # surfaced read-only here (env-controlled, mirroring the LLM-settings
+    # view). getattr keeps this rendering even against a Settings build that
+    # predates the field.
+    settings = get_settings()
     return templates.TemplateResponse(
         request,
         "site_settings.html",
@@ -5242,6 +5266,10 @@ async def site_settings_view(
             "price_es": values.get(_LANDING_PRICE_ES_KEY, ""),
             "price_en": values.get(_LANDING_PRICE_EN_KEY, ""),
             "saved": bool(saved),
+            "reframe_tracking_enabled": bool(
+                getattr(settings, "reframe_tracking_enabled", False)
+            ),
+            "reframe_sample_fps": getattr(settings, "reframe_sample_fps", None),
         },
     )
 

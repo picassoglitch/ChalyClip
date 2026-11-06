@@ -66,6 +66,39 @@ def test_tracking_crop_when_subject_moves() -> None:
     assert v.confidence >= 0.60
 
 
+def test_tracking_crop_when_static_coverage_fails_but_subject_drifts() -> None:
+    """A subject that drifts 0.32 → 0.50 → 0.68 sits just below the primary
+    tracking-variance threshold, so a centered static column can't cover it
+    (< 55% overlap). It moved enough to follow, so it must be TRACKED, never
+    rejected — the regression lock for the reject→tracking escalation."""
+    subjects = [_face_at(0.32), _face_at(0.50), _face_at(0.68)]
+    v = _verdict_horizontal(subjects, sw=1920, sh=1080)
+    assert v.recommended_output == "mobile_crop_tracking"
+    assert v.safe_crop_box is not None
+    assert v.confidence >= 0.60
+
+
+def test_spread_action_stays_full_screen_not_tracking() -> None:
+    """A genuinely spread action (subjects hugging both edges) has a high
+    center variance too, but Rule A must win: it is uncroppable, so it ships
+    full-screen horizontal — NOT a tracking crop that would still lose an
+    edge subject. Guards the Rule-A-before-tracking ordering."""
+    subjects = [_face_at(0.06), _face_at(0.50), _face_at(0.94)]
+    v = _verdict_horizontal(subjects, sw=1920, sh=1080)
+    assert v.recommended_output == "full_screen_horizontal"
+    assert v.safe_crop_box is None
+
+
+def test_contained_moving_subject_prefers_static_crop() -> None:
+    """A subject that drifts only within a coverable band (0.42 → 0.58) still
+    fits a centered static column, so we keep the simpler static crop instead
+    of over-tracking every wobble."""
+    subjects = [_face_at(0.42), _face_at(0.50), _face_at(0.58)]
+    v = _verdict_horizontal(subjects, sw=1920, sh=1080)
+    assert v.recommended_output == "mobile_crop_static"
+    assert v.safe_crop_box is not None
+
+
 def test_no_subjects_falls_back_to_centered_static_crop() -> None:
     """No face data → conservative default. Confidence is low so the
     operator knows to review."""

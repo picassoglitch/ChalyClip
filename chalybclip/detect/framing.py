@@ -112,10 +112,20 @@ _ACTION_SPREAD_HORIZONTAL_THRESHOLD = 0.72
 """If detected action spreads across >72% of the source width on a
 horizontal video, declare it full-screen-required."""
 
-_TRACKING_VARIANCE_THRESHOLD = 0.18
+_TRACKING_VARIANCE_THRESHOLD = 0.15
 """Standard-deviation-of-face-centers (as fraction of source_w) above
-which the subject is 'moving' enough to need tracking crop. 0.18 ≈
-the subject's face slides across about 18% of the frame on average."""
+which the subject is clearly 'moving' and a tracking crop is chosen
+outright. 0.15 ≈ the subject's face slides across about 15% of the frame
+width — past that a fixed 9:16 column starts to slide off it, so we
+follow the face with keyframes instead of rejecting the clip."""
+
+_TRACKING_MIN_MOVEMENT = 0.08
+"""Lower movement bound consulted ONLY after a static crop has already
+failed its coverage check (Rule C). A subject whose face drifted at least
+this much across the samples is followed with a tracking crop rather than
+rejected — a wide-MOVING subject should be tracked, not rejected for the
+low static coverage its own movement produced. Below this the centers are
+effectively still (nothing to follow), so the clip is a genuine reject."""
 
 _MIN_SAFE_CROP_OVERLAP = 0.55
 """When face/action centers are bounded, the resulting 9:16 column
@@ -299,27 +309,26 @@ def _verdict_horizontal(
             ),
         )
 
-    # Rule B — face center moves a lot across the clip → tracking crop.
+    # Rule B — the subject's face moves clearly across the clip. A fixed
+    # 9:16 column would slide off it, so follow the face with a tracking
+    # crop. Evaluated BEFORE the static-coverage / reject rule below: a
+    # wide-MOVING subject must be tracked, never rejected for the low
+    # static coverage its own movement produces.
     if stddev > _TRACKING_VARIANCE_THRESHOLD:
-        return FramingVerdict(
-            source_orientation="horizontal",
-            recommended_output="mobile_crop_tracking",
-            confidence=min(0.90, 0.60 + (stddev - 0.18) * 2.0),
-            subject_boxes=subjects,
-            action_boxes=[],
-            safe_crop_box=_centered_safe_crop_at(mean_cx, target_col_w_frac),
-            reason=(
-                f"Subject moves across {stddev:.0%} of the frame width — "
-                f"a static crop would lose the subject. Tracking crop "
-                f"keyframes follow the face."
-            ),
-        )
+        return _tracking_verdict(subjects, mean_cx, target_col_w_frac, stddev)
 
-    # Rule C — action contained near mean_cx → static crop centered there.
+    # Rule C — the subject is roughly still, so a static 9:16 column
+    # centered on it should hold. Verify it actually contains the subject.
     crop_box = _centered_safe_crop_at(mean_cx, target_col_w_frac)
-    # Sanity: does the crop column actually contain the subjects?
     coverage = _subject_coverage(subjects, crop_box)
     if coverage < _MIN_SAFE_CROP_OVERLAP:
+        # A centered static column can't contain the subject. If the face
+        # nonetheless drifted across the samples (even below the Rule-B
+        # threshold), a tracking crop that follows it recovers the shot —
+        # prefer that over rejecting. Only a low-coverage frame with a
+        # near-static subject (nothing to follow) is a genuine reject.
+        if stddev >= _TRACKING_MIN_MOVEMENT:
+            return _tracking_verdict(subjects, mean_cx, target_col_w_frac, stddev)
         return FramingVerdict(
             source_orientation="horizontal",
             recommended_output="reject_crop",
@@ -329,8 +338,8 @@ def _verdict_horizontal(
             safe_crop_box=None,
             reason=(
                 f"No safe 9:16 crop — only {coverage:.0%} of subject "
-                f"coverage. Operator must export full-screen or trim "
-                f"the clip."
+                f"coverage and the subject is too still to track. Operator "
+                f"must export full-screen or trim the clip."
             ),
         )
     return FramingVerdict(
@@ -343,6 +352,39 @@ def _verdict_horizontal(
         reason=(
             f"Action centered around x={mean_cx:.0%} — a static 9:16 "
             f"crop covers {coverage:.0%} of the subject."
+        ),
+    )
+
+
+def _tracking_verdict(
+    subjects: list[SubjectBox],
+    mean_cx: float,
+    col_w_frac: float,
+    stddev: float,
+) -> FramingVerdict:
+    """Build a `mobile_crop_tracking` verdict for a horizontal source.
+
+    Shared by Rule B (clear movement) and the Rule-C escalation (a static
+    crop that lost a subject which nonetheless drifted enough to follow).
+    Confidence is anchored to `_TRACKING_VARIANCE_THRESHOLD` and floored at
+    0.60 so an escalated below-threshold track still reads as a positive,
+    actionable decision rather than a coin-flip. `safe_crop_box` carries the
+    initial centered column — the renderer's reframe pass refines it into
+    per-keyframe positions."""
+    confidence = min(
+        0.90, 0.60 + max(0.0, stddev - _TRACKING_VARIANCE_THRESHOLD) * 2.0
+    )
+    return FramingVerdict(
+        source_orientation="horizontal",
+        recommended_output="mobile_crop_tracking",
+        confidence=confidence,
+        subject_boxes=subjects,
+        action_boxes=[],
+        safe_crop_box=_centered_safe_crop_at(mean_cx, col_w_frac),
+        reason=(
+            f"Subject moves across {stddev:.0%} of the frame width — "
+            f"a static crop would lose the subject. Tracking crop "
+            f"keyframes follow the face."
         ),
     )
 

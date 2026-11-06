@@ -2618,6 +2618,27 @@
     font-size: 11px;
   }
   .nc-framing__overrides .nc-checkbox { font-size: 11px; }
+  /* Active-speaker reframe intent-vs-applied note (tracking verdicts only). */
+  .nc-framing__tracking {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 12px;
+    line-height: 1.45;
+    margin: 0 0 10px 0;
+    padding: 8px 10px;
+    border-radius: 8px;
+  }
+  .nc-framing__tracking .ti { flex: none; margin-top: 1px; }
+  .nc-framing__tracking--on {
+    background: rgba(0, 217, 122, 0.10);
+    color: #00d97a;
+  }
+  .nc-framing__tracking--off {
+    background: rgba(255, 184, 0, 0.10);
+    color: #ffb800;
+  }
+  .nc-framing__tracking strong { color: inherit; }
 
   /* Slice I.5 — softer section rhythm + confident dark-cinematic feel.
      Subtle border, slightly bigger radius, hover-lift on panels. */
@@ -3291,6 +3312,22 @@
     </span>
   </div>
   <p class="nc-framing__reason">{{ _framing.reason or '' }}</p>
+  {# Active-speaker reframe intent vs applied. The verdict above RECOMMENDS a
+     tracking crop for this clip; whether it's actually applied depends on the
+     global reframe flag (surfaced in Ajustes del sitio). Shows the operator
+     the before/after. #}
+  {% if _framing.recommended_output == 'mobile_crop_tracking' %}
+  <p class="nc-framing__tracking nc-framing__tracking--{{ 'on' if reframe_tracking_enabled else 'off' }}">
+    <i class="ti ti-viewfinder" aria-hidden="true"></i>
+    {% if reframe_tracking_enabled %}
+    <span><strong>Seguimiento del hablante activado</strong> — el recorte 9:16
+    seguirá a quien habla en este clip.</span>
+    {% else %}
+    <span><strong>Seguimiento del hablante desactivado</strong> — se exportará
+    con un recorte 9:16 fijo centrado. Actívalo en Ajustes del sitio.</span>
+    {% endif %}
+  </p>
+  {% endif %}
   <div class="nc-framing__overrides">
     <label class="nc-checkbox">
       <input type="checkbox" name="framing_force_vertical_crop" value="1" id="ctl-framing-force-vertical">
