@@ -8,7 +8,7 @@ import logging
 from pathlib import Path
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from chalybclip.errors import LLMError
 from chalybclip.llm import LLMRouter, VariantBatch
@@ -436,3 +436,93 @@ def test_variant_batch_schema_round_trips(tmp_path: Path) -> None:
     assert len(batch.variants) == 2
     assert batch.variants[0].id == "v_1"
     assert batch.variants[0].hashtags == ["clip", "streamer"]
+
+
+_PII = "Juan Pérez, tel 555-0101"
+
+
+def test_schema_mismatch_keeps_model_output_out_of_errors_and_rows(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    from chalybclip.llm import SchemaMismatchError
+
+    fake = FakeProvider("anthropic")
+    for _ in range(3):
+        # Wrong type and an extra field, both carrying PII-looking content.
+        fake.queue_success({"answer": {"name": _PII}, "note": _PII})
+    log = tmp_path / "llm_calls.jsonl"
+    router = LLMRouter(
+        make_llm_config(retry_attempts=3),
+        api_keys={"anthropic": "k"},
+        provider_factory=_factory({"anthropic": fake}),
+        call_log_path=log,
+    )
+    with caplog.at_level(logging.DEBUG), pytest.raises(LLMError) as ei:
+        asyncio.run(
+            router.complete(
+                tenant_id="t", purpose="variant_generation", system="s", user="u",
+                schema=TinySchema,
+            )
+        )
+    texts = [str(ei.value), log.read_text("utf-8"), caplog.text]
+    for leaked in ("Juan", "555-0101"):
+        assert all(leaked not in t for t in texts)
+    assert "TinySchema validation failed (1 errors: answer:string_type;" in str(ei.value)
+    cause = ei.value.__cause__
+    assert isinstance(cause, SchemaMismatchError)
+    assert cause.raw_output == {"answer": {"name": _PII}, "note": _PII}
+    assert "Juan" in str(cause.validation_error)  # the original stays reachable, unlogged
+
+
+class _Inner(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    score: float
+
+
+class _Strict(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    answer: str
+    items: list[_Inner] = []
+    by_name: dict[str, _Inner] = {}
+
+
+def test_schema_mismatch_redacts_model_chosen_keys(tmp_path: Path) -> None:
+    from chalybclip.llm import SchemaMismatchError
+
+    phone, email = "+52 55 1234 5678", "juan.perez@example.com"
+    bad = {
+        "answer": "ok",
+        phone: 1,  # forbidden extra field named after PII
+        "items": [{"score": "x", email: 2}],
+        "by_name": {email: {"score": "y"}},
+    }
+    fake = FakeProvider("anthropic")
+    fake.queue_success(bad)
+    log = tmp_path / "llm_calls.jsonl"
+    router = LLMRouter(
+        make_llm_config(retry_attempts=1),
+        api_keys={"anthropic": "k"},
+        provider_factory=_factory({"anthropic": fake}),
+        call_log_path=log,
+    )
+    with pytest.raises(LLMError) as ei:
+        asyncio.run(
+            router.complete(
+                tenant_id="t", purpose="variant_generation", system="s", user="u", schema=_Strict
+            )
+        )
+    cause = ei.value.__cause__
+    assert isinstance(cause, SchemaMismatchError)
+    row = log.read_text("utf-8")
+    for leaked in (phone, email, "1234", "juan"):
+        for text in (str(ei.value), repr(ei.value), str(cause), repr(cause), row):
+            assert leaked not in text
+    msg = str(cause)
+    for expected in (
+        "<key>:extra_forbidden",
+        "items.0.score:float_parsing",
+        "items.0.<key>:extra_forbidden",
+        "by_name.<key>.score:float_parsing",
+    ):
+        assert expected in msg
+    assert cause.raw_output == bad

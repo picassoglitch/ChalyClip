@@ -122,8 +122,8 @@ When adding a new feature:
 
 When debugging an LLM call:
 - Check `llm_calls` table first — the call was logged whether it succeeded or failed.
-- The `evidence` and `payload_json` columns have the input/output for replay.
-- If the structured-output validation failed, the raw response is in the error log.
+- `llm_calls` holds tokens, cost, status, attempts and a content-free `error` (no prompt or reply text).
+- The raw reply never reaches logs or the table (rule 10): it rides on the exception, as `raw_reply` (non-JSON) or `raw_output` + `validation_error` (`SchemaMismatchError`), reachable through the router error's `__cause__`.
 
 When unsure:
 - Defer to the spec.

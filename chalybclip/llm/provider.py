@@ -15,11 +15,15 @@ the next entry in the chain.
 
 from __future__ import annotations
 
-from typing import Any, Literal, Protocol
+import functools
+import hashlib
+from typing import Any, Literal, Protocol, get_args
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from chalybclip.errors import LLMError
+
+from .config import Effort
 
 
 class RetryableLLMError(LLMError):
@@ -35,11 +39,91 @@ class RetryableLLMError(LLMError):
         *,
         status_code: int | None = None,
         usage: ProviderResult | None = None,
+        raw_reply: str | None = None,
     ):
         super().__init__(message)
         self.status_code = status_code
         # Tokens the failed attempt still consumed (e.g. a response with no
-        # tool_use block). The router bills them like any other attempt.
+        # usable JSON). The router bills them like any other attempt.
+        self.usage = usage
+        # The model's reply can echo user transcripts (PII): kept for debugging,
+        # never formatted into the message, which reaches the logs (rule 10).
+        self.raw_reply = raw_reply
+
+
+def reply_fingerprint(text: str) -> str:
+    """Length + sha256 prefix: identifies a model reply in logs without its content."""
+    return f"{len(text)} chars, sha256={hashlib.sha256(text.encode('utf-8')).hexdigest()[:12]}"
+
+
+@functools.cache
+def declared_field_names(schema: type[BaseModel]) -> frozenset[str]:
+    """Every field name and alias declared anywhere in `schema`'s model graph."""
+    names: set[str] = set()
+    seen: set[type[BaseModel]] = set()
+
+    def walk(tp: Any) -> None:
+        if isinstance(tp, type) and issubclass(tp, BaseModel):
+            if tp in seen:
+                return
+            seen.add(tp)
+            for name, field in tp.model_fields.items():
+                names.add(name)
+                if field.alias:
+                    names.add(field.alias)
+                walk(field.annotation)
+        for arg in get_args(tp):  # list[X], dict[K, V], X | None, Annotated[...]
+            walk(arg)
+
+    walk(schema)
+    return frozenset(names)
+
+
+def _safe_loc(segment: str | int, known: frozenset[str]) -> str:
+    # Extra fields and dict keys are chosen by the model and can carry PII.
+    return str(segment) if isinstance(segment, int) or segment in known else "<key>"
+
+
+class SchemaMismatchError(LLMError):
+    """The reply parsed but failed the schema. The message names only field locations and
+    error types; the pydantic error (which quotes model output) stays on `validation_error`."""
+
+    def __init__(self, schema: type[BaseModel], error: ValidationError, raw_output: Any):
+        known = declared_field_names(schema)
+        problems = ", ".join(
+            f"{'.'.join(_safe_loc(p, known) for p in item['loc']) or '<root>'}:{item['type']}"
+            for item in error.errors(include_input=False, include_url=False)
+        )
+        super().__init__(
+            f"{schema.__name__} validation failed ({error.error_count()} errors: {problems}; "
+            f"{reply_fingerprint(repr(raw_output))})"
+        )
+        self.validation_error = error
+        self.raw_output = raw_output
+
+
+class TruncatedOutputError(LLMError):
+    """The reply hit `max_tokens` before the JSON closed. Not retried (the same
+    request would truncate again), but its tokens were billed: `usage` has them."""
+
+    def __init__(self, message: str, *, usage: ProviderResult | None = None):
+        super().__init__(message)
+        self.usage = usage
+
+
+class ContextWindowExceededError(TruncatedOutputError):
+    """Stopped at `model_context_window_exceeded`: like max_tokens, billed once, not retried."""
+
+
+class RefusalError(LLMError):
+    """The model declined (`stop_reason: refusal`). Not retried, since the same
+    request is declined again, but billed: `usage` has the tokens."""
+
+    def __init__(
+        self, message: str, *, category: str | None = None, usage: ProviderResult | None = None
+    ):
+        super().__init__(message)
+        self.category = category
         self.usage = usage
 
 
@@ -82,6 +166,7 @@ class LLMProvider(Protocol):
         system: str,
         user: str,
         schema: type[BaseModel],
+        effort: Effort | None = None,
     ) -> ProviderResult: ...
 
     async def complete_multimodal(
@@ -93,4 +178,5 @@ class LLMProvider(Protocol):
         user: str,
         images: list[MultimodalImage],
         schema: type[BaseModel],
+        effort: Effort | None = None,
     ) -> ProviderResult: ...

@@ -34,6 +34,23 @@ class TokenRates:
     output: float
     cache_read: float | None = None
     cache_write: float | None = None
+    # Long-prompt tier: a call whose whole prompt (uncached + cache read + cache
+    # write) exceeds `long_prompt_tokens` bills every token at these rates.
+    long_prompt_tokens: int | None = None
+    long_input: float | None = None
+    long_output: float | None = None
+
+    def for_prompt(self, prompt_tokens: int) -> TokenRates:
+        """The rates that apply to a call with `prompt_tokens` of prompt."""
+        if self.long_prompt_tokens is None or prompt_tokens <= self.long_prompt_tokens:
+            return self
+        long_in = self.long_input if self.long_input is not None else self.input
+        # Cache rates stay unset on purpose: Anthropic prices cache reads/writes as
+        # multiples (0.1x / 1.25x) of whichever input rate card applies.
+        return TokenRates(
+            input=long_in,
+            output=self.long_output if self.long_output is not None else self.output,
+        )
 
     @property
     def cache_read_rate(self) -> float:
@@ -52,6 +69,10 @@ class TokenRates:
 # changed price between point releases (Opus 4 / 4.1 vs 4.5+).
 ANTHROPIC_RATES: dict[str, TokenRates] = {
     "claude-haiku-4-5": TokenRates(input=1.00, output=5.00),
+    # $0.50 / $2.50 once the prompt passes 100K tokens.
+    "claude-haiku-5-5": TokenRates(
+        input=0.10, output=0.50, long_prompt_tokens=100_000, long_input=0.50, long_output=2.50
+    ),
     "claude-sonnet-4": TokenRates(input=3.00, output=15.00),  # 4, 4.5, 4.6
     "claude-sonnet-5": TokenRates(input=2.00, output=10.00),  # 5, 5.5
     "claude-opus-4-0": TokenRates(input=15.00, output=75.00),
@@ -102,6 +123,8 @@ def cost_micros(
 ) -> int:
     """Real USD micros for one call. USD per 1M tokens == micros per token,
     so the rates multiply token counts directly."""
+    prompt = max(0, input_tokens) + max(0, cache_read_tokens) + max(0, cache_write_tokens)
+    rates = rates.for_prompt(prompt)
     cost = (
         max(0, input_tokens) * rates.input
         + max(0, output_tokens) * rates.output

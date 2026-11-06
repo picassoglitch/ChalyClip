@@ -5,6 +5,7 @@ usage event."""
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from types import SimpleNamespace
@@ -59,12 +60,29 @@ def test_cache_tokens_are_priced_at_anthropic_multipliers() -> None:
         ("claude-sonnet-4-5", 3.0, 15.0),
         ("claude-opus-5", 5.0, 25.0),
         ("claude-opus-4-7", 5.0, 25.0),
+        ("claude-haiku-5-5", 0.10, 0.50),
+        ("claude-opus-5-5", 4.0, 20.0),
     ],
 )
 def test_committed_prices_cover_referenced_models(model: str, rin: float, rout: float) -> None:
     rates = lookup_rates("anthropic", model)
     assert rates is not None
     assert (rates.input, rates.output) == (rin, rout)
+
+
+def test_haiku_5_5_long_prompt_tier_bills_every_token_at_the_higher_rate() -> None:
+    rates = lookup_rates("anthropic", "claude-haiku-5-5")
+    assert rates is not None
+    at_limit = cost_micros(rates, input_tokens=100_000, output_tokens=1_000)
+    assert at_limit == round(100_000 * 0.10 + 1_000 * 0.50)
+    # Cache reads count toward the 100K threshold.
+    over = cost_micros(rates, input_tokens=60_000, output_tokens=1_000, cache_read_tokens=50_000)
+    assert over == round(60_000 * 0.50 + 1_000 * 2.50 + 50_000 * 0.05)
+
+
+def test_opus_5_5_cache_reads_at_20_cents() -> None:
+    rates = lookup_rates("anthropic", "claude-opus-5-5")
+    assert rates is not None and rates.cache_read_rate == 0.20
 
 
 def test_unknown_paid_model_uses_conservative_rate() -> None:
@@ -111,10 +129,13 @@ def test_committed_example_config_prices_its_models() -> None:
 
 
 def _message(*, tool: bool, **usage: int) -> SimpleNamespace:
-    content = [SimpleNamespace(type="tool_use", input={"answer": "x"})] if tool else [
-        SimpleNamespace(type="text", text="oops")
-    ]
-    return SimpleNamespace(content=content, usage=SimpleNamespace(**usage))
+    # `tool` = a usable structured-output reply (JSON text), else unparseable text.
+    text = '{"answer": "x"}' if tool else "oops"
+    return SimpleNamespace(
+        content=[SimpleNamespace(type="text", text=text)],
+        stop_reason="end_turn",
+        usage=SimpleNamespace(**usage),
+    )
 
 
 def test_anthropic_parse_reads_cache_tokens() -> None:
@@ -127,7 +148,7 @@ def test_anthropic_parse_reads_cache_tokens() -> None:
     assert res.output == {"answer": "x"}
 
 
-def test_anthropic_missing_tool_use_still_reports_usage() -> None:
+def test_anthropic_unparseable_reply_still_reports_usage() -> None:
     with pytest.raises(RetryableLLMError) as ei:
         _parse_message(_message(
             tool=False, input_tokens=300, output_tokens=40,
@@ -250,3 +271,36 @@ def test_cache_read_rates_follow_anthropic_list_prices():
     assert lookup_rates("anthropic", "claude-sonnet-5-5").cache_read_rate == 0.20
     assert lookup_rates("anthropic", "claude-haiku-4-5").cache_read_rate == 0.10
     assert lookup_rates("anthropic", "claude-opus-5-5").cache_write_rate == 5.00
+
+
+@pytest.mark.parametrize("final", ["ok", "error"])
+async def test_long_prompt_tier_is_priced_per_attempt_not_on_the_retry_sum(
+    tmp_path: Path, final: str
+) -> None:
+    """Two 60K-prompt Haiku 5.5 attempts: each is under the 100K tier, so the
+    row is 2 x (60,000 x $0.10 + 2,000 x $0.50) = 14,000 µ$, not 70,000."""
+    fake = _CacheFake("anthropic")
+    fake.queue_raw(
+        ProviderResult(output={"wrong": 1}, input_tokens=60_000, output_tokens=2_000, model="m")
+    )
+    second = {"answer": "ok"} if final == "ok" else {"wrong": 2}
+    fake.queue_raw(
+        ProviderResult(output=second, input_tokens=60_000, output_tokens=2_000, model="m")
+    )
+    cfg = make_llm_config(standard_model="claude-haiku-5-5", retry_attempts=2)
+    cfg = cfg.model_copy(update={"pricing": {}})  # bill from prices.py
+    log = tmp_path / "calls.jsonl"
+    router = LLMRouter(
+        cfg, api_keys={"anthropic": "k"}, provider_factory=_factory(fake), call_log_path=log
+    )
+    call = router.complete(
+        tenant_id="ten_a", purpose="variant_generation", system="s", user="u", schema=Answer
+    )
+    if final == "ok":
+        await call
+    else:
+        with pytest.raises(LLMError):
+            await call
+    row = json.loads(log.read_text("utf-8").splitlines()[-1])
+    assert (row["input_tokens"], row["output_tokens"]) == (120_000, 4_000)
+    assert row["cost_usd_micros"] == 14_000

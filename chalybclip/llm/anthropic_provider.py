@@ -1,18 +1,23 @@
-"""Anthropic Claude provider - structured output via tool use.
+"""Anthropic Claude provider - structured output via `output_config.format`.
 
-The structured-output trick: we declare a single `tool` whose `input_schema`
-is the Pydantic model's JSON schema, then force `tool_choice` to that tool.
-Claude returns a `tool_use` content block whose `input` is the structured
-output dict, which the router validates against the originating schema.
+Each call sends the Pydantic model's JSON schema as a `json_schema` output
+format, so Claude's reply is a text block holding JSON that matches it. The
+router still validates that dict against the originating schema.
 
-Vision (`complete_multimodal`) wraps the same trick: the user message becomes
-a content list mixing image blocks (base64-inlined) with the text prompt;
-Claude still emits a single tool_use response.
+Forced tool use (`tool_choice` "tool"/"any") was the old trick; Opus 5.5,
+Sonnet 5.5 and Fable 5.1 reject it with a 400, and structured outputs work on
+every model we route (Haiku 4.5/5.5, Sonnet 5/5.5, Opus 5/5.5).
+
+Vision (`complete_multimodal`) sends the same format: the user message becomes
+a content list mixing image blocks (base64-inlined) with the text prompt.
 """
 
 from __future__ import annotations
 
 import base64
+import functools
+import json
+import logging
 from typing import Any
 
 import anthropic
@@ -20,11 +25,46 @@ from pydantic import BaseModel
 
 from chalybclip.errors import LLMError
 
-from .config import ProviderConfig
-from .provider import LLMProvider, MultimodalImage, ProviderResult, RetryableLLMError
+from .config import Effort, ProviderConfig
+from .provider import (
+    ContextWindowExceededError,
+    LLMProvider,
+    MultimodalImage,
+    ProviderResult,
+    RefusalError,
+    RetryableLLMError,
+    TruncatedOutputError,
+    reply_fingerprint,
+)
 
-_RETRYABLE_STATUSES = frozenset({408, 409, 429, 500, 502, 503, 504})
-_TOOL_NAME = "chalybclip_structured_output"
+_log = logging.getLogger("chalybclip.llm.anthropic")
+_effort_dropped_for: set[str] = set()
+
+
+@functools.cache
+def output_format_for(schema: type[BaseModel]) -> dict[str, Any]:
+    """`output_config.format` for a schema; constraints the API can't enforce move
+    into descriptions, and the router re-validates them."""
+    return {"type": "json_schema", "schema": anthropic.transform_schema(schema)}
+
+
+# Families that accept `output_config.effort`; Haiku 4.5, Sonnet 4.5 and older 400 on it.
+_EFFORT_FAMILIES = (
+    "claude-opus-4-5",
+    "claude-opus-4-6",
+    "claude-opus-4-7",
+    "claude-opus-4-8",
+    "claude-opus-5",
+    "claude-sonnet-4-6",
+    "claude-sonnet-5",
+    "claude-haiku-5",
+    "claude-fable-5",
+    "claude-mythos-5",
+)
+
+
+def supports_effort(model: str) -> bool:
+    return model.startswith(_EFFORT_FAMILIES)
 
 
 class AnthropicProvider(LLMProvider):
@@ -36,6 +76,8 @@ class AnthropicProvider(LLMProvider):
             api_key=api_key,
             base_url=config.base_url or None,
             timeout=config.timeout_s,
+            # The router owns retries; SDK retries multiplied them (3 x 3 x timeout_s).
+            max_retries=0,
         )
 
     async def complete(
@@ -46,14 +88,15 @@ class AnthropicProvider(LLMProvider):
         system: str,
         user: str,
         schema: type[BaseModel],
+        effort: Effort | None = None,
     ) -> ProviderResult:
         del tenant_id  # used by the router for logging, not the SDK call
-        tool = self._tool_for(schema)
         message = await self._send(
             model=model,
             system=system,
             messages=[{"role": "user", "content": user}],
-            tool=tool,
+            schema=schema,
+            effort=effort,
         )
         return _parse_message(message, model=model)
 
@@ -66,9 +109,9 @@ class AnthropicProvider(LLMProvider):
         user: str,
         images: list[MultimodalImage],
         schema: type[BaseModel],
+        effort: Effort | None = None,
     ) -> ProviderResult:
         del tenant_id
-        tool = self._tool_for(schema)
         # Image blocks first, then the text prompt - matches Anthropic's
         # documented best practice for multi-image requests.
         content: list[dict[str, Any]] = [
@@ -87,17 +130,25 @@ class AnthropicProvider(LLMProvider):
             model=model,
             system=system,
             messages=[{"role": "user", "content": content}],
-            tool=tool,
+            schema=schema,
+            effort=effort,
         )
         return _parse_message(message, model=model)
 
     @staticmethod
-    def _tool_for(schema: type[BaseModel]) -> dict[str, Any]:
-        return {
-            "name": _TOOL_NAME,
-            "description": "Return the structured output requested by the system prompt.",
-            "input_schema": schema.model_json_schema(),
-        }
+    def _output_config(
+        model: str, schema: type[BaseModel], effort: Effort | None
+    ) -> dict[str, Any]:
+        config: dict[str, Any] = {"format": output_format_for(schema)}
+        if effort is not None:
+            if supports_effort(model):
+                config["effort"] = effort
+            elif model not in _effort_dropped_for:
+                _effort_dropped_for.add(model)
+                _log.warning(
+                    "llm.effort_dropped model=%s effort=%s (model rejects effort)", model, effort
+                )
+        return config
 
     async def _send(
         self,
@@ -105,23 +156,22 @@ class AnthropicProvider(LLMProvider):
         model: str,
         system: str,
         messages: list[dict[str, Any]],
-        tool: dict[str, Any],
+        schema: type[BaseModel],
+        effort: Effort | None,
     ) -> anthropic.types.Message:
         try:
-            # The Anthropic SDK's overloads use TypedDicts for `tools` /
-            # `tool_choice` / message content; passing plain dicts works at
-            # runtime but doesn't satisfy the overload at type-check time.
+            # The SDK's overloads use TypedDicts for message content and
+            # `output_config`; plain dicts work at runtime but not at type-check.
             return await self._client.messages.create(  # type: ignore[call-overload, no-any-return]
                 model=model,
-                max_tokens=4096,
+                max_tokens=self._config.max_output_tokens,
                 system=system,
                 messages=messages,
-                tools=[tool],
-                tool_choice={"type": "tool", "name": _TOOL_NAME},
+                output_config=self._output_config(model, schema, effort),
             )
         except anthropic.APIStatusError as e:
             status = getattr(e, "status_code", None)
-            if status in _RETRYABLE_STATUSES:
+            if status in self._config.retryable_status_codes:
                 raise RetryableLLMError(f"anthropic {status}: {e}", status_code=status) from e
             raise LLMError(f"anthropic {status}: {e}") from e
         except (anthropic.APIConnectionError, anthropic.APITimeoutError) as e:
@@ -129,7 +179,8 @@ class AnthropicProvider(LLMProvider):
 
 
 def _parse_message(message: anthropic.types.Message, *, model: str) -> ProviderResult:
-    """Pull the tool_use input out of Claude's response."""
+    """Pull the JSON object out of a structured-output reply. Every error carries this
+    attempt's usage; only non-JSON text is retryable (max_tokens and refusals are not)."""
     usage = message.usage
     result = ProviderResult(
         output={},
@@ -139,16 +190,48 @@ def _parse_message(message: anthropic.types.Message, *, model: str) -> ProviderR
         cache_write_tokens=int(getattr(usage, "cache_creation_input_tokens", 0) or 0),
         model=model,
     )
+    stop = getattr(message, "stop_reason", None)
+    if stop == "refusal":
+        details = getattr(message, "stop_details", None)
+        category = getattr(details, "category", None)
+        # No server-side `fallbacks` (decision 2026-11-03): refusals are rare on logo/agent
+        # prompts, and a fallback bills at message.model's rates, which the router doesn't read yet.
+        raise RefusalError(
+            f"anthropic refused (category={category})", category=category, usage=result
+        )
 
-    structured: dict[str, Any] | None = None
-    for block in message.content:
-        if getattr(block, "type", None) == "tool_use":
-            structured = dict(getattr(block, "input", {}) or {})
-            break
+    if stop == "max_tokens":
+        # Thinking counts against max_tokens too; retrying the same request
+        # would truncate again, so fail once and bill it.
+        raise TruncatedOutputError(
+            f"anthropic reply hit max_tokens ({result.output_tokens} output tokens)",
+            usage=result,
+        )
+    if stop == "model_context_window_exceeded":
+        # Prompt + output filled the context window: a retry of the same prompt fills it again.
+        raise ContextWindowExceededError(
+            f"anthropic reply hit the context window ({result.input_tokens} input tokens)",
+            usage=result,
+        )
 
-    if structured is None:
-        # The call was still billed — hand the usage to the router so the
-        # retry it triggers doesn't hide this attempt's tokens.
-        raise RetryableLLMError("anthropic returned no tool_use block", usage=result)
-
+    text = "".join(
+        getattr(block, "text", "") or ""
+        for block in message.content
+        if getattr(block, "type", None) == "text"
+    )
+    try:
+        structured = json.loads(text)
+    except json.JSONDecodeError as e:
+        raise _not_json(text, stop=stop, usage=result, why="invalid JSON") from e
+    if not isinstance(structured, dict):
+        raise _not_json(text, stop=stop, usage=result, why=type(structured).__name__)
     return result.model_copy(update={"output": structured})
+
+
+def _not_json(text: str, *, stop: str | None, usage: ProviderResult, why: str) -> RetryableLLMError:
+    return RetryableLLMError(
+        f"anthropic reply is not a JSON object ({why}, stop_reason={stop}, "
+        f"{reply_fingerprint(text)})",
+        usage=usage,
+        raw_reply=text,
+    )

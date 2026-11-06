@@ -33,10 +33,15 @@ from pydantic import BaseModel
 
 from chalybclip.errors import LLMError
 
-from .config import ProviderConfig
-from .provider import LLMProvider, MultimodalImage, ProviderResult, RetryableLLMError
+from .config import Effort, ProviderConfig
+from .provider import (
+    LLMProvider,
+    MultimodalImage,
+    ProviderResult,
+    RetryableLLMError,
+    reply_fingerprint,
+)
 
-_RETRYABLE_STATUSES = frozenset({408, 409, 429, 500, 502, 503, 504})
 _THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
 _FENCE_RE = re.compile(r"^```[a-zA-Z0-9_-]*\s*|```\s*$", re.MULTILINE)
 
@@ -58,6 +63,7 @@ class OpenAICompatibleProvider(LLMProvider):
             headers["Authorization"] = f"Bearer {api_key}"
         self._client = httpx.AsyncClient(timeout=config.timeout_s, headers=headers)
         self._json_mode = config.json_mode
+        self._retryable_status_codes = frozenset(config.retryable_status_codes)
 
     async def complete(
         self,
@@ -67,8 +73,10 @@ class OpenAICompatibleProvider(LLMProvider):
         system: str,
         user: str,
         schema: type[BaseModel],
+        effort: Effort | None = None,
     ) -> ProviderResult:
-        del tenant_id  # cost attribution happens in the router
+        # Cost attribution happens in the router; OpenAI-compatible runtimes have no effort knob.
+        del tenant_id, effort
         return await self._chat(
             model=model,
             system=system,
@@ -85,8 +93,9 @@ class OpenAICompatibleProvider(LLMProvider):
         user: str,
         images: list[MultimodalImage],
         schema: type[BaseModel],
+        effort: Effort | None = None,
     ) -> ProviderResult:
-        del tenant_id
+        del tenant_id, effort  # no effort knob on OpenAI-compatible runtimes
         content: list[dict[str, Any]] = [
             {
                 "type": "image_url",
@@ -135,13 +144,13 @@ class OpenAICompatibleProvider(LLMProvider):
         except (httpx.TimeoutException, httpx.TransportError) as e:
             raise RetryableLLMError(f"open-llm transient: {e}") from e
 
-        if resp.status_code in _RETRYABLE_STATUSES:
+        if resp.status_code in self._retryable_status_codes:
             raise RetryableLLMError(
-                f"open-llm {resp.status_code}: {resp.text[:300]}",
+                f"open-llm {resp.status_code}: ({reply_fingerprint(resp.text)})",
                 status_code=resp.status_code,
             )
         if resp.status_code >= 400:
-            raise LLMError(f"open-llm {resp.status_code}: {resp.text[:300]}")
+            raise LLMError(f"open-llm {resp.status_code}: ({reply_fingerprint(resp.text)})")
 
         try:
             data = resp.json()
@@ -153,7 +162,8 @@ class OpenAICompatibleProvider(LLMProvider):
         if structured is None:
             # Reasoning ramble / refusal / truncation — worth another attempt.
             raise RetryableLLMError(
-                f"open-llm returned non-JSON content: {text[:200]!r}"
+                f"open-llm returned non-JSON content ({reply_fingerprint(text)})",
+                raw_reply=text,
             )
 
         usage = data.get("usage") or {}

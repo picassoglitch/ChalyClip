@@ -30,9 +30,15 @@ from pydantic import BaseModel, ValidationError
 
 from chalybclip.errors import BudgetExceeded, LLMError
 
-from .config import LLMConfig, ProviderConfig, Quality
+from .config import Effort, LLMConfig, ProviderConfig, Quality
 from .prices import cost_micros
-from .provider import LLMProvider, MultimodalImage, ProviderResult, RetryableLLMError
+from .provider import (
+    LLMProvider,
+    MultimodalImage,
+    ProviderResult,
+    RetryableLLMError,
+    SchemaMismatchError,
+)
 
 if TYPE_CHECKING:
     from chalybclip.db import Database
@@ -43,7 +49,7 @@ T = TypeVar("T", bound=BaseModel)
 _router_log = logging.getLogger("chalybclip.llm.router")
 
 ProviderFactory = Callable[[str, ProviderConfig, str], LLMProvider | None]
-ProviderInvoker = Callable[[LLMProvider, str], Awaitable[ProviderResult]]
+ProviderInvoker = Callable[[LLMProvider, str, Effort | None], Awaitable[ProviderResult]]
 
 # ---- billing circuit breaker -------------------------------------------
 # A billing failure (credit balance exhausted, monthly usage cap hit) is not
@@ -87,6 +93,8 @@ class CallLogRow(BaseModel):
     status: str = "ok"
     error: str | None = None
     attempts: int = 1
+    # The deadline cancelled an attempt mid-request: its tokens are unknown and unbilled.
+    in_flight_cancelled: bool = False
 
 
 def _default_provider_factory(
@@ -158,13 +166,16 @@ class LLMRouter:
             quality: Override the routing rule's `default_quality`.
         """
 
-        async def invoke(provider: LLMProvider, model: str) -> ProviderResult:
+        async def invoke(
+            provider: LLMProvider, model: str, effort: Effort | None
+        ) -> ProviderResult:
             return await provider.complete(
                 tenant_id=tenant_id,
                 model=model,
                 system=system,
                 user=user,
                 schema=schema,
+                effort=effort,
             )
 
         return await self._invoke(
@@ -173,6 +184,7 @@ class LLMRouter:
             schema=schema,
             quality=quality,
             invoke_provider=invoke,
+            prompt_tokens_est=_estimate_prompt_tokens(system, user),
         )
 
     async def complete_multimodal(
@@ -197,7 +209,9 @@ class LLMRouter:
         if not images:
             raise LLMError("complete_multimodal requires at least one image")
 
-        async def invoke(provider: LLMProvider, model: str) -> ProviderResult:
+        async def invoke(
+            provider: LLMProvider, model: str, effort: Effort | None
+        ) -> ProviderResult:
             return await provider.complete_multimodal(
                 tenant_id=tenant_id,
                 model=model,
@@ -205,6 +219,7 @@ class LLMRouter:
                 user=user,
                 images=images,
                 schema=schema,
+                effort=effort,
             )
 
         return await self._invoke(
@@ -213,6 +228,7 @@ class LLMRouter:
             schema=schema,
             quality=quality,
             invoke_provider=invoke,
+            prompt_tokens_est=_estimate_prompt_tokens(system, user, n_images=len(images)),
         )
 
     async def _invoke(
@@ -223,6 +239,7 @@ class LLMRouter:
         schema: type[T],
         quality: Quality | None,
         invoke_provider: ProviderInvoker,
+        prompt_tokens_est: int = 0,
     ) -> T:
         """Run the provider chain for a single call (text or multimodal)."""
         rule = self._config.routing.get(purpose)
@@ -277,16 +294,29 @@ class LLMRouter:
                 chain_errors.append(f"{provider_name}: {reason}")
                 continue
             model = self._config.model_for(provider_name, effective_quality)
+            # Each provider in the chain gets its own deadline from its own timeout_s.
+            deadline = self._deadline(provider_name, effective_quality)
 
             try:
                 validated, attempts, spent = await self._call_with_retries(
                     schema=schema,
-                    invoke=functools.partial(invoke_provider, provider, model),
+                    invoke=functools.partial(invoke_provider, provider, model, rule.effort),
+                    deadline=deadline,
                 )
             except (LLMError, ValidationError) as e:
                 # Failed attempts still consumed tokens (schema-invalid
-                # output, a response with no tool_use block) — bill them.
-                failed_usage = _sum_usage(getattr(e, "spent", None) or [])
+                # output, a reply with no usable JSON) — bill them.
+                failed_spent: list[ProviderResult] = getattr(e, "spent", None) or []
+                failed_usage = _sum_usage(failed_spent)
+                in_flight_cancelled = bool(getattr(e, "in_flight_cancelled", False))
+                if in_flight_cancelled:
+                    await self._report_unbilled_timeout(
+                        tenant_id=tenant_id,
+                        purpose=purpose,
+                        provider=provider_name,
+                        model=model,
+                        prompt_tokens_est=prompt_tokens_est,
+                    )
                 await self._log(
                     tenant_id=tenant_id,
                     purpose=purpose,
@@ -295,11 +325,12 @@ class LLMRouter:
                     quality=effective_quality,
                     usage=failed_usage,
                     cost_usd_micros=self._compute_cost_micros(
-                        provider=provider_name, model=model, usage=failed_usage,
+                        provider=provider_name, model=model, spent=failed_spent
                     ),
                     status="error",
                     error=f"{type(e).__name__}: {e}",
                     attempts=getattr(e, "attempts", 1),
+                    in_flight_cancelled=in_flight_cancelled,
                 )
                 last_error = e
                 chain_errors.append(f"{provider_name}: {type(e).__name__}: {e}")
@@ -333,9 +364,7 @@ class LLMRouter:
             # Every attempt's tokens, not just the one that validated: a
             # retry after a schema violation paid for both responses.
             usage = _sum_usage(spent)
-            cost = self._compute_cost_micros(
-                provider=provider_name, model=model, usage=usage,
-            )
+            cost = self._compute_cost_micros(provider=provider_name, model=model, spent=spent)
             await self._log(
                 tenant_id=tenant_id,
                 purpose=purpose,
@@ -369,6 +398,7 @@ class LLMRouter:
         *,
         schema: type[T],
         invoke: Callable[[], Awaitable[ProviderResult]],
+        deadline: float | None = None,
     ) -> tuple[T, int, list[ProviderResult]]:
         """Drive a single provider through `RetryConfig.max_attempts`.
 
@@ -379,9 +409,15 @@ class LLMRouter:
         retry = self._config.retry
         last_err: Exception | None = None
         spent: list[ProviderResult] = []
+        loop = asyncio.get_running_loop()
         for attempt in range(1, retry.max_attempts + 1):
+            remaining = None if deadline is None else deadline - loop.time()
+            if remaining is not None and remaining <= 0:
+                last_err = _deadline_error(last_err)
+                attempt -= 1  # this attempt never started
+                break
             try:
-                result = await invoke()
+                result = await asyncio.wait_for(invoke(), remaining)
                 spent.append(result)
                 validated = schema.model_validate(result.output)
                 return validated, attempt, spent
@@ -389,30 +425,77 @@ class LLMRouter:
                 if e.usage is not None:
                     spent.append(e.usage)
                 last_err = e
-                if attempt < retry.max_attempts:
-                    backoff = retry.initial_backoff_s * (retry.backoff_multiplier ** (attempt - 1))
-                    await asyncio.sleep(backoff)
+                if attempt < retry.max_attempts and not await self._backoff(attempt, deadline):
+                    last_err = _deadline_error(last_err)
+                    break
                 continue
             except ValidationError as e:
                 # Treat schema violations as retryable - the LLM may produce a
                 # better-formed object on the next attempt.
-                last_err = e
-                if attempt < retry.max_attempts:
-                    backoff = retry.initial_backoff_s * (retry.backoff_multiplier ** (attempt - 1))
-                    await asyncio.sleep(backoff)
+                last_err = SchemaMismatchError(schema, e, result.output)
+                if attempt < retry.max_attempts and not await self._backoff(attempt, deadline):
+                    last_err = _deadline_error(last_err)
+                    break
                 continue
+            except TimeoutError:
+                # The in-flight attempt was cancelled at the deadline; its tokens are unknown.
+                last_err = _deadline_error(last_err, in_flight_cancelled=True)
+                break
             except LLMError as e:
-                # Non-retryable: stop here, but keep what earlier attempts cost.
+                # Non-retryable: stop here, but keep what earlier attempts cost
+                # (and this one's, when the provider reports it).
+                usage = getattr(e, "usage", None)
+                if isinstance(usage, ProviderResult):
+                    spent.append(usage)
                 e.attempts = attempt  # type: ignore[attr-defined]
                 e.spent = spent  # type: ignore[attr-defined]
                 raise
 
         # Annotate so the caller can record attempts in the failure log row.
         if last_err is not None:
-            last_err.attempts = retry.max_attempts  # type: ignore[attr-defined]
+            last_err.attempts = attempt  # type: ignore[attr-defined]
             last_err.spent = spent  # type: ignore[attr-defined]
             raise last_err
         raise LLMError("retry loop exited without success or error")
+
+    async def _report_unbilled_timeout(
+        self, *, tenant_id: str, purpose: str, provider: str, model: str, prompt_tokens_est: int
+    ) -> None:
+        """Estimate of an attempt cut at the deadline, for finance to reconcile; not billed."""
+        cfg = self._config.providers.get(provider)
+        max_output = cfg.max_output_tokens if cfg is not None else 0
+        rates, _known = self._config.rates_for(provider, model)
+        est = cost_micros(rates, input_tokens=prompt_tokens_est, output_tokens=max_output)
+        payload = {
+            "purpose": purpose,
+            "provider": provider,
+            "model": model,
+            "in_flight_cancelled": True,
+            "est_input_tokens": prompt_tokens_est,
+            "max_output_tokens": max_output,
+            "est_cost_usd_micros": est,
+        }
+        _router_log.warning("llm.unbilled_timeout %s", json.dumps(payload, sort_keys=True))
+        await self._emit_event(tenant_id=tenant_id, type_="llm.unbilled_timeout", payload=payload)
+
+    def _deadline(self, provider: str, quality: Quality) -> float | None:
+        """Loop-clock deadline for one provider in the chain, from its own timeout_s."""
+        cfg = self._config.providers.get(provider)
+        if cfg is None:
+            return None
+        factor = self._config.retry.deadline_timeouts.get(quality)
+        if factor is None:
+            return None
+        return asyncio.get_running_loop().time() + cfg.timeout_s * factor
+
+    async def _backoff(self, attempt: int, deadline: float | None) -> bool:
+        """Sleep before the next attempt; False (no sleep) when the deadline comes first."""
+        retry = self._config.retry
+        delay = retry.initial_backoff_s * (retry.backoff_multiplier ** (attempt - 1))
+        if deadline is not None and delay >= deadline - asyncio.get_running_loop().time():
+            return False
+        await asyncio.sleep(delay)
+        return True
 
     def _get_provider(self, name: str) -> LLMProvider | None:
         if name not in self._providers:
@@ -423,28 +506,36 @@ class LLMRouter:
             if cfg is None or (cfg.api_key_required and not api_key):
                 self._providers[name] = None
             else:
+                cfg = cfg.model_copy(
+                    update={"retryable_status_codes": self._config.retry.retryable_status_codes}
+                )
                 self._providers[name] = self._provider_factory(name, cfg, api_key)
         return self._providers[name]
 
     def _compute_cost_micros(
-        self, *, provider: str, model: str, usage: ProviderResult
+        self, *, provider: str, model: str, spent: list[ProviderResult]
     ) -> int:
         """Real USD micros incl. prompt-cache reads/writes. An unpriced
         model of a paid provider bills at the conservative (highest) rate
         and logs an error — never silently 0."""
         rates, known = self._config.rates_for(provider, model)
-        if not known and _usage_total(usage) > 0:
+        if not known and any(_usage_total(u) > 0 for u in spent):
             _router_log.error(
                 "llm.price_unknown provider=%s model=%s — billed at the "
                 "conservative rate; add it to chalybclip/llm/prices.py",
                 provider, model,
             )
-        return cost_micros(
-            rates,
-            input_tokens=usage.input_tokens,
-            output_tokens=usage.output_tokens,
-            cache_read_tokens=usage.cache_read_tokens,
-            cache_write_tokens=usage.cache_write_tokens,
+        # Each attempt is its own request: a long-prompt tier applies per request,
+        # never to the sum of retries.
+        return sum(
+            cost_micros(
+                rates,
+                input_tokens=u.input_tokens,
+                output_tokens=u.output_tokens,
+                cache_read_tokens=u.cache_read_tokens,
+                cache_write_tokens=u.cache_write_tokens,
+            )
+            for u in spent
         )
 
     async def _log(
@@ -460,6 +551,7 @@ class LLMRouter:
         status: str = "ok",
         error: str | None = None,
         attempts: int = 1,
+        in_flight_cancelled: bool = False,
     ) -> None:
         """Write one cost-tracking row to the JSONL breadcrumb and the DB.
 
@@ -486,6 +578,7 @@ class LLMRouter:
             status=status,
             error=error,
             attempts=attempts,
+            in_flight_cancelled=in_flight_cancelled,
         )
 
         if self._call_log_path is not None:
@@ -586,6 +679,25 @@ class LLMRouter:
                 await emit(self._db, type_, payload)
         except Exception:
             pass
+
+
+def _deadline_error(cause: Exception | None, *, in_flight_cancelled: bool = False) -> LLMError:
+    detail = f" (last error: {type(cause).__name__}: {cause})" if cause is not None else ""
+    flag = " in_flight_cancelled=true" if in_flight_cancelled else ""
+    err = LLMError(f"LLM call exceeded its wall-time deadline{detail}{flag}")
+    err.__cause__ = cause
+    err.in_flight_cancelled = in_flight_cancelled  # type: ignore[attr-defined]
+    return err
+
+
+# Rough prompt size for the unbilled-timeout estimate only (never billed): ~4 chars
+# per token, ~1.2K tokens per 720p frame.
+_CHARS_PER_TOKEN = 4
+_TOKENS_PER_IMAGE = 1_200
+
+
+def _estimate_prompt_tokens(system: str, user: str, *, n_images: int = 0) -> int:
+    return (len(system) + len(user)) // _CHARS_PER_TOKEN + n_images * _TOKENS_PER_IMAGE
 
 
 def _sum_usage(results: list[ProviderResult]) -> ProviderResult:

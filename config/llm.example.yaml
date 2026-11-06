@@ -46,21 +46,25 @@ providers:
     api_key_env: ANTHROPIC_API_KEY
     base_url: https://api.anthropic.com
     models:
-      standard: claude-haiku-4-5                # fast + cheap, vision-capable; ~$0.03/VOD for text
-      premium: claude-opus-5                    # the two `premium` purposes only (logo, agent decisions)
+      standard: claude-haiku-5-5                # fast + cheap, vision-capable; $0.10/$0.50 per MTok
+      premium: claude-opus-5-5                  # the two `premium` purposes only (logo, agent decisions)
     rate_limits:
       requests_per_minute: 1000
       input_tokens_per_minute: 400000
       output_tokens_per_minute: 80000
-    timeout_s: 30
+    # Opus 5.5 always thinks, and a call can run past 30 s; the SDK uses this per HTTP attempt.
+    timeout_s: 300                              # router caps a call at 2x (standard) / 1x (premium)
+    max_output_tokens: 16000                    # thinking counts against it; 16K stays non-streaming-safe
 
 # Routing rules per "purpose" (the use case of the call).
 # The router resolves: purpose -> quality -> provider -> model.
+# `effort: low` on extraction/scoring purposes; creative ones keep the model default.
 routing:
   vision_rescore:                               # frame-based rescore of detect candidates
     default_quality: standard
     primary: anthropic
     fallbacks: []
+    effort: low
 
   variant_generation_visual:                    # Phase 2+, multimodal
     default_quality: standard
@@ -71,6 +75,7 @@ routing:
     default_quality: standard
     primary: anthropic
     fallbacks: []
+    effort: low
 
   agent_decision:                               # alter-ego auto-approval reasoning
     default_quality: premium
@@ -81,6 +86,7 @@ routing:
     default_quality: standard
     primary: anthropic
     fallbacks: []
+    effort: low
 
   logo_generation:                              # AI-generated SVG brand mark (voice-markers §3.3.a)
     default_quality: premium
@@ -97,15 +103,15 @@ retry:
   max_attempts: 3
   initial_backoff_s: 1.0
   backoff_multiplier: 4.0
-  retryable_status_codes: [429, 500, 502, 503, 504]
+  # retryable_status_codes defaults to 408, 409, 429 and every 5xx (529 overloaded included).
 
 circuit_breaker:
   error_rate_threshold: 0.20                    # >20% errors over window -> trip
   window_s: 300
   recovery_s: 300
 
-# Cost tracking — used to compute cost_usd_micros per call.
-# Open models have no pricing entry: unlisted (provider, model) pairs cost 0.
+# Cost tracking: entries here override chalybclip/llm/prices.py per model.
+# The 5.5 models stay unlisted so Haiku 5.5's >100K-prompt tier keeps applying.
 pricing:
   anthropic:
     claude-haiku-4-5:

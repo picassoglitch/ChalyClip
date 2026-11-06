@@ -3,7 +3,16 @@
 from .config import LLMConfig, ProviderConfig, Quality, RoutingRule, load_llm_config
 from .frame_cache import FrameCache
 from .frame_store import FrameStore, MemoryFrameStore
-from .provider import LLMProvider, MultimodalImage, ProviderResult, RetryableLLMError
+from .provider import (
+    ContextWindowExceededError,
+    LLMProvider,
+    MultimodalImage,
+    ProviderResult,
+    RefusalError,
+    RetryableLLMError,
+    SchemaMismatchError,
+    TruncatedOutputError,
+)
 from .router import CallLogRow, LLMRouter
 from .schemas import (
     CropBoxVerdict,
@@ -19,6 +28,7 @@ from .schemas import (
 
 __all__ = [
     "CallLogRow",
+    "ContextWindowExceededError",
     "CropBoxVerdict",
     "FaceEmotionVerdict",
     "FrameCache",
@@ -34,10 +44,13 @@ __all__ = [
     "ProviderConfig",
     "ProviderResult",
     "Quality",
+    "RefusalError",
     "RescoreVerdict",
     "RetryableLLMError",
     "RoutingRule",
+    "SchemaMismatchError",
     "ThumbnailPickVerdict",
+    "TruncatedOutputError",
     "Variant",
     "VariantBatch",
     "load_llm_config",
