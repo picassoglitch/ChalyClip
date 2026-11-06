@@ -557,7 +557,7 @@ def _safe_reframe_track(
     otherwise — and on ANY error — so the renderer falls back to the static
     crop. Reframe is an enhancement; it must never fail a cut.
     """
-    from nexoclip.settings import get_settings
+    from chalybclip.settings import get_settings
 
     settings = get_settings()
     if not getattr(settings, "reframe_tracking_enabled", False):
@@ -854,7 +854,7 @@ def _ffmpeg_reformat_9_16(
     # matching _safe_reframe_track) and defensively — a settings build
     # without the field, or the flag OFF, is byte-identical to the legacy
     # letterbox behavior. The dynamic reframe_track branch is untouched.
-    from nexoclip.settings import get_settings
+    from chalybclip.settings import get_settings
 
     reframe_static_fill = (
         bool(getattr(get_settings(), "reframe_tracking_enabled", False))

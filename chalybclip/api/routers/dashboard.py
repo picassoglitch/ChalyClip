@@ -2455,7 +2455,7 @@ async def clip_detail(
     # actually follows the speaker or falls back to a static crop — the
     # before/after intent. getattr so a Settings without the field still
     # renders.
-    from nexoclip.settings import get_settings
+    from chalybclip.settings import get_settings
 
     reframe_tracking_enabled = bool(
         getattr(get_settings(), "reframe_tracking_enabled", False)
@@ -5248,7 +5248,7 @@ async def site_settings_view(
     """Admin-only site settings form. 404 for non-admins."""
     if not getattr(request.state, "is_admin", False):
         raise HTTPException(status_code=404, detail="not found")
-    from nexoclip.settings import get_settings
+    from chalybclip.settings import get_settings
 
     values = await PlatformSettingsRepo(db).get_many(
         [_LANDING_PRICE_ES_KEY, _LANDING_PRICE_EN_KEY]

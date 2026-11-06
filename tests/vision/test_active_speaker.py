@@ -13,13 +13,13 @@ import struct
 
 import pytest
 
-from nexoclip.vision.active_speaker import (
+from chalybclip.vision.active_speaker import (
     motion_magnitude,
     mouth_roi_box,
     pick_active_speaker,
     score_candidate,
 )
-from nexoclip.vision.face_track import _rms_bins, _sample_envelope
+from chalybclip.vision.face_track import _rms_bins, _sample_envelope
 
 # ---- pick_active_speaker: contract edges ----
 

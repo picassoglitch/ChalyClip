@@ -23,7 +23,7 @@ lip motion — the frame-to-frame pixel change in the lower third of the face
 box — and, when the source has an audio track, how well that lip motion
 syncs with the audio-energy envelope. The face whose mouth moves (in time
 with the sound) wins. The pure scorer lives in
-`nexoclip.vision.active_speaker`; this module only feeds it pixels + audio.
+`chalybclip.vision.active_speaker`; this module only feeds it pixels + audio.
 
 This is a HEURISTIC ASD (frame-diff lip motion + audio-energy sync), NOT a
 learned model. The real upgrade (Light-ASD / TalkNet) is a localized swap:
@@ -43,10 +43,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from nexoclip.logging import get_logger
-from nexoclip.vision.active_speaker import mouth_roi_box, pick_active_speaker
+from chalybclip.logging import get_logger
+from chalybclip.vision.active_speaker import mouth_roi_box, pick_active_speaker
 
-_log = get_logger("nexoclip.vision.face_track")
+_log = get_logger("chalybclip.vision.face_track")
 
 # Detection runs on a downscaled copy — Haar cost scales with pixel count
 # and a face is still comfortably detectable at ~480px wide. Centers map
@@ -132,7 +132,7 @@ def sample_subject_track(
     except Exception:  # OpenCV optional in some environments
         return None
 
-    from nexoclip.vision.haar import haar_face_detector
+    from chalybclip.vision.haar import haar_face_detector
 
     detector = haar_face_detector()
     if detector is None:

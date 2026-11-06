@@ -16,7 +16,7 @@ embedding; it bets on two cheap, robust signals:
 `pick_active_speaker` is a PURE function — no OpenCV, no ffmpeg, no I/O, not
 even numpy — so the decision maths is unit-tested in isolation. The
 video/audio plumbing that produces its inputs lives in
-`nexoclip.vision.face_track`.
+`chalybclip.vision.face_track`.
 
 Upgrade path
 ------------

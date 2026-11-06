@@ -51,7 +51,7 @@ def compute_reframe_track(
     (no OpenCV, too few faces, source already ≤9:16) — the caller then
     uses the existing static crop. Never raises.
     """
-    from nexoclip.vision.face_track import sample_subject_track
+    from chalybclip.vision.face_track import sample_subject_track
 
     samples = sample_subject_track(
         video_path, start_s=start_s, end_s=end_s, target_fps=target_fps

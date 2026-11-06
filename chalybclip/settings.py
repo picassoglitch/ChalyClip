@@ -72,13 +72,13 @@ class Settings(BaseSettings):
     # letterbox. Opt-in (default OFF): it adds one dense face-detect decode
     # pass per QUALIFYING clip, and leaves every other clip byte-identical.
     reframe_tracking_enabled: bool = Field(
-        default=False, validation_alias="NEXOCLIP_REFRAME_TRACKING_ENABLED"
+        default=False, validation_alias="CHALYBCLIP_REFRAME_TRACKING_ENABLED"
     )
     # Sampling rate (fps) for the reframe face track. Higher = tighter
     # follow + more decode cost. 3 fps is a calm, TV-like pan on a
     # talking-head clip; bump to 5-6 for fast movement.
     reframe_sample_fps: float = Field(
-        default=3.0, validation_alias="NEXOCLIP_REFRAME_SAMPLE_FPS"
+        default=3.0, validation_alias="CHALYBCLIP_REFRAME_SAMPLE_FPS"
     )
 
     # Storage hygiene — delete the raw source VOD (downloaded video +

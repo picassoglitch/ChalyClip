@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import itertools
 
-from nexoclip.clip.models import ReframeKeyframe, ReframeTrack
-from nexoclip.clip.reframe import (
+from chalybclip.clip.models import ReframeKeyframe, ReframeTrack
+from chalybclip.clip.reframe import (
     _MAX_KEYFRAMES,
     build_reframe_track,
     reframe_track_to_ffmpeg_filter,
