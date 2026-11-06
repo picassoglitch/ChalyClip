@@ -113,7 +113,7 @@ def require_top_tier(request: Request) -> None:
     dashboard.py Buffer matrix). The Zernio publish surface is gated by
     require_paid_tier instead — `pro` CAN publish there, capped at one
     connected account (tiers.zernio_account_limit); all_access (VIP) is
-    unlimited. The top tier includes Chalyb's `partner` alias,
+    capped at 3. The top tier includes Chalyb's `partner` alias,
     normalized to all_access at the auth read choke point.
 
     Returns 402 Payment Required with a paywall hint.

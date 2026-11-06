@@ -876,6 +876,7 @@ async def dashboard_context(
         "connected_set": connected_set,
         "account_by_platform": _account_map(accounts),
         "account_limit": _account_limit(request),
+        "account_upgrade_hint": _upgrade_hint(_account_limit(request) or 0),
         "account_count": len(accounts),
         "connect_fetch_failed": connect_fetch_failed,
         "history": history,
@@ -1425,6 +1426,7 @@ async def zernio_accounts_panel(
             "connected_set": _connected_platforms(accounts),
             "account_by_platform": _account_map(accounts),
             "account_limit": _account_limit(request),
+            "account_upgrade_hint": _upgrade_hint(_account_limit(request) or 0),
             "account_count": len(accounts),
             "supported_platforms": _SUPPORTED_PLATFORMS,
         },
@@ -2086,6 +2088,16 @@ async def maybe_autopublish_on_approve(
         # Auto-programar scheduler). Without this, a tenant who enabled
         # auto-publish but never picked target platforms gets a silent no-op.
         targets = [t for t in want if t in connected] or sorted(connected)
+        # Same cut as Auto-programar: a VIP over the account cap still posts.
+        from chalybclip.tiers import zernio_account_limit
+
+        limit = zernio_account_limit(tenant.tier if tenant else None)
+        if limit is not None and len(targets) > limit:
+            log.info(
+                "autopublish.targets_capped",
+                tenant_id=tenant_id, limit=limit, dropped=targets[limit:],
+            )
+            targets = targets[:limit]
         if not targets:
             log.info(
                 "autopublish.no_connected_targets",
