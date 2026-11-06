@@ -41,6 +41,7 @@ from chalybclip.db import (
     ClipsRepo,
     Database,
     EventsRepo,
+    HubPublishJobsRepo,
     TenantsRepo,
     ZernioBroadcastLogRepo,
     ZernioCalendarRepo,
@@ -51,6 +52,7 @@ from chalybclip.integrations.zernio import (
     ZernioAccount,
     ZernioClient,
     ZernioError,
+    ZernioPostStatus,
     create_profile_for_tenant,
 )
 from chalybclip.publish.hub import PublishOptions, build_per_platform_payload
@@ -236,10 +238,11 @@ def _account_limit(request: Request) -> int | None:
 
 def _account_limit_message(limit: int) -> str:
     """Operator-facing copy for hitting the per-tier account cap."""
+    # User-facing (shown in the publish UI) — Spanish, like the rest of it.
     return (
-        f"Your plan allows {limit} connected social account"
-        f"{'' if limit == 1 else 's'}. Disconnect one first, or upgrade "
-        f"to All-Access for unlimited accounts."
+        f"Tu plan permite {limit} cuenta"
+        f"{'' if limit == 1 else 's'} conectada{'' if limit == 1 else 's'}. "
+        f"Desconecta una primero, o pásate a VIP para conectar las que quieras."
     )
 
 
@@ -381,9 +384,9 @@ async def _publish_clip(
         raise HTTPException(
             status_code=402,
             detail=(
-                f"Your plan publishes with {limit} connected account"
-                f"{'' if limit == 1 else 's'} — deselect the extra "
-                f"platform(s) or upgrade to All-Access."
+                f"Tu plan publica con {limit} cuenta"
+                f"{'' if limit == 1 else 's'} conectada{'' if limit == 1 else 's'} — "
+                f"quita las plataformas de más o pásate a VIP."
             ),
         )
 
@@ -566,6 +569,75 @@ async def _publish_clip(
                 tenant_id, clip_id,
             )
     return post_id
+
+
+# ---- Ownership gates for vendor-side ids ----------------------------------
+# The Zernio API key is company-wide, so any route that acts on a Zernio id
+# taken from the URL must first prove the id belongs to the caller.
+
+
+async def _post_owner(db: Database, post_id: str) -> str | None:
+    """Tenant that owns a Zernio post, from our own records (dashboard
+    publishes → zernio_publishes; hub/ChalyOBS publishes → hub_publish_jobs).
+    None when we have no record of the post."""
+    row = await ZernioPublishesRepo(db).get_by_post_id(post_id)
+    if row is not None:
+        return row.tenant_id
+    return await HubPublishJobsRepo(db).get_tenant_for_post(post_id)
+
+
+async def _owned_post(db: Database, tenant_id: str, post_id: str) -> ZernioPostStatus | None:
+    """404 unless the caller owns the post. Recorded posts are checked against
+    our records (returns None); an unrecorded one is fetched and must carry
+    the caller's Zernio profileId (returns the fetched post). A failed fetch
+    raises ZernioError, so nothing about the post is shown or acted on."""
+    owner = await _post_owner(db, post_id)
+    if owner is not None:
+        if owner != tenant_id:
+            raise HTTPException(status_code=404, detail="not found")
+        return None
+    profile_id = await _tenant_profile_id(db, tenant_id)
+    if not profile_id:
+        raise HTTPException(status_code=404, detail="not found")
+    post = await _build_client().get_post(post_id)
+    if post.profile_id is not None:
+        owned = post.profile_id == profile_id
+    else:
+        # No profileId on the post: fall back to its target accounts.
+        owned = bool(_post_account_ids(post) & set(await _tenant_account_ids(db, tenant_id)))
+    if not owned:
+        raise HTTPException(status_code=404, detail="not found")
+    return post
+
+
+def _post_account_ids(post: ZernioPostStatus) -> set[str]:
+    ids: set[str] = set()
+    for p in post.platforms if isinstance(post.platforms, list) else []:
+        acct = p.get("accountId") if isinstance(p, dict) else None
+        if isinstance(acct, dict):
+            acct = acct.get("_id") or acct.get("id")
+        if isinstance(acct, str) and acct:
+            ids.add(acct)
+    return ids
+
+
+async def _tenant_profile_id(db: Database, tenant_id: str) -> str | None:
+    tenant = await TenantsRepo(db).get(tenant_id)
+    return tenant.zernio_profile_id if tenant else None
+
+
+async def _owns_sequence(db: Database, tenant_id: str, sequence_id: str) -> bool:
+    profile_id = await _tenant_profile_id(db, tenant_id)
+    if not profile_id:
+        return False
+    try:
+        return sequence_id in _ids_of(await _build_client().list_sequences(profile_id=profile_id))
+    except ZernioError:
+        return False
+
+
+def _ids_of(rows: list[dict[str, Any]]) -> set[str]:
+    return {str(r.get("_id") or r.get("id")) for r in rows if (r.get("_id") or r.get("id"))}
 
 
 @router.get("", response_class=HTMLResponse)
@@ -2600,6 +2672,16 @@ async def zernio_growth_toggle_automation(
     db: Database = Depends(get_db),
 ) -> Response:
     """Activate/pause an automation. Body: {active: bool}."""
+    profile_id = await _tenant_profile_id(db, tenant_id)
+    try:
+        mine = (
+            _ids_of(await _build_client().list_comment_automations(profile_id=profile_id))
+            if profile_id else set()
+        )
+    except ZernioError as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=502)
+    if automation_id not in mine:
+        raise HTTPException(status_code=404, detail="not found")
     data = await _read_json(request)
     active = bool(data.get("active")) if isinstance(data, dict) else False
     try:
@@ -2710,6 +2792,8 @@ async def zernio_growth_toggle_sequence(
     _t: None = Depends(require_paid_tier),
     db: Database = Depends(get_db),
 ) -> Response:
+    if not await _owns_sequence(db, tenant_id, sequence_id):
+        raise HTTPException(status_code=404, detail="not found")
     data = await _read_json(request)
     active = bool(data.get("active")) if isinstance(data, dict) else False
     try:
@@ -2730,6 +2814,8 @@ async def zernio_growth_enroll_sequence(
 ) -> Response:
     """Enroll contacts. Body: {contact_ids:[...]} OR {tag: "..."} to
     enroll all contacts carrying that tag."""
+    if not await _owns_sequence(db, tenant_id, sequence_id):
+        raise HTTPException(status_code=404, detail="not found")
     data = await _read_json(request)
     if not isinstance(data, dict):
         return JSONResponse({"ok": False, "error": "Body must be JSON"}, status_code=400)
@@ -2738,6 +2824,15 @@ async def zernio_growth_enroll_sequence(
         [str(c) for c in contact_ids if c]
         if isinstance(contact_ids, list) else []
     )
+    if ids:
+        # Only this tenant's own contacts — never ids from another inbox.
+        own_rows = await ZernioInboxRepo(db).list_contacts(
+            await _tenant_account_ids(db, tenant_id), limit=100_000
+        )
+        own_ids = {
+            str(r["zernio_contact_id"]) for r in own_rows if r.get("zernio_contact_id")
+        }
+        ids = [c for c in ids if c in own_ids]
     tag = str(data.get("tag") or "").strip()
     if tag and not ids:
         # "enroll all with tag X" — resolve to the contacts' Zernio ids.
@@ -3237,6 +3332,19 @@ async def zernio_retry_one(
         )
         return JSONResponse(out, status_code=200 if out["ok"] else 409)
     client = _build_client()
+    owner = await _post_owner(db, post_id)
+    if owner is not None and owner != tenant_id:
+        raise HTTPException(status_code=404, detail="not found")
+    if owner is None:
+        # No local record — only retry posts that show up in THIS tenant's
+        # failed list (the same list the UI's retry buttons come from).
+        profile_id = await _tenant_profile_id(db, tenant_id)
+        try:
+            mine = _ids_of(await client.list_failed(profile_id=profile_id)) if profile_id else set()
+        except ZernioError:
+            mine = set()
+        if post_id not in mine:
+            raise HTTPException(status_code=404, detail="not found")
     try:
         result = await client.retry_post(post_id)
     except ZernioError as e:
@@ -3933,12 +4041,21 @@ async def zernio_cancel_scheduled(
     # company-wide, so without this any tenant could delete any other
     # tenant's scheduled post by id. 404 (not 403) to match the rest of
     # the dashboard's don't-advertise-existence convention. A post with
-    # no local row (scheduled directly on Zernio) stays cancellable —
-    # we have nothing to check it against.
+    # no local row must carry this tenant's Zernio profileId.
     pubs = ZernioPublishesRepo(db)
     row = await pubs.get_by_post_id(post_id)
     if row is not None and row.tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail="not found")
+    # Hub/ChalyOBS publishes (hub_publish_jobs) and unrecorded posts too.
+    try:
+        await _owned_post(db, tenant_id, post_id)
+    except ZernioError as e:
+        if e.status_code == 404:
+            raise HTTPException(status_code=404, detail="not found") from e
+        return JSONResponse(
+            {"ok": False, "error": "No pudimos verificar el post. Intenta de nuevo."},
+            status_code=502,
+        )
     client = _build_client()
     try:
         await client.delete_post(post_id)
@@ -4800,7 +4917,7 @@ async def zernio_job_detail(
     per_platform: Any = None
     fetch_error: str | None = None
     try:
-        status = await client.get_post(post_id)
+        status = await _owned_post(db, tenant_id, post_id) or await client.get_post(post_id)
         overall_status = (status.status or "UNKNOWN").upper()
         per_platform = status.platforms
     except ZernioError as e:
@@ -4812,18 +4929,17 @@ async def zernio_job_detail(
         if local is not None:
             overall_status, per_platform = local
             fetch_error = (
-                "Live status from Zernio is unavailable right now — showing "
-                "the last result we recorded for this post."
+                "Ahora mismo no podemos consultar el estado en vivo — te "
+                "mostramos el último resultado que registramos de este post."
             )
         elif e.status_code == 404:
             overall_status = _STATUS_UNAVAILABLE
             fetch_error = (
-                "This post is no longer available on Zernio. It may have been "
-                "deleted, or it was published from a different workspace — "
-                "there's nothing more to load here."
+                "Este post ya no está disponible. Puede que se haya borrado — "
+                "no hay nada más que cargar aquí."
             )
         else:
-            fetch_error = f"Couldn't load status from Zernio: {e}"
+            fetch_error = "No pudimos cargar el estado del post. Intenta de nuevo en un momento."
 
     return templates.TemplateResponse(
         request,
@@ -4854,7 +4970,7 @@ async def zernio_status(
     refreshing instead of looping on a 502 forever."""
     client = _build_client()
     try:
-        status = await client.get_post(post_id)
+        status = await _owned_post(db, tenant_id, post_id) or await client.get_post(post_id)
     except ZernioError as e:
         _log.warning(
             "zernio.status.failed tenant=%s post_id=%s status=%s err=%s",

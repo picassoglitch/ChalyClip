@@ -7,7 +7,7 @@
   <div class="nc-pc-acct-row">
     {% set at_limit = account_limit is not none and account_count >= account_limit %}
     {% if account_limit is not none %}
-    <span class="nc-pc-acct-chip" title="Cuántas cuentas puedes conectar con tu plan. Pásate a All-Access y conecta las que quieras.">
+    <span class="nc-pc-acct-chip" title="Cuántas cuentas puedes conectar con tu plan. Pásate a VIP y conecta las que quieras.">
       <i class="ti ti-lock" aria-hidden="true"></i>
       <span>{{ account_count }}/{{ account_limit }} cuenta{{ '' if account_limit == 1 else 's' }} (Pro)</span>
     </span>
@@ -33,7 +33,7 @@
       {% elif at_limit %}
       <button type="button" class="nc-pc-connect-btn" disabled
               style="opacity: 0.4; cursor: not-allowed;"
-              title="Ya llegaste al máximo de cuentas de tu plan. Desconecta una o pásate a All-Access.">
+              title="Ya llegaste al máximo de cuentas de tu plan. Desconecta una o pásate a VIP.">
         <i class="ti {{ icon }}" aria-hidden="true"></i>
         <span>Conectar {{ label }}</span>
       </button>
