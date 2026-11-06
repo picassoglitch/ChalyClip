@@ -662,11 +662,7 @@ class PersonasRepo:
             "primary_language = excluded.primary_language, "
             "target_languages_json = excluded.target_languages_json, "
             "voice_prompt = excluded.voice_prompt, "
-            "routing_tags_json = excluded.routing_tags_json "
-            # personas.id is a GLOBAL primary key: without this guard a
-            # tenant upserting a shared YAML persona id ('default',
-            # 'aldo_villanueva') overwrote ANOTHER tenant's row.
-            "WHERE personas.tenant_id = excluded.tenant_id",
+            "routing_tags_json = excluded.routing_tags_json",
             (
                 persona_id,
                 tenant_id,
