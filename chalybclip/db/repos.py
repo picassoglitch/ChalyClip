@@ -1066,6 +1066,11 @@ async def _streams_repo_mark_live_ended(
     Same tenant-derived-from-row contract as `_streams_repo_mark_live_started`.
     Optionally accepts the final duration from MediaMTX's
     runOnNotReady webhook payload so the streams row stops showing 0.
+
+    Idempotent per stream: only the first 'ended' (live_ended_at still NULL)
+    changes the row. A repeat (the relay retries live/ended) returns the row
+    as it is, so a stream already claimed for processing, done or failed is
+    never reset to 'live_ended' and clipped (and charged) a second time.
     """
     tenant_id = await _resolve_tenant_for_stream(db, stream_id=stream_id)
     if tenant_id is None:
@@ -1079,7 +1084,7 @@ async def _streams_repo_mark_live_ended(
             "    live_ended_at = ?, "
             "    status = 'live_ended', "
             "    duration_s = ? "
-            "WHERE id = ? AND tenant_id = ?",
+            "WHERE id = ? AND tenant_id = ? AND live_ended_at IS NULL",
             (now, float(duration_s), stream_id, tenant_id),
         )
     else:
@@ -1088,7 +1093,7 @@ async def _streams_repo_mark_live_ended(
             "SET is_live = 0, "
             "    live_ended_at = ?, "
             "    status = 'live_ended' "
-            "WHERE id = ? AND tenant_id = ?",
+            "WHERE id = ? AND tenant_id = ? AND live_ended_at IS NULL",
             (now, stream_id, tenant_id),
         )
     await conn.commit()

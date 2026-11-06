@@ -362,3 +362,51 @@ async def test_live_runner_ingests_then_processes(
     # Flipped to a terminal status so the dashboard stops showing
     # 'Analyzing…' (the autoclip claim left it 'processing').
     assert after.status == "done"
+
+
+async def test_repeat_ended_after_claim_runs_no_second_pipeline(
+    db: Database, tmp_path: Path, monkeypatch
+) -> None:
+    """The relay retries live/ended (ChalyOBS forwards it again): the second
+    'ended' must not reset a claimed stream to 'live_ended', so no second
+    pipeline run (and no second charge) is scheduled."""
+    from chalybclip.db.repos import (
+        _streams_repo_mark_live_ended,
+        _streams_repo_mark_live_started,
+    )
+
+    tenant = await TenantsRepo(db).create(name="Aldo")
+    await _seed_live_ended(db, tenant_id=tenant.id, stream_id="str_r", status="pending")
+    await _seed_persona(db, tenant.id, "per_r")
+    monkeypatch.setattr(
+        "chalybclip.settings.get_settings",
+        lambda: _stub_settings(tmp_path / "live.db", tmp_path / "out"),
+    )
+    calls: list[dict] = []
+
+    def collector(**kwargs: object) -> None:
+        calls.append(dict(kwargs))
+
+    await _streams_repo_mark_live_started(db, stream_id="str_r")
+    # First 'ended': flip + claim + schedule, as the webhook handler does.
+    row = await _streams_repo_mark_live_ended(db, stream_id="str_r", duration_s=60.0)
+    assert row is not None and row.status == "live_ended"
+    ended_at = row.live_ended_at
+    assert await _pipeline.maybe_autoclip_after_live_end(db, row=row, schedule=collector)
+
+    # Repeat 'ended' while processing, then again after the run is done.
+    for status_now in ("processing", "done"):
+        if status_now == "done":
+            from chalybclip.db.repos import _streams_repo_set_status
+
+            await _streams_repo_set_status(db, stream_id="str_r", status="done")
+        again = await _streams_repo_mark_live_ended(db, stream_id="str_r", duration_s=61.0)
+        assert again is not None
+        assert again.status == status_now
+        assert again.live_ended_at == ended_at
+        assert again.duration_s == 60.0
+        assert not await _pipeline.maybe_autoclip_after_live_end(
+            db, row=again, schedule=collector
+        )
+
+    assert len(calls) == 1
