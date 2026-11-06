@@ -41,10 +41,16 @@ async def _rows(db_path: str) -> tuple[dict, dict]:
     db = Database(db_path)
     repo = UsageOutboxRepo(db)
     out = {}
+    conn = await db.connect()
     for i in ("compute_j_ok", "compute_j_bad", "compute_j_cxl"):
-        r = await repo.get(i)
-        if r:
-            out[i] = r.payload
+        # One compute row per run attempt: compute_<job>_<attempt id>.
+        cur = await conn.execute(
+            "SELECT id FROM usage_outbox WHERE id LIKE ?", (f"{i}_%",)
+        )
+        ids = [r["id"] for r in await cur.fetchall()]
+        if ids:
+            assert len(ids) == 1
+            out[i] = (await repo.get(ids[0])).payload
     settles = {}
     for res in ("r_ok", "r_bad", "r_cxl"):
         r = await repo.get(f"settle_{res}")
@@ -110,3 +116,24 @@ async def test_cancellation_settles_cancelled(db_path: str) -> None:
     compute, settles = await _rows(db_path)
     assert settles["r_cxl"] == "cancelled"
     assert "compute_j_cxl" in compute
+
+
+async def test_rerunning_the_same_job_meters_each_attempts_compute(db_path: str) -> None:
+    """The same usage job can run twice (a dispatch retried after a lost
+    response, a boost start that ran and also fell back to standard). Both
+    attempts used compute; the second must not collide with the first's
+    source_id and be dropped as a duplicate."""
+    for _ in range(2):
+        async with metered_run(
+            db_path, tenant_id="ten_a", stream_id="str_1", job_id="j_ok",
+            reservation_id="r_ok", lane="standard",
+        ):
+            pass
+    db = Database(db_path)
+    conn = await db.connect()
+    cur = await conn.execute(
+        "SELECT id FROM usage_outbox WHERE id LIKE 'compute_j_ok_%'"
+    )
+    ids = {r["id"] for r in await cur.fetchall()}
+    await db.close()
+    assert len(ids) == 2

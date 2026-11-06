@@ -200,3 +200,39 @@ async def test_heartbeat_posts_settle_heartbeat(chalyb_env) -> None:
     assert _json.loads(route.calls.last.request.content) == {
         "reservation_id": "res-9", "outcome": "heartbeat",
     }
+
+
+@respx.mock
+async def test_unknown_user_is_not_reported_as_hub_down(db: Database, chalyb_env) -> None:
+    """404 "unknown user_id" is about the account, not the hub: its own
+    message, and not the "try again in a few minutes" 503."""
+    tid = await _linked_tenant(db)
+    respx.post(_ADMIT).mock(return_value=httpx.Response(404, json={"error": "unknown user_id"}))
+    with pytest.raises(AdmissionRefused) as ei:
+        await admit(db, tenant_id=tid, request=AdmitRequest(external_job_id="j"))
+    assert ei.value.reason == "unknown_user"
+    assert ei.value.status_code == 403
+    assert "unos minutos" not in ei.value.user_message
+
+
+@respx.mock
+async def test_4xx_carrying_a_refusal_reason_uses_its_message(db: Database, chalyb_env) -> None:
+    tid = await _linked_tenant(db)
+    respx.post(_ADMIT).mock(return_value=httpx.Response(
+        409, json={"allowed": False, "reason": "already_settled"}
+    ))
+    with pytest.raises(AdmissionRefused) as ei:
+        await admit(db, tenant_id=tid, request=AdmitRequest(external_job_id="j"))
+    assert ei.value.reason == "already_settled"
+    assert ei.value.status_code == 409
+
+
+@respx.mock
+async def test_unknown_engine_404_is_config_and_fails_closed(db: Database, chalyb_env) -> None:
+    tid = await _linked_tenant(db)
+    respx.post(_ADMIT).mock(return_value=httpx.Response(
+        404, json={"error": "unknown engine: chalybclip"}
+    ))
+    with pytest.raises(AdmissionRefused) as ei:
+        await admit(db, tenant_id=tid, request=AdmitRequest(external_job_id="j"))
+    assert ei.value.reason == "hub_unavailable"
