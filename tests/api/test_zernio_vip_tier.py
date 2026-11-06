@@ -55,8 +55,8 @@ async def vip(
 def test_vip_normalizes_to_all_access() -> None:
     assert normalize_tier("vip") == "all_access"
     assert normalize_tier("VIP") == "all_access"
-    # VIP is unlimited connected accounts (the top-tier cap).
-    assert zernio_account_limit("vip") is None
+    # VIP connects up to 3 accounts (the top-tier cap).
+    assert zernio_account_limit("vip") == 3
 
 
 @pytest.mark.asyncio

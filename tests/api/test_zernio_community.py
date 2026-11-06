@@ -112,6 +112,7 @@ async def test_connect_allows_discord(
     """Discord/Telegram are connectable (community channels) even though
     they're not publish targets."""
     with respx.mock() as mock:
+        mock.get(f"{_ZBASE}/accounts").mock(return_value=httpx.Response(200, json={"accounts": []}))  # VIP cap check: 0 of 3
         mock.get(f"{_ZBASE}/connect/discord").mock(
             return_value=httpx.Response(200, json={"authUrl": "https://discord/oauth"})
         )

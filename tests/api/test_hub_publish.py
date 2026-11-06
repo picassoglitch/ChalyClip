@@ -221,7 +221,7 @@ async def test_overview_shapes_dashboard_context(
     assert body["ok"] is True and body["configured"] is True
     assert body["profile"] == {"id": "prof_alice", "name": "Alice"}
     assert body["accounts"] == [{"platform": "tiktok", "account_id": "acc_tt"}]
-    assert body["account_limit"] is None  # all_access
+    assert body["account_limit"] == 3  # all_access
     assert [c["id"] for c in body["publishable"]] == [clip_id]
     assert body["publishable"][0]["title"] == "Gran jugada"
     assert body["publishable_total"] == 1
@@ -255,6 +255,7 @@ async def test_connect_redirects_to_hub_landing(
     alice: str,
 ) -> None:
     with respx.mock(assert_all_called=True) as mock:
+        mock.get(f"{_ZBASE}/accounts").mock(return_value=_accounts())  # VIP cap check: 0 of 3
         route = mock.get(f"{_ZBASE}/connect/facebook").mock(
             return_value=httpx.Response(200, json={"authUrl": "https://zernio.com/oauth/x"}),
         )
@@ -314,6 +315,7 @@ async def test_connect_bare_domain_matches_www(
     alice: str,
 ) -> None:
     with respx.mock(assert_all_called=True) as mock:
+        mock.get(f"{_ZBASE}/accounts").mock(return_value=_accounts())  # VIP cap check: 0 of 3
         mock.get(f"{_ZBASE}/connect/tiktok").mock(
             return_value=httpx.Response(200, json={"authUrl": "https://zernio.com/x"}),
         )
@@ -359,6 +361,30 @@ async def test_connect_pro_account_cap_is_needs_plan(
     err = _err(r, 402, "needs_plan")
     assert err["reason"] == "account_limit"
     assert "1" in err["message"]
+
+
+async def test_connect_vip_account_cap_is_three(
+    client: httpx.AsyncClient,
+    env: None,
+    alice: str,
+) -> None:
+    with respx.mock() as mock:
+        mock.get(f"{_ZBASE}/accounts").mock(
+            return_value=_accounts(
+                ("acc_tt", "tiktok", "prof_alice"),
+                ("acc_ig", "instagram", "prof_alice"),
+                ("acc_yt", "youtube", "prof_alice"),
+            ),
+        )
+        r = await client.post(
+            "/api/hub/v1/publish/connect",
+            headers=_hub(alice),
+            json={"platform": "facebook", "return_url": f"{_HUB}/app/clips/publicar/conectado"},
+        )
+    err = _err(r, 402, "needs_plan")
+    assert err["reason"] == "account_limit"
+    assert "3 cuentas" in err["message"]
+    assert "VIP" not in err["message"], "VIP is already the top plan"
 
 
 # ---- error shaping + redirect → JSON ----
@@ -867,3 +893,57 @@ async def test_autopilot_does_not_fire_below_top_tier(db: Database, env: None, a
             )
         assert fired is None and swept == 0
         assert not anything.called
+
+
+async def test_autopilot_vip_over_cap_posts_to_three(
+    db: Database, env: None, alice: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A VIP with 4 connected accounts and no picked targets still posts,
+    to the first 3 (the VIP cap), instead of a 402 on every approve."""
+    from chalybclip.api.routers import zernio as zr
+    from chalybclip.db import AutopublishSettingsRepo
+    from chalybclip.integrations.chalyb.service import sync_tenant_tier
+    from chalybclip.publish.compose import ComposedPost
+
+    await sync_tenant_tier(db, tenant_id=alice, tier="all_access")
+    clip_id = await _approved_clip(db, alice)
+    await AutopublishSettingsRepo(db).upsert(
+        alice,
+        enabled=True,
+        mode="on_approve",
+        targets=None,
+        post_mode="now",
+        daily_cap=0,
+        score_threshold=0.0,
+        tag_suffix="",
+        growth_min_score=0,
+        daily_clip_budget=None,
+    )
+    sent: dict[str, Any] = {}
+
+    async def _fake_build_post(*_a: Any, **_k: Any) -> ComposedPost:
+        return ComposedPost(caption="Gran jugada #viral", title="Gran jugada")
+
+    async def _fake_publish(**kw: Any) -> str:
+        sent.update(kw)
+        return "post_1"
+
+    monkeypatch.setattr("chalybclip.publish.compose.build_post", _fake_build_post)
+    monkeypatch.setattr(zr, "_publish_clip", _fake_publish)
+    with respx.mock() as mock:
+        mock.get(f"{_ZBASE}/accounts").mock(
+            return_value=_accounts(
+                ("acc_tt", "tiktok", "prof_alice"),
+                ("acc_ig", "instagram", "prof_alice"),
+                ("acc_yt", "youtube", "prof_alice"),
+                ("acc_fb", "facebook", "prof_alice"),
+            ),
+        )
+        out = await zr.maybe_autopublish_on_approve(
+            request=None,  # type: ignore[arg-type]
+            db=db,
+            tenant_id=alice,
+            clip_id=clip_id,
+        )
+    assert out == "post_1"
+    assert sent["platforms"] == ["facebook", "instagram", "tiktok"]

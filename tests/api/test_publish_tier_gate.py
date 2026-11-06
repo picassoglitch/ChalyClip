@@ -5,7 +5,7 @@ require_top_tier gates the LEGACY native publish routes (clips.py
 publish surface is gated by require_paid_tier — pro CAN publish there,
 capped at one connected account (tiers.zernio_account_limit, tested in
 tests/test_tiers.py); all_access (and its `partner` alias, normalized
-upstream) gets unlimited accounts. free gets 402 everywhere.
+upstream) gets up to 3 accounts. free gets 402 everywhere.
 
 These tests exercise the gate function directly with a faked
 request.state.tenant_tier — the gate's only input — so they pin the

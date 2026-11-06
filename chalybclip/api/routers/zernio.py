@@ -227,7 +227,7 @@ def _tiktok_settings() -> dict[str, Any]:
 def _account_limit(request: Request) -> int | None:
     """Connected-account cap for the requesting tenant's tier.
 
-    pro = 1, all_access (VIP) = None (unlimited). The tier was
+    pro = 1, all_access (VIP) = 3. The tier was
     normalized by the auth middleware; tiers.zernio_account_limit holds
     the per-tier numbers (single source of truth)."""
     from chalybclip.tiers import zernio_account_limit
@@ -236,13 +236,24 @@ def _account_limit(request: Request) -> int | None:
     return zernio_account_limit(tier)
 
 
+def _upgrade_hint(limit: int) -> str:
+    """" o pásate a VIP…" only when VIP connects more than this plan."""
+    from chalybclip.tiers import ALL_ACCESS, zernio_account_limit
+
+    top = zernio_account_limit(ALL_ACCESS)
+    if top is not None and top <= limit:
+        return ""
+    more = "las que quieras" if top is None else f"hasta {top}"
+    return f", o pásate a VIP para conectar {more}"
+
+
 def _account_limit_message(limit: int) -> str:
     """Operator-facing copy for hitting the per-tier account cap."""
     # User-facing (shown in the publish UI) — Spanish, like the rest of it.
     return (
         f"Tu plan permite {limit} cuenta"
         f"{'' if limit == 1 else 's'} conectada{'' if limit == 1 else 's'}. "
-        f"Desconecta una primero, o pásate a VIP para conectar las que quieras."
+        f"Desconecta una primero{_upgrade_hint(limit)}."
     )
 
 
@@ -386,7 +397,7 @@ async def _publish_clip(
             detail=(
                 f"Tu plan publica con {limit} cuenta"
                 f"{'' if limit == 1 else 's'} conectada{'' if limit == 1 else 's'} — "
-                f"quita las plataformas de más o pásate a VIP."
+                f"quita las plataformas de más{_upgrade_hint(limit)}."
             ),
         )
 
@@ -865,6 +876,7 @@ async def dashboard_context(
         "connected_set": connected_set,
         "account_by_platform": _account_map(accounts),
         "account_limit": _account_limit(request),
+        "account_upgrade_hint": _upgrade_hint(_account_limit(request) or 0),
         "account_count": len(accounts),
         "connect_fetch_failed": connect_fetch_failed,
         "history": history,
@@ -1030,7 +1042,7 @@ async def connect_auth_url_response(
     profile_id = await _require_profile(db, tenant_id)
     client = _build_client()
 
-    # Per-tier connected-account cap: pro = 1, all_access = unlimited.
+    # Per-tier connected-account cap: pro = 1, all_access = 3.
     # Counted against Zernio (the source of truth for connections), and
     # checked BEFORE minting the OAuth URL so the operator gets a clear
     # paywall message instead of a dead OAuth round-trip.
@@ -1414,6 +1426,7 @@ async def zernio_accounts_panel(
             "connected_set": _connected_platforms(accounts),
             "account_by_platform": _account_map(accounts),
             "account_limit": _account_limit(request),
+            "account_upgrade_hint": _upgrade_hint(_account_limit(request) or 0),
             "account_count": len(accounts),
             "supported_platforms": _SUPPORTED_PLATFORMS,
         },
@@ -2075,6 +2088,16 @@ async def maybe_autopublish_on_approve(
         # Auto-programar scheduler). Without this, a tenant who enabled
         # auto-publish but never picked target platforms gets a silent no-op.
         targets = [t for t in want if t in connected] or sorted(connected)
+        # Same cut as Auto-programar: a VIP over the account cap still posts.
+        from chalybclip.tiers import zernio_account_limit
+
+        limit = zernio_account_limit(tenant.tier if tenant else None)
+        if limit is not None and len(targets) > limit:
+            log.info(
+                "autopublish.targets_capped",
+                tenant_id=tenant_id, limit=limit, dropped=targets[limit:],
+            )
+            targets = targets[:limit]
         if not targets:
             log.info(
                 "autopublish.no_connected_targets",
