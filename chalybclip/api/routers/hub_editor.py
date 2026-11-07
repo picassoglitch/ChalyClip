@@ -250,17 +250,19 @@ def _intel_lines(ctx: dict[str, Any]) -> list[str]:
     lines.extend(dec_lines)
     face_zone = ctx.get("face_zone")
     face_in_dec = "Face" in " ".join(dec_lines)
+    # English like the rest of the AI's sentences; localize() adds the Spanish
+    # (clip/ai_text.py), so `?lang=en` no longer gets Spanish here.
     if face_zone == "top" and (dec is None or not face_in_dec):
-        lines.append("Tu cara va arriba del cuadro — el hook se bajó para no taparla")
+        lines.append("Your face is at the top of the frame — the hook moved down to keep it clear")
     elif face_zone == "lower" and (dec is None or not face_in_dec):
-        lines.append("Tu cara va abajo del cuadro — los subtítulos se subieron para no taparla")
+        lines.append("Your face is at the bottom of the frame — captions moved up to keep it clear")
     b = ctx["breakdown"]
     if b.heuristic_reason and b.heuristic_reason != "unknown":
-        lines.append("Detectamos: " + b.heuristic_reason.replace("_", " "))
+        lines.append("Detected: " + b.heuristic_reason.replace("_", " "))
     if b.reaction_confidence is not None and b.reaction_confidence >= 0.6:
-        lines.append("Hay una reacción fuerte en pantalla justo en el momento clave")
+        lines.append("A strong reaction on screen right at the key moment")
     if b.face_presence is not None and b.face_presence >= 0.55:
-        lines.append(f"Se te ve en pantalla el {int(b.face_presence * 100)}% del clip")
+        lines.append(f"You're on screen {int(b.face_presence * 100)}% of the clip")
     return lines[:2]
 
 

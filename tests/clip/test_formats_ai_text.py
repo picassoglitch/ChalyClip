@@ -128,3 +128,38 @@ def test_timeline_labels_and_viral_trail() -> None:
     assert localize("silence: 6s without speech at 0-6s") == "silencio de 6 s (del 0 al 6 s)"
     assert "base 55" in localize_viral_why("baseline 55 · face 0.70 → +8")
     assert localize("Something new the engine says") == "Something new the engine says"
+
+
+def test_intel_lines_are_english_with_the_old_spanish_through_localize() -> None:
+    # The verdict card's ✨ lines: English source, so `?lang=en` reads English;
+    # Spanish (the default) is byte-for-byte what the card said before.
+    from chalybclip.api.routers.hub_editor import _intel_lines
+
+    def lines(**kw: object) -> list[str]:
+        b = SimpleNamespace(
+            heuristic_reason=kw.get("reason"),
+            reaction_confidence=kw.get("reaction"),
+            face_presence=kw.get("face"),
+        )
+        return _intel_lines({"ai_decisions": None, "face_zone": kw.get("zone"), "breakdown": b})
+
+    top = lines(zone="top", reason="chat_spike")
+    assert top == [
+        "Your face is at the top of the frame — the hook moved down to keep it clear",
+        "Detected: chat spike",
+    ]
+    assert [localize(x, "es") for x in top] == [
+        "Tu cara va arriba del cuadro — el hook se bajó para no taparla",
+        "Detectamos: chat spike",
+    ]
+    assert [localize(x, "en") for x in top] == top
+    low = lines(zone="lower", reaction=0.8)
+    assert [localize(x, "es") for x in low] == [
+        "Tu cara va abajo del cuadro — los subtítulos se subieron para no taparla",
+        "Hay una reacción fuerte en pantalla justo en el momento clave",
+    ]
+    face = lines(face=0.734)
+    assert face == ["You're on screen 73% of the clip"]
+    assert localize(face[0], "es") == "Se te ve en pantalla el 73% del clip"
+    for line in top + low + face:
+        assert not any(w in localize(line, "en") for w in ("Tu ", "Detectamos", "Hay una", "Se te"))
