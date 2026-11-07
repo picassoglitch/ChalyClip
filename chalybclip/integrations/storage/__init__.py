@@ -101,6 +101,8 @@ class ArtifactStore(Protocol):
 
     async def delete(self, *, key: str) -> None: ...
 
+    async def delete_prefix(self, *, prefix: str) -> int: ...
+
 
 class S3ArtifactStore:
     """`ArtifactStore` over any S3-compatible bucket (Cloudflare R2, Supabase
@@ -209,6 +211,50 @@ class S3ArtifactStore:
                 Bucket=self._bucket, Key=self._full(key),
             )
 
+    async def delete_prefix(self, *, prefix: str) -> int:
+        """Delete every object under `prefix`; returns how many were deleted.
+
+        Raises on a list/delete failure (unlike `delete`) so retention keeps
+        the DB row and retries next run instead of orphaning objects. One
+        DeleteObject per key: GCS's S3 interop has no multi-object delete.
+        """
+        full = self._full(prefix).rstrip("/") + "/"
+        if full == "/":
+            raise ValueError("refusing to delete the whole bucket")
+
+        def _run() -> int:
+            # List everything first: deleting mid-pagination can shift the
+            # listing under the continuation token and skip keys.
+            keys: list[str] = []
+            token: str | None = None
+            while True:
+                kw: dict[str, Any] = {"Bucket": self._bucket, "Prefix": full}
+                if token:
+                    kw["ContinuationToken"] = token
+                resp: Any = self._client.list_objects_v2(**kw)
+                keys.extend(str(o["Key"]) for o in resp.get("Contents") or [])
+                if not resp.get("IsTruncated"):
+                    break
+                token = resp.get("NextContinuationToken")
+            for key in keys:
+                try:
+                    self._client.delete_object(Bucket=self._bucket, Key=key)
+                except Exception as e:
+                    if not _is_not_found(e):
+                        raise
+            return len(keys)
+
+        return await asyncio.to_thread(_run)
+
+
+def _is_not_found(exc: Exception) -> bool:
+    """A key that vanished between list and delete is already done (GCS
+    answers 404 where S3 answers 204)."""
+    resp = getattr(exc, "response", None) or {}
+    code = str((resp.get("Error") or {}).get("Code") or "")
+    status = (resp.get("ResponseMetadata") or {}).get("HTTPStatusCode")
+    return code in {"NoSuchKey", "404"} or status == 404
+
 
 def _s3_config() -> Any:
     """boto3 >= 1.36 adds CRC32 checksum headers to every upload by default.
@@ -293,8 +339,10 @@ from .keys import (  # noqa: E402 — re-export the key builders
     clip_key_family,
     clip_landscape_key,
     clip_media_key,
+    clip_prefix,
     clip_render_key,
     clip_thumbnail_key,
+    stream_prefixes,
     upload_source_key,
 )
 
@@ -308,7 +356,9 @@ __all__ = [
     "clip_key_family",
     "clip_landscape_key",
     "clip_media_key",
+    "clip_prefix",
     "clip_render_key",
     "clip_thumbnail_key",
+    "stream_prefixes",
     "upload_source_key",
 ]

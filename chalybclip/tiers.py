@@ -62,6 +62,32 @@ def zernio_account_limit(raw: str | None) -> int | None:
     """
     return ZERNIO_ACCOUNT_LIMITS.get(normalize_tier(raw), 0)
 
+# Days a tenant's clips, VODs and transcripts are kept, per plan. Mirrors the
+# hub's TIER_CAPS clipVodRetentionDays/historyDays (owner 2026-11-07).
+RETENTION_DAYS: Final[dict[str, int]] = {
+    FREE: 7,
+    PRO: 30,
+    ALL_ACCESS: 30,
+}
+
+# What an unrecognized tier gets: never delete a paying user's data early.
+LONGEST_RETENTION_DAYS: Final[int] = max(RETENTION_DAYS.values())
+
+# The media bucket deletes every object at this age (chalyb
+# infra/terraform var.media_retention_days). No window may exceed it, or
+# the bucket drops objects whose DB rows are still kept.
+BUCKET_RETENTION_DAYS: Final[int] = 30
+assert LONGEST_RETENTION_DAYS <= BUCKET_RETENTION_DAYS
+
+
+def retention_days(raw: str | None) -> int | None:
+    """Plan retention window for a (possibly aliased) tier label, or None
+    when the label isn't a tier we recognize — unlike normalize_tier, an
+    unknown label must NOT fall back to free's short window."""
+    canonical = resolve_tier_alias(raw)
+    return RETENTION_DAYS[canonical] if canonical is not None else None
+
+
 # Aliases Chalyb (or future billing sources) may use for a canonical
 # tier. Keyed lowercase. Extend this — NOT the comparison sites — when
 # a new label shows up. `partner` == our top tier `all_access`, and so is
@@ -109,14 +135,18 @@ def normalize_tier(raw: str | None) -> str:
 
 
 __all__ = [
-    "FREE",
-    "PRO",
     "ALL_ACCESS",
+    "BUCKET_RETENTION_DAYS",
     "CANONICAL_TIERS",
-    "TOP_TIERS",
+    "FREE",
+    "LONGEST_RETENTION_DAYS",
     "PAID_TIERS",
+    "PRO",
+    "RETENTION_DAYS",
+    "TOP_TIERS",
     "ZERNIO_ACCOUNT_LIMITS",
-    "resolve_tier_alias",
     "normalize_tier",
+    "resolve_tier_alias",
+    "retention_days",
     "zernio_account_limit",
 ]

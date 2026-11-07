@@ -110,3 +110,21 @@ steps:
           --image=${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_SERVICE}:${SHORT_SHA} \
           --region=${_REGION} --project=${_PROJECT} --quiet
     waitFor: [push]
+
+  # The daily retention job (chalyb Terraform) runs this image's
+  # `chalybclip retention sweep`; Terraform ignores image changes, so point
+  # it at each new build here.
+  - id: deploy-retention
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        if ! gcloud run jobs describe ${_SERVICE}-retention-sweep --region=${_REGION} --project=${_PROJECT} >/dev/null 2>&1; then
+          echo "no ${_SERVICE}-retention-sweep job; skipping"
+          exit 0
+        fi
+        gcloud run jobs update ${_SERVICE}-retention-sweep \
+          --image=${_REGION}-docker.pkg.dev/${_PROJECT}/${_REPO}/${_SERVICE}:${SHORT_SHA} \
+          --region=${_REGION} --project=${_PROJECT} --quiet
+    waitFor: [push]

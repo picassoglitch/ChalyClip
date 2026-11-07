@@ -172,11 +172,11 @@ def test_tenants_set_retention_persists_overrides(tmp_path: Path) -> None:
     assert "vod_days=7" in r.output
     assert "clip_days=30" in r.output
     # transcript_days untouched -> still NULL -> rendered as default(365).
-    assert "transcript_days=default(365)" in r.output
+    assert "transcript_days=plan" in r.output
 
 
 def test_tenants_set_retention_zero_clears_to_default(tmp_path: Path) -> None:
-    """vod_days=0 means 'go back to the system default', NOT '0 days'."""
+    """vod_days=0 means 'go back to the plan window', NOT '0 days'."""
     db_path = tmp_path / "x.db"
     runner = CliRunner()
     runner.invoke(app, ["db", "init", "--db-path", str(db_path)])
@@ -208,7 +208,7 @@ def test_tenants_set_retention_zero_clears_to_default(tmp_path: Path) -> None:
         ],
     )
     assert r.exit_code == 0, r.output
-    assert "vod_days=default(7)" in r.output
+    assert "vod_days=plan" in r.output
 
 
 def test_tenants_set_retention_no_args_exits_2(tmp_path: Path) -> None:
@@ -223,3 +223,32 @@ def test_tenants_set_retention_no_args_exits_2(tmp_path: Path) -> None:
     )
     assert r.exit_code == 2
     assert "nothing to update" in (r.stderr or r.output)
+
+
+def test_set_retention_rejects_more_than_bucket_age(tmp_path: Path) -> None:
+    db_path = tmp_path / "x.db"
+    r = CliRunner().invoke(
+        app, ["tenants", "set-retention", "ten_x", "--clip-days", "31", "--db-path", str(db_path)]
+    )
+    assert r.exit_code == 2
+    assert "0<=x<=30" in r.output
+
+
+def test_set_retention_accepts_bucket_age(tmp_path: Path) -> None:
+    import asyncio
+
+    db_path = tmp_path / "x.db"
+
+    async def _mk() -> str:
+        db = Database(db_path)
+        await apply_migrations(db)
+        t = await TenantsRepo(db).create(name="Aldo")
+        await db.close()
+        return t.id
+
+    tid = asyncio.run(_mk())
+    r = CliRunner().invoke(
+        app, ["tenants", "set-retention", tid, "--clip-days", "30", "--db-path", str(db_path)]
+    )
+    assert r.exit_code == 0, r.output
+    assert "clip_days=30" in r.output
