@@ -237,6 +237,50 @@ async def test_progress_ignores_failures_before_a_rerun(
     assert p["failure"] is None and p["is_running"]
 
 
+async def test_stream_cost_hands_hub_the_run_ids_not_its_own_figure(
+    client: httpx.AsyncClient, db: Database, tenants: dict[str, dict[str, str]], tmp_path: Path
+) -> None:
+    """QA 2026-11-07 (str_01M6SSAG74RRDYKC2N2WZJES70): the page showed 16,052
+    credits from llm_calls/4 + base while the balance lost 51,403. The engine
+    must not compute a charge; it hands the hub the run ids its ledger keys."""
+    from chalybclip.db import LLMCallsRepo
+    from chalybclip.db.models import LLMCallRow
+    from chalybclip.db.usage_repos import UsageJobsRepo
+
+    alice, bob = tenants["alice"]["id"], tenants["bob"]["id"]
+    await _persona(db, alice)
+    await _stream(db, alice, tmp_path, sid="str_c1", clips=[("clp_c1", "approved")])
+    with bound_tenant(alice):
+        # The transcription call the old figure counted (4,208 µ$ / 4 = 1,052).
+        await LLMCallsRepo(db).record(
+            LLMCallRow(
+                id="llm_c1", tenant_id=alice, purpose="transcribe", provider="assemblyai",
+                model="best", quality="standard", cost_usd_micros=4_208, ts=_now(),
+                stream_id="str_c1",
+            )
+        )
+    jobs = UsageJobsRepo(db)
+    for job_id, tenant, sid in (
+        ("ujob_c1", alice, "str_c1"),
+        ("ujob_c2", alice, "str_c1"),  # Córrelo again: a second run of the same video
+        ("ujob_other", alice, "str_c9"),
+        ("ujob_bob", bob, "str_c1"),
+    ):
+        await jobs.upsert(
+            job_id=job_id, tenant_id=tenant, stream_id=sid, operation="clips.pipeline",
+            job_class="job", reservation_id=f"res_{job_id}", lane="standard", boost=None,
+            upload_mb=0.0, source_minutes=10.0,
+        )
+    cost = (await client.get("/api/hub/v1/streams/str_c1", headers=hdr(alice))).json()["cost"]
+    assert cost["usage_job_ids"] == ["ujob_c1", "ujob_c2"]
+    assert "tokens_used" not in cost and "tokens_by_source" not in cost
+    assert "usd_micros" not in cost
+
+    await _stream(db, alice, tmp_path, sid="str_c0")
+    cost = (await client.get("/api/hub/v1/streams/str_c0", headers=hdr(alice))).json()["cost"]
+    assert cost["usage_job_ids"] == []  # pre-contract run: nothing to look up
+
+
 async def test_other_tenant_sees_nothing(
     client: httpx.AsyncClient, db: Database, tenants: dict[str, dict[str, str]], tmp_path: Path
 ) -> None:

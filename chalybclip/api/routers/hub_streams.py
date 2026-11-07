@@ -306,34 +306,28 @@ async def stream_progress_view(
 async def _run_cost_view(
     db: Database, request: Request, stream: Any, tenant_id: str
 ) -> dict[str, Any]:
-    """Run cost in TOKENS (never USD for creators). Mirrors the token math
-    in dashboard.stream_detail (Token T3/T5: per-provider floor 1, metered
-    providers cost→tokens at MICROS_PER_TOKEN=4, plus the base charge)."""
+    """Run cost in TOKENS (never USD for creators). What a run actually took
+    from the balance lives in the hub's ledger (usage_events.billable_tokens,
+    margin included), so this hands the hub the run ids that key it
+    (`usage_job_ids` = its external_job_ids) instead of a figure of its own."""
     from math import ceil
 
+    from chalybclip.db.usage_repos import UsageJobsRepo
     from chalybclip.llm.estimator import estimate_pipeline_run, estimate_runs_per_balance
 
-    actual = None
-    with contextlib.suppress(Exception):
-        actual = await LLMCallsRepo(db).cost_for_stream(stream.id)
+    # None (not []) when the lookup fails: the hub then says it couldn't
+    # read the charge instead of implying the run cost nothing.
+    job_ids: list[str] | None = None
+    try:
+        job_ids = await UsageJobsRepo(db).ids_for_stream(
+            tenant_id=tenant_id, stream_id=stream.id
+        )
+    except Exception as e:  # a cost hiccup must not 500 the page
+        _log.warning("hub.cost.usage_jobs_failed", stream_id=stream.id, error=str(e))
 
     micros_per_token = 4  # MUST match Chalyb getTokenBalance's MICROS_PER_TOKEN
     base_micros = int(getattr(get_settings(), "pipeline_base_charge_usd_micros", 0) or 0)
     base_tokens = ceil(base_micros / micros_per_token) if base_micros > 0 else 0
-
-    used: int | None = None
-    by_source: list[dict[str, Any]] = []
-    if actual is not None and actual.total_calls:
-        total = 0
-        for p in actual.by_provider:
-            t = p.tokens if p.tokens > 0 else ceil(p.cost_usd_micros / micros_per_token)
-            t = max(1, int(t))
-            by_source.append({"label": p.provider, "tokens": t})
-            total += t
-        if base_tokens > 0:
-            by_source.append({"label": "base", "tokens": base_tokens})
-            total += base_tokens
-        used = total
 
     estimate = estimate_pipeline_run(duration_seconds=stream.duration_s, persona_count=1)
     est_total = (
@@ -352,14 +346,17 @@ async def _run_cost_view(
         remaining_tokens=remaining, duration_seconds=stream.duration_s, persona_count=1
     )
     out: dict[str, Any] = {
-        "tokens_used": used,
-        "tokens_by_source": by_source,
+        "usage_job_ids": job_ids,
         "estimate_tokens": est_total,
         "runs_available": runs,
         "unlimited": unlimited,
     }
-    if getattr(request.state, "is_admin", False) and actual is not None:
-        out["usd_micros"] = int(actual.total_cost_usd_micros)
+    if getattr(request.state, "is_admin", False):
+        actual = None
+        with contextlib.suppress(Exception):
+            actual = await LLMCallsRepo(db).cost_for_stream(stream.id)
+        if actual is not None:
+            out["usd_micros"] = int(actual.total_cost_usd_micros)
     return out
 
 
