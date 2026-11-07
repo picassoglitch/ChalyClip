@@ -1,10 +1,11 @@
-"""End-of-clip splash — the chalybclip outro card (TikTok/CapCut-style).
+"""End-of-clip splash — the Chalyb outro card (TikTok/CapCut-style).
 
-Every exported clip ends with a short branded end card: the bundled
-`assets/outro.mp4` video concatenated after the clip. Free-tier tenants
-always get it; paid tiers can switch it off per brand kit
-(`brand_kits.show_chalybclip_outro`, default ON) — the caller resolves
-that decision and only invokes this module when the outro should land.
+The bundled `assets/outro.mp4` end card ("CHALYB" + chalyb.com) is
+concatenated after the clip. Free-tier tenants always get it; paid
+tiers only when their brand kit opts in (`brand_kits.show_chalybclip_outro`);
+a paid tenant with no kit gets none. The caller resolves that decision
+(branding.outro_enabled_for_clip) and only invokes this module when the
+outro should land.
 
 Design:
 
@@ -185,7 +186,7 @@ def build_outro_command(
 
 
 def append_outro(video_path: Path) -> bool:
-    """Append the bundled chalybclip end card to `video_path` in place.
+    """Append the bundled Chalyb end card to `video_path` in place.
 
     Probes the clip + the asset, concatenates, and atomically replaces
     `video_path` with the combined result. Returns True on success,

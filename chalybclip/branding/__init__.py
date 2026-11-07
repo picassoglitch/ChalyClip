@@ -61,6 +61,7 @@ from .service import (
     outro_enabled_for_clip,
     resolve_brand_kit_for_candidate,
     resolve_brand_kit_for_speaker,
+    watermark_enabled_for_clip,
 )
 
 __all__ = [
@@ -97,5 +98,6 @@ __all__ = [
     "resolve_brand_kit_for_speaker",
     "sanitize_svg",
     "style_choices",
+    "watermark_enabled_for_clip",
     "zones_for_platform",
 ]

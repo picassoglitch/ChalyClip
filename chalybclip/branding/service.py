@@ -25,34 +25,50 @@ from chalybclip.db.models import BrandKitRow, CustomTriggerPhrases
 _log = structlog.get_logger(__name__)
 
 
+async def _tenant_is_free(db: Database, tenant_id: str) -> bool:
+    from chalybclip.tiers import FREE, normalize_tier
+
+    tenant = await TenantsRepo(db).get(tenant_id)
+    return normalize_tier(tenant.tier if tenant else None) == FREE
+
+
+async def watermark_enabled_for_clip(db: Database, *, tenant_id: str) -> bool:
+    """Whether the corner "CHALYB" mark is burned into this clip.
+
+    Free tier only — paid plans carry no watermark (owner, 2026-11-06).
+    A tier lookup failure keeps the mark so free exports never lose it.
+    """
+    try:
+        return await _tenant_is_free(db, tenant_id)
+    except Exception:  # noqa: BLE001 — best-effort; free-safe default
+        return True
+
+
 async def outro_enabled_for_clip(
     db: Database, *, tenant_id: str, stream_id: str
 ) -> bool:
-    """Whether the chalybclip end-card outro should be appended to this
-    clip's export.
+    """Whether the Chalyb end-card outro is appended to this clip's export.
 
-    Free tier ALWAYS gets it (returns True regardless of any stored
-    flag). Paid tiers respect the resolved brand kit's
-    `show_chalybclip_outro` (default True). Best-effort — any failure
-    defaults to True so a lookup hiccup never silently strips the
-    free-tier credit.
+    Free tier ALWAYS gets it. Paid tiers get it only when their resolved
+    brand kit opts in (`show_chalybclip_outro`); no kit means no outro.
+    A tier lookup failure keeps it (free-safe); a paid kit lookup failure
+    drops it, so a hiccup never brands a paid export.
     """
     from chalybclip.tenancy import bound_tenant
 
     try:
-        tenant = await TenantsRepo(db).get(tenant_id)
-        tier = (tenant.tier if tenant else "free") or "free"
-        if tier == "free":
+        if await _tenant_is_free(db, tenant_id):
             return True
+    except Exception:  # noqa: BLE001 — best-effort; free-safe default
+        return True
+    try:
         with bound_tenant(tenant_id):
             kit = await resolve_brand_kit_for_candidate(
                 db, stream_id=stream_id, speaker_label=None
             )
-        if kit is None:
-            return True
-        return bool(getattr(kit, "show_chalybclip_outro", True))
-    except Exception:  # noqa: BLE001 — best-effort; default to on
-        return True
+    except Exception:  # noqa: BLE001 — paid: no branding on a miss
+        return False
+    return kit is not None and bool(kit.show_chalybclip_outro)
 
 
 async def resolve_brand_kit_for_speaker(

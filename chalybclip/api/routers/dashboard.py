@@ -3491,7 +3491,7 @@ async def _burn_overlays_for_clip(
     import structlog
 
     from chalybclip.clip import burn_overlays
-    from chalybclip.db import TenantsRepo, TranscriptsRepo
+    from chalybclip.db import TranscriptsRepo
 
     log = structlog.get_logger("chalybclip.api.dashboard")
 
@@ -3512,22 +3512,9 @@ async def _burn_overlays_for_clip(
         except (TypeError, _json.JSONDecodeError):
             segments = []
 
-    # Slice O.1 — resolve whether to burn the chalybclip.com watermark.
-    # Free tier always; pro+ respects the brand_kit toggle. Best-effort
-    # — we never block a burn on missing tier/kit data.
-    render_wm = True
-    try:
-        tenant = await TenantsRepo(db).get(clip.tenant_id)
-        tier = (tenant.tier if tenant else "free") or "free"
-        if tier != "free":
-            from chalybclip.branding import resolve_brand_kit_for_candidate
-            kit = await resolve_brand_kit_for_candidate(
-                db, stream_id=clip.stream_id, speaker_label=None
-            )
-            if kit is not None and not getattr(kit, "show_chalybclip_credit", True):
-                render_wm = False
-    except Exception:  # noqa: BLE001 — best-effort
-        render_wm = True
+    from chalybclip.branding import watermark_enabled_for_clip
+
+    render_wm = await watermark_enabled_for_clip(db, tenant_id=clip.tenant_id)
 
     try:
         # ffmpeg is sync + CPU-bound; offload to a thread so the
@@ -3551,10 +3538,10 @@ async def _burn_overlays_for_clip(
         reason = str(e)[:80].replace("\n", " ")
         return f"failed:{reason}"
 
-    # Append the chalybclip end card to the burned fallback artifact so
+    # Append the Chalyb end card to the burned fallback artifact so
     # the legacy-burn path matches the recorder path (which appends its
-    # own outro before publishing). Free tier always; paid tiers respect
-    # the brand-kit toggle. Best-effort — append_outro never raises and
+    # own outro before publishing). Free tier always; paid tiers only
+    # when their brand kit opts in. Best-effort — append_outro never raises and
     # leaves clip_final.mp4 untouched on failure.
     if burned:
         from chalybclip.branding import outro_enabled_for_clip
@@ -4375,7 +4362,7 @@ async def _resolve_overlay_context(db: Database, clip: object) -> dict:
       show_live_pill, brand_kit
     """
     from chalybclip.branding import resolve_brand_kit_for_candidate
-    from chalybclip.db import CandidatesRepo, TenantsRepo
+    from chalybclip.db import CandidatesRepo
 
     ov = clip.overlay_config or {}
     _captions = ov.get("captions") if isinstance(ov.get("captions"), dict) else {}
@@ -4457,18 +4444,10 @@ async def _resolve_overlay_context(db: Database, clip: object) -> dict:
 
     show_live_pill = bool(_banner.get("live_badge", False))
 
-    # ---- render_watermark (tier-gated, same in both before) ----
-    render_watermark = True
-    try:
-        tenant = await TenantsRepo(db).get(clip.tenant_id)
-        tier = (tenant.tier if tenant else "free") or "free"
-        if tier != "free":
-            if brand_kit is not None and not getattr(
-                brand_kit, "show_chalybclip_credit", True,
-            ):
-                render_watermark = False
-    except Exception:  # noqa: BLE001
-        render_watermark = True
+    # ---- render_watermark (free tier only) ----
+    from chalybclip.branding import watermark_enabled_for_clip
+
+    render_watermark = await watermark_enabled_for_clip(db, tenant_id=clip.tenant_id)
 
     return {
         "ov": ov,
