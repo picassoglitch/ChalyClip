@@ -64,6 +64,34 @@ FFMPEG_PRESET = "medium"
 FFMPEG_THREADS = os.environ.get("CHALYBCLIP_FFMPEG_THREADS", "2")
 DEFAULT_FPS = 30
 
+# (min pixels, crf, maxrate) above 1080p: an upscaled 1080 source at CRF 14 only
+# spends bits on scaler texture, so cap near the platforms' 2K/4K upload rates.
+_HI_RES_ENCODE: tuple[tuple[int, str, str], ...] = (
+    (2160 * 3840, "18", "45M"),
+    (1440 * 2560, "16", "24M"),
+)
+
+
+def _encode_args(width: int | None, height: int | None) -> list[str]:
+    """libx264 rate control for the export's pixel count (1080 unchanged)."""
+    pixels = (width or 0) * (height or 0)
+    for min_pixels, crf, maxrate in _HI_RES_ENCODE:
+        if pixels >= min_pixels:
+            bufsize = f"{int(maxrate[:-1]) * 2}M"
+            return ["-crf", crf, "-maxrate", maxrate, "-bufsize", bufsize]
+    return ["-crf", FFMPEG_CRF]
+
+
+def _base_video_chain(width: int | None, height: int | None) -> str:
+    """Source → exactly the export size. The cut is 1080x1920, so 2K/4K are a
+    real lanczos upscale (they used to crop the overlay to its top-left)."""
+    if not width or not height:
+        return "[0:v]null[base]"
+    return (
+        f"[0:v]scale={width}:{height}:force_original_aspect_ratio=decrease"
+        f":flags=lanczos,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1[base]"
+    )
+
 
 class HybridRecordingError(RuntimeError):
     """Raised on any unrecoverable failure inside the hybrid pipeline.
@@ -222,6 +250,8 @@ async def record_clip_hybrid(
             duration_s=duration_s,
             ass_file_path=ass_file_path,
             append_outro_enabled=append_outro_enabled,
+            width=width,
+            height=height,
             progress_callback=(
                 _composite_progress if progress_callback is not None else None
             ),
@@ -348,12 +378,15 @@ def _ffmpeg_composite_alpha_over_source(
     ass_file_path: Path | None = None,
     append_outro_enabled: bool = True,
     progress_callback: Any = None,
+    width: int | None = None,
+    height: int | None = None,
 ) -> None:
     """Composite the alpha PNG sequence over the source video and mux
     the original audio. One ffmpeg pass; one file out.
 
     Filter graph:
-      [0:v]        — source video (already 1080×1920 from the cut step)
+      [0:v]        — source video (1080x1920 from the cut step), scaled
+                     to exactly `width`x`height` (lanczos) when given
       [1:v]        — alpha PNG sequence at the export framerate
       overlay=0:0  — alpha-blend the PNGs on top of the source frames
       -map [v]     — composited video stream
@@ -412,11 +445,15 @@ def _ffmpeg_composite_alpha_over_source(
 
         ass_path_escaped = escape_ass_path_for_filter(ass_file_path)
         filter_graph = (
-            f"[0:v][1:v]overlay=0:0:format=auto[ovl];"
+            f"{_base_video_chain(width, height)};"
+            f"[base][1:v]overlay=0:0:format=auto[ovl];"
             f"[ovl]ass='{ass_path_escaped}'[v]"
         )
     else:
-        filter_graph = "[0:v][1:v]overlay=0:0:format=auto[v]"
+        filter_graph = (
+            f"{_base_video_chain(width, height)};"
+            "[base][1:v]overlay=0:0:format=auto[v]"
+        )
     # Feed only the unique overlay PNGs: decoding the same 4K PNG once per
     # frame was ~60% of a 20 s 4K composite (QA 2026-11-06, export timeout).
     concat_list = _write_overlay_concat(frames_dir, fps)
@@ -444,7 +481,7 @@ def _ffmpeg_composite_alpha_over_source(
         "-map", "0:a?",
         "-c:v", "libx264",
         "-preset", FFMPEG_PRESET,
-        "-crf", FFMPEG_CRF,
+        *_encode_args(width, height),
         # Cap encoder threads (see FFMPEG_THREADS) to avoid EAGAIN under
         # concurrent load. Spliced via *[] so 0/unset means "ffmpeg auto".
         *(["-threads", FFMPEG_THREADS] if FFMPEG_THREADS not in ("0", "") else []),

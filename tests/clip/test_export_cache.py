@@ -39,3 +39,12 @@ def test_missing_overlay_is_stable() -> None:
     assert export_fingerprint(_clip(overlay_config=None), quality="1080") == export_fingerprint(
         _clip(overlay_config={}), quality="1080"
     )
+
+
+def test_render_version_bump_invalidates_old_exports(monkeypatch) -> None:
+    """2026-11-07 real 2K/4K: exports cropped by the old renderer must miss."""
+    from chalybclip.clip import export_cache
+
+    new = export_fingerprint(_clip(), quality="4k")
+    monkeypatch.setattr(export_cache, "EXPORT_RENDER_VERSION", "1")
+    assert export_fingerprint(_clip(), quality="4k") != new
