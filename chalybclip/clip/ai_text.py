@@ -56,6 +56,16 @@ _EXACT: dict[str, str] = {
     "Clip too short for two hooks": "El clip es muy corto para dos hooks",
     "Single hook reads cleaner here": "Aquí se lee mejor un solo hook",
     "Face high in frame → captions below it": "Tu cara va arriba → subtítulos debajo",
+    # api/routers/hub_editor.py _intel_lines
+    "Your face is at the top of the frame — the hook moved down to keep it clear": (
+        "Tu cara va arriba del cuadro — el hook se bajó para no taparla"
+    ),
+    "Your face is at the bottom of the frame — captions moved up to keep it clear": (
+        "Tu cara va abajo del cuadro — los subtítulos se subieron para no taparla"
+    ),
+    "A strong reaction on screen right at the key moment": (
+        "Hay una reacción fuerte en pantalla justo en el momento clave"
+    ),
     "Face low in frame → captions above it": "Tu cara va abajo → subtítulos encima",
     "Gameplay HUD likely in bottom band → captions up high": (
         "El HUD del juego suele ir abajo → subtítulos arriba"
@@ -135,6 +145,12 @@ _HEURISTICS: dict[str, str] = {
 
 _P = Callable[[re.Match[str]], str]
 _PATTERNS: list[tuple[re.Pattern[str], _P]] = [
+    # api/routers/hub_editor.py _intel_lines
+    (
+        re.compile(r"^You're on screen (\d+)% of the clip$"),
+        lambda m: f"Se te ve en pantalla el {m[1]}% del clip",
+    ),
+    (re.compile(r"^Detected: (.+)$"), lambda m: f"Detectamos: {m[1]}"),
     # ai_decisions.py
     (
         re.compile(r"^Face on screen (\d+)% of the clip — face leads$"),

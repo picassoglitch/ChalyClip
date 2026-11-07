@@ -54,6 +54,12 @@ ZERNIO_ACCOUNT_LIMITS: Final[dict[str, int | None]] = {
 }
 
 
+# Owner 2026-11-07: Free = 1 video a month up to 5 min. Mirrors chalyb
+# TIER_CAPS.FREE (maxSourceMinutes, clipVideosPerMonth).
+FREE_MAX_SOURCE_MINUTES: Final = 5.0
+FREE_VIDEOS_PER_MONTH: Final = 1
+
+
 def zernio_account_limit(raw: str | None) -> int | None:
     """Connected-account cap for a (possibly raw/aliased) tier label.
 
@@ -139,6 +145,8 @@ __all__ = [
     "BUCKET_RETENTION_DAYS",
     "CANONICAL_TIERS",
     "FREE",
+    "FREE_MAX_SOURCE_MINUTES",
+    "FREE_VIDEOS_PER_MONTH",
     "LONGEST_RETENTION_DAYS",
     "PAID_TIERS",
     "PRO",

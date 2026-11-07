@@ -315,6 +315,46 @@ async def tenant_storage_bytes(db: Database, tenant_id: str) -> int:
     return int(row["n"] or 0) if row is not None else 0
 
 
+FREE_FAILED_RETRIES = 3
+
+
+async def count_videos_since(
+    db: Database,
+    *,
+    tenant_id: str,
+    operation: str,
+    since_iso: str,
+    stale_before_iso: str,
+    exclude_job_id: str | None = None,
+) -> int:
+    """Pipeline runs a tenant used since `since_iso`: succeeded ones, the
+    ones in flight (so two at once can't both pass), and failed ones that
+    still left clips. A failed run with no clips frees the slot (owner
+    2026-11-07), up to FREE_FAILED_RETRIES a month; past that they count.
+    Cancelled and refused runs never count. An upload admitted but never
+    completed (no stream row) stops counting once older than the hold's TTL
+    (`stale_before_iso`), as the hub expires its reservation."""
+    conn = await db.connect()
+    cur = await conn.execute(
+        "SELECT j.status AS status, EXISTS (SELECT 1 FROM clips c "
+        "WHERE c.stream_id = j.stream_id AND c.tenant_id = j.tenant_id) AS has_clips "
+        "FROM usage_jobs j WHERE j.tenant_id = ? "
+        "AND j.operation = ? AND j.job_class = 'job' AND j.created_at >= ? "
+        "AND j.id <> ? AND j.status NOT IN ('cancelled', 'refused') "
+        "AND NOT (j.status = 'admitted' AND j.updated_at < ? AND NOT EXISTS "
+        "(SELECT 1 FROM streams s WHERE s.id = j.stream_id AND s.tenant_id = j.tenant_id))",
+        (tenant_id, operation, since_iso, exclude_job_id or "", stale_before_iso),
+    )
+    used = 0
+    clipless_failures = 0
+    for row in await cur.fetchall():
+        if row["status"] == "failed" and not row["has_clips"]:
+            clipless_failures += 1
+        else:
+            used += 1
+    return used + max(0, clipless_failures - FREE_FAILED_RETRIES)
+
+
 async def set_stream_storage_bytes(
     db: Database, *, tenant_id: str, stream_id: str, storage_bytes: int
 ) -> None:
