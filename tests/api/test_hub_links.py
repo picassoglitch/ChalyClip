@@ -138,7 +138,7 @@ async def test_signed_out_dashboard_bounces_to_english_login(client: httpx.Async
     assert r.status_code == 303
     assert r.headers["location"].endswith("/en/login")
     r = await client.get("/dashboard/streams", follow_redirects=False)
-    assert "/en/" not in r.headers["location"]
+    assert r.headers["location"] == "https://chalyb.com/login"
 
 
 async def test_logout_goes_to_english_login(client: httpx.AsyncClient) -> None:
@@ -181,3 +181,37 @@ async def test_live_page_links_to_en_vivo_in_english(
     assert en.status_code == 200 and es.status_code == 200
     assert "https://www.chalyb.com/auth/launch/chalybobs?lang=en" in en.text
     assert 'href="https://www.chalyb.com/auth/launch/chalybobs"' in es.text
+
+
+@pytest.mark.parametrize(
+    "lang,href", [("en", "https://chalyb.com/en/login"), (None, "https://chalyb.com/login")]
+)
+async def test_sso_failure_page_login_link(
+    client: httpx.AsyncClient,
+    sso_env: str,
+    monkeypatch: pytest.MonkeyPatch,
+    lang: str | None,
+    href: str,
+) -> None:
+    # Earlier suites leave structlog bound to a closed stdout; the log line is not under test.
+    import structlog
+
+    quiet = SimpleNamespace(warning=lambda *a, **k: None)
+    monkeypatch.setattr(structlog, "get_logger", lambda *a, **k: quiet)
+    q = f"&lang={lang}" if lang else ""
+    r = await client.get(f"/auth/sso?token=bad.token{q}", follow_redirects=False)
+    assert r.status_code == 401
+    assert f'href="{href}"' in r.text
+
+
+@pytest.mark.parametrize(
+    "lang,want", [("en", "https://chalyb.com/en/app/planes"), (None, "https://chalyb.com/app/planes")]
+)
+async def test_autopilot_upgrade_link_language(
+    client: httpx.AsyncClient, tenants: dict[str, dict[str, str]], lang: str | None, want: str
+) -> None:
+    q = f"?lang={lang}" if lang else ""
+    h = {"Authorization": f"Bearer {tenants['alice']['token']}"}
+    r = await client.post(f"/dashboard/publish/zernio/autopublish/save{q}", headers=h, json={"enabled": True})
+    assert r.status_code == 402, r.text
+    assert r.json()["detail"]["upgrade_url"] == want

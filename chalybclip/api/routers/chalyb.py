@@ -544,16 +544,14 @@ async def sso_finalize(
         samesite="lax",
         path="/",
     )
-    # Hub PR #174 sends `lang` only for English; no lang means a Spanish hub, so
-    # drop a stale choice instead of sending a Spanish user to /en/….
-    from chalybclip.api.auth import _remember_locale
+    # Hub PR #174 sends `lang` only for English (the auth middleware stores it); no
+    # lang means a Spanish hub, so drop a stale choice instead of sending them to /en/….
     from chalybclip.api.i18n import LOCALE_COOKIE, LOCALE_QUERY_PARAM, SUPPORTED_LOCALES
 
     requested = (request.query_params.get(LOCALE_QUERY_PARAM) or "").strip().lower()
     if requested.split("-", 1)[0] not in SUPPORTED_LOCALES:
         response.delete_cookie(LOCALE_COOKIE, path="/")
-        return response
-    return _remember_locale(request, response)
+    return response
 
 
 # ── GET /api/admin/sso-diag ──────────────────────────────────────────────
