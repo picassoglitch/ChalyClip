@@ -358,3 +358,201 @@ def test_composite_failure_scrubs_partial(
 
     assert not partial.exists(), "partial should be unlinked on failure"
     assert not out.exists(), "final cache path must never appear on failure"
+
+
+# ---- QA 2026-11-06: unique-overlay concat + composite progress ----
+
+
+def _write_runs(frames: Path, runs: list[tuple[bytes, int]], *, hardlink: bool = True) -> None:
+    import os
+
+    i = 0
+    for payload, count in runs:
+        first: Path | None = None
+        for _ in range(count):
+            p = frames / f"overlay_{i:08d}.png"
+            if first is None or not hardlink:
+                p.write_bytes(payload)
+                first = first or p
+            else:
+                os.link(first, p)
+            i += 1
+
+
+def _concat_entries(text: str) -> list[tuple[str, str | None]]:
+    entries: list[tuple[str, str | None]] = []
+    for line in text.splitlines():
+        if line.startswith("file "):
+            entries.append((line.split("'")[1], None))
+        elif line.startswith("duration "):
+            entries[-1] = (entries[-1][0], line.split()[1])
+    return entries
+
+
+def test_overlay_concat_collapses_runs(tmp_path: Path) -> None:
+    from chalybclip.clip.hybrid_recorder import _write_overlay_concat
+
+    frames = tmp_path / "frames"
+    frames.mkdir()
+    _write_runs(frames, [(b"A", 37), (b"B", 1), (b"C", 200), (b"A", 15)])
+    listing = _write_overlay_concat(frames, 30)
+    assert listing is not None
+    entries = _concat_entries(listing.read_text())
+    assert [Path(f).name for f, _ in entries] == [
+        "overlay_00000000.png", "overlay_00000037.png",
+        "overlay_00000038.png", "overlay_00000238.png",
+    ]
+    # Durations are differences of floored µs boundaries (0, 1233333, 1266666, ...).
+    assert [d for _, d in entries] == ["1.233333", "0.033333", "6.666667", "0.500000"]
+    # Each PNG is read at the export rate, not image2's default 25 fps.
+    assert listing.read_text().count("option framerate 30\n") == 4
+
+
+def test_overlay_concat_groups_copied_frames(tmp_path: Path) -> None:
+    """The copy2 fallback (no hardlinks) still collapses identical bytes."""
+    from chalybclip.clip.hybrid_recorder import _write_overlay_concat
+
+    frames = tmp_path / "frames"
+    frames.mkdir()
+    _write_runs(frames, [(b"A", 5), (b"B", 5)], hardlink=False)
+    listing = _write_overlay_concat(frames, 30)
+    assert listing is not None
+    assert len(_concat_entries(listing.read_text())) == 2
+
+
+def test_overlay_concat_none_without_frames(tmp_path: Path) -> None:
+    from chalybclip.clip.hybrid_recorder import _write_overlay_concat
+
+    assert _write_overlay_concat(tmp_path, 30) is None
+
+
+def test_composite_uses_concat_and_progress_when_frames_exist(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(hybrid_recorder.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+    captured: dict = {}
+
+    class _Proc:
+        returncode = 0
+        stderr = b""
+
+    def fake_run(cmd: list[str], *args, **kwargs):
+        captured["cmd"] = cmd
+        out = Path(cmd[-1])
+        if tmp_path in out.parents:
+            out.write_bytes(b"\x00fake mp4")
+        return _Proc()
+
+    monkeypatch.setattr(hybrid_recorder.subprocess, "run", fake_run)
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"\x00src")
+    frames = tmp_path / "frames"
+    frames.mkdir()
+    _write_runs(frames, [(b"A", 30)])
+
+    _ffmpeg_composite_alpha_over_source(
+        source_video=source, frames_dir=frames, output_path=tmp_path / "out.mp4",
+        fps=30, duration_s=1.0, append_outro_enabled=False,
+        progress_callback=lambda pct: None,
+    )
+    cmd = captured["cmd"]
+    i_indices = [i for i, x in enumerate(cmd) if x == "-i"]
+    assert cmd[i_indices[1] - 4:i_indices[1]] == ["-f", "concat", "-safe", "0"]
+    assert cmd[i_indices[1] + 1].endswith("overlay_list.ffconcat")
+    assert "-framerate" not in cmd
+    p_idx = cmd.index("-progress")
+    assert cmd[p_idx + 1].endswith("composite.progress")
+    assert cmd[-1].endswith(".partial.mp4")
+
+
+def test_composite_progress_pct_maps_to_50_99() -> None:
+    from chalybclip.clip.hybrid_recorder import composite_progress_pct
+
+    assert composite_progress_pct(None, 20.0) is None
+    assert composite_progress_pct(-1.0, 20.0) is None
+    assert composite_progress_pct(0.0, 20.0) == 50
+    assert composite_progress_pct(10.0, 20.0) == 74
+    assert composite_progress_pct(20.0, 20.0) == 99
+    assert composite_progress_pct(25.0, 20.0) == 99
+    assert composite_progress_pct(5.0, 0.0) is None
+
+
+def test_progress_watcher_reads_latest_out_time(tmp_path: Path) -> None:
+    from chalybclip.clip.hybrid_recorder import _CompositeProgressWatcher
+
+    seen: list[int] = []
+    pf = tmp_path / "composite.progress"
+    w = _CompositeProgressWatcher(pf, 20.0, seen.append)
+    w.poll()  # file not there yet → no callback
+    pf.write_text("frame=10\nout_time_us=5000000\nprogress=continue\n")
+    w.poll()
+    pf.write_text(pf.read_text() + "out_time_us=N/A\nout_time_us=10000000\n")
+    w.poll()
+    w.poll()  # unchanged → not re-emitted
+    assert seen == [62, 74]
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="needs ffmpeg")
+async def test_real_composite_matches_per_frame_sequence_and_reports_progress(
+    tmp_path: Path,
+) -> None:
+    """Real ffmpeg: the concat path yields the same frames as the old
+    per-frame PNG sequence, and progress climbs inside 50-99."""
+    ff = shutil.which("ffmpeg")
+    assert ff
+    src = tmp_path / "src.mp4"
+    subprocess.run(
+        [ff, "-y", "-loglevel", "error",
+         "-f", "lavfi", "-i", "testsrc2=size=108x192:rate=30",
+         "-f", "lavfi", "-i", "sine=f=440:sample_rate=48000",
+         "-t", "3", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", str(src)],
+        check=True,
+    )
+    pngs = []
+    for color in ("red", "blue"):
+        png = tmp_path / f"{color}.png"
+        subprocess.run(
+            [ff, "-y", "-loglevel", "error", "-f", "lavfi", "-i",
+             # pad gives real alpha (drawbox on rgba leaves alpha at 0 = invisible).
+             f"color=c={color}@0.8:s=60x30,format=rgba,pad=108:192:10:20:color=black@0",
+             "-frames:v", "1", str(png)],
+            check=True,
+        )
+        pngs.append(png.read_bytes())
+    frames = tmp_path / "frames"
+    frames.mkdir()
+    # Single-frame runs at 30 fps: the case that drifted on image2's 1/25 time base.
+    _write_runs(frames, [
+        (pngs[0], 1), (pngs[1], 1), (pngs[0], 2), (pngs[1], 1),
+        (pngs[0], 3), (pngs[1], 40), (pngs[0], 42),
+    ])
+
+    def framemd5(overlay_args: list[str]) -> list[str]:
+        out = subprocess.run(
+            [ff, "-loglevel", "error", "-i", str(src), *overlay_args,
+             "-filter_complex", "[0:v][1:v]overlay=0:0:format=auto[v]",
+             "-map", "[v]", "-f", "framemd5", "-"],
+            check=True, capture_output=True,
+        ).stdout.decode()
+        return [ln.split(",")[-1].strip() for ln in out.splitlines() if not ln.startswith("#")]
+
+    from chalybclip.clip.hybrid_recorder import _write_overlay_concat
+
+    old = framemd5(["-framerate", "30", "-i", str(frames / "overlay_%08d.png")])
+    listing = _write_overlay_concat(frames, 30)
+    assert listing is not None
+    new = framemd5(["-f", "concat", "-safe", "0", "-i", str(listing)])
+    assert len(old) == 90
+    assert len(set(old)) > 1  # the overlay is visible, so timing differences would show
+    assert new == old
+
+    seen: list[int] = []
+    out = tmp_path / "clip_render_4k.mp4"
+    await asyncio.to_thread(
+        _ffmpeg_composite_alpha_over_source,
+        source_video=src, frames_dir=frames, output_path=out, fps=30,
+        duration_s=3.0, append_outro_enabled=False, progress_callback=seen.append,
+    )
+    assert out.exists() and out.stat().st_size > 0
+    assert all(50 <= p <= 99 for p in seen)
+    assert seen == sorted(seen)

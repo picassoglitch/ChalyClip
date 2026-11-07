@@ -3852,6 +3852,26 @@ _EXPORT_RESOLUTIONS: dict[str, tuple[int, int, float]] = {
 # clip and hits this, the next click on Retry triggers a fresh
 # background task and continues.
 _ZOMBIE_RENDERING_TIMEOUT_S: int = 15 * 60
+# QA 2026-11-06 — a flat 15 min failed long/4K exports still in flight;
+# the budget grows with clip length x the resolution's cost multiplier.
+_RENDER_BUDGET_S_PER_CLIP_S: float = 20.0
+_ZOMBIE_RENDERING_TIMEOUT_MAX_S: int = 60 * 60
+
+
+def _render_zombie_timeout_s(duration_s: float | None, quality: str) -> int:
+    """Seconds a render may stay 'rendering' before it's treated as dead."""
+    key = (quality or "1080").strip().lower()
+    mult = _EXPORT_RESOLUTIONS.get(key, _EXPORT_RESOLUTIONS["1080"])[2]
+    budget = float(duration_s or 0.0) * _RENDER_BUDGET_S_PER_CLIP_S * mult
+    return int(min(_ZOMBIE_RENDERING_TIMEOUT_MAX_S, max(_ZOMBIE_RENDERING_TIMEOUT_S, budget)))
+
+
+def _render_timeout_error(age_s: float, limit_s: int) -> str:
+    return (
+        f"render timed out: no result after {int(age_s) // 60} min "
+        f"(limit {limit_s // 60} min for this clip). The server may have "
+        "restarted mid-render (e.g. a deploy)"
+    )
 _TIER_RESOLUTIONS: dict[str, set[str]] = {
     "free": {"1080"},
     "pro": {"1080"},
@@ -3980,7 +4000,8 @@ async def clip_render_status(
             if started.tzinfo is None:
                 started = started.replace(tzinfo=UTC)
             age_s = (_dt.now(UTC) - started).total_seconds()
-            if age_s > _ZOMBIE_RENDERING_TIMEOUT_S:
+            limit_s = _render_zombie_timeout_s(clip.duration_s, quality)
+            if age_s > limit_s:
                 # Mark failed once so the retry path works without a
                 # second click. Idempotent — if the background task
                 # is somehow still alive and races us, it'll either
@@ -3989,11 +4010,7 @@ async def clip_render_status(
                 try:
                     await ClipsRepo(db).mark_render_failed(
                         clip_id,
-                        error=(
-                            f"render timed out after {int(age_s)}s "
-                            "without completing (background task "
-                            "likely crashed)"
-                        ),
+                        error=_render_timeout_error(age_s, limit_s),
                     )
                 except Exception:  # noqa: BLE001 — best-effort
                     pass
@@ -4002,9 +4019,8 @@ async def clip_render_status(
                         "state": "failed",
                         "progress_pct": int(clip.render_progress_pct or 0),
                         "error": (
-                            f"render timed out after {int(age_s)}s "
-                            "without completing (background task "
-                            "likely crashed) — click Retry"
+                            _render_timeout_error(age_s, limit_s)
+                            + " — click Retry"
                         ),
                         "retry_url": (
                             f"/dashboard/clips/{clip_id}/render-retry"
@@ -4248,7 +4264,7 @@ async def clip_download(
                 if started.tzinfo is None:
                     started = started.replace(tzinfo=UTC)
                 age_s = (_dt.now(UTC) - started).total_seconds()
-                if age_s > _ZOMBIE_RENDERING_TIMEOUT_S:
+                if age_s > _render_zombie_timeout_s(clip.duration_s, quality):
                     is_zombie = True
                     import structlog
                     structlog.get_logger(

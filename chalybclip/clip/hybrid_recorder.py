@@ -205,6 +205,14 @@ async def record_clip_hybrid(
         # 50% mark — capture done, start composite.
         await _emit_progress(progress_callback, 50)
 
+        loop = asyncio.get_running_loop()
+
+        def _composite_progress(pct: int) -> None:
+            # Called from the composite's worker thread; hop back onto the loop.
+            asyncio.run_coroutine_threadsafe(
+                _emit_progress(progress_callback, pct), loop
+            )
+
         await asyncio.to_thread(
             _ffmpeg_composite_alpha_over_source,
             source_video=audio_source_path,
@@ -214,6 +222,9 @@ async def record_clip_hybrid(
             duration_s=duration_s,
             ass_file_path=ass_file_path,
             append_outro_enabled=append_outro_enabled,
+            progress_callback=(
+                _composite_progress if progress_callback is not None else None
+            ),
         )
 
         await _emit_progress(progress_callback, 100)
@@ -336,6 +347,7 @@ def _ffmpeg_composite_alpha_over_source(
     duration_s: float,
     ass_file_path: Path | None = None,
     append_outro_enabled: bool = True,
+    progress_callback: Any = None,
 ) -> None:
     """Composite the alpha PNG sequence over the source video and mux
     the original audio. One ffmpeg pass; one file out.
@@ -405,15 +417,27 @@ def _ffmpeg_composite_alpha_over_source(
         )
     else:
         filter_graph = "[0:v][1:v]overlay=0:0:format=auto[v]"
+    # Feed only the unique overlay PNGs: decoding the same 4K PNG once per
+    # frame was ~60% of a 20 s 4K composite (QA 2026-11-06, export timeout).
+    concat_list = _write_overlay_concat(frames_dir, fps)
+    if concat_list is not None:
+        overlay_input = ["-f", "concat", "-safe", "0", "-i", str(concat_list)]
+    else:
+        overlay_input = ["-framerate", str(fps), "-i", overlay_pattern]
+    progress_file = frames_dir / "composite.progress"
+    progress_args = (
+        ["-progress", str(progress_file), "-nostats"]
+        if progress_callback is not None else []
+    )
     cmd = [
         ffmpeg,
         "-y",
         "-loglevel", "error",
         # Source video (audio + already-shaped frames).
         "-i", str(source_video),
-        # Overlay PNG sequence at the export framerate.
-        "-framerate", str(fps),
-        "-i", overlay_pattern,
+        # Overlay layer: unique PNGs with their hold times (or the raw
+        # per-frame sequence when nothing was captured).
+        *overlay_input,
         # Composite: overlay alpha PNGs, then libass burn-in.
         "-filter_complex", filter_graph,
         "-map", "[v]",
@@ -445,6 +469,7 @@ def _ffmpeg_composite_alpha_over_source(
         # streaming preview of the rendered MP4, run a SEPARATE
         # `qt-faststart` pass that doesn't have ffmpeg's
         # delete-on-failure semantics.
+        *progress_args,
         str(partial_path),
     ]
     _log.info(
@@ -454,7 +479,13 @@ def _ffmpeg_composite_alpha_over_source(
         final=str(output_path),
     )
     try:
-        proc = subprocess.run(cmd, capture_output=True, check=False)
+        if progress_callback is not None:
+            with _CompositeProgressWatcher(
+                progress_file, duration_s, progress_callback
+            ):
+                proc = subprocess.run(cmd, capture_output=True, check=False)
+        else:
+            proc = subprocess.run(cmd, capture_output=True, check=False)
         if proc.returncode != 0:
             stderr_tail = proc.stderr.decode("utf-8", errors="replace")[-800:]
             raise HybridRecordingError(
@@ -514,6 +545,116 @@ def _ffmpeg_composite_alpha_over_source(
         except OSError:
             pass
         raise
+
+
+def _write_overlay_concat(frames_dir: Path, fps: int) -> Path | None:
+    """Collapse the per-frame overlay PNGs into an ffconcat list of unique
+    PNGs, each held for its run length. Hardlinked/copied repeats share
+    an inode/size+bytes run, so the overlay is decoded once per change.
+    Returns None when there are no frames (caller keeps the raw pattern).
+    """
+    frames = sorted(frames_dir.glob("overlay_*.png"))
+    if not frames:
+        return None
+    runs: list[tuple[Path, int]] = []
+    prev_key: tuple[int, int] | None = None
+    for f in frames:
+        st = f.stat()
+        key = (st.st_dev, st.st_ino)
+        if runs and (key == prev_key or _same_bytes(runs[-1][0], f)):
+            runs[-1] = (runs[-1][0], runs[-1][1] + 1)
+        else:
+            runs.append((f, 1))
+        prev_key = key
+    lines = ["ffconcat version 1.0"]
+    start_frame = 0
+    for path, count in runs:
+        # Integer µs boundaries floored, so a change never starts after its frame.
+        start_us = start_frame * 1_000_000 // fps
+        end_us = (start_frame + count) * 1_000_000 // fps
+        dur_us = end_us - start_us
+        lines.append(f"file '{_ffconcat_quote(path)}'")
+        # image2 defaults to a 1/25 time base, which shifts 30 fps changes by a frame.
+        lines.append(f"option framerate {fps}")
+        lines.append(f"duration {dur_us // 1_000_000}.{dur_us % 1_000_000:06d}")
+        start_frame += count
+    out = frames_dir / "overlay_list.ffconcat"
+    out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return out
+
+
+def _same_bytes(a: Path, b: Path) -> bool:
+    """Cheap equality for the copy2 fallback (no hardlinks on that FS)."""
+    try:
+        return a.stat().st_size == b.stat().st_size and a.read_bytes() == b.read_bytes()
+    except OSError:
+        return False
+
+
+def _ffconcat_quote(path: Path) -> str:
+    return str(path.resolve()).replace("'", "'\\''")
+
+
+class _CompositeProgressWatcher:
+    """Tails ffmpeg's `-progress` file on a daemon thread and maps
+    out_time to 50-99% so the export bar moves during the composite."""
+
+    def __init__(self, progress_file: Path, duration_s: float, callback: Any) -> None:
+        import threading
+
+        self._file = progress_file
+        self._duration = max(0.001, float(duration_s))
+        self._callback = callback
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._last_pct = 50
+
+    def __enter__(self) -> _CompositeProgressWatcher:
+        self._thread.start()
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self._stop.set()
+        self._thread.join(timeout=2.0)
+
+    def _run(self) -> None:
+        while not self._stop.wait(1.0):
+            self.poll()
+
+    def poll(self) -> None:
+        pct = composite_progress_pct(self._read_out_time_s(), self._duration)
+        if pct is None or pct <= self._last_pct:
+            return
+        self._last_pct = pct
+        try:
+            self._callback(pct)
+        except Exception:
+            _log.warning("hybrid_recorder.composite_progress_failed", pct=pct)
+
+    def _read_out_time_s(self) -> float | None:
+        try:
+            text = self._file.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return None
+        out_us: float | None = None
+        for line in text.splitlines():
+            # out_time_us is microseconds; older ffmpeg mislabels it out_time_ms.
+            key, _, value = line.partition("=")
+            if key in ("out_time_us", "out_time_ms"):
+                try:
+                    out_us = float(value)
+                except ValueError:
+                    continue
+        return None if out_us is None else out_us / 1_000_000.0
+
+
+def composite_progress_pct(out_time_s: float | None, duration_s: float) -> int | None:
+    """Map ffmpeg's encoded position to the composite's 50-99% band.
+    100 is reserved for "file published", which the caller emits."""
+    if out_time_s is None or out_time_s < 0 or duration_s <= 0:
+        return None
+    frac = min(1.0, out_time_s / duration_s)
+    return 50 + int(49 * frac)
 
 
 async def _emit_progress(callback: Any, pct: int) -> None:
