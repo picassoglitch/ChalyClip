@@ -6,8 +6,8 @@ finished MP4 is uploaded to `clip_export_key(...)` and every instance reads
 the same object.
 
 An object is only served when its `fp` metadata matches the clip's current
-fingerprint, so an edit after the export (overlay, trim, format, end-card
-outro) is a cache miss without touching every place that edits a clip.
+fingerprint, so an edit after the export (overlay, trim, format) or a plan
+change (watermark, end-card outro) is a cache miss without touching every place that edits a clip.
 """
 
 from __future__ import annotations
@@ -34,7 +34,9 @@ _REDIRECT_TTL_S = 3600
 _FP_META = "fp"
 
 
-def export_fingerprint(clip: Any, *, quality: str, outro: bool | None = None) -> str:
+def export_fingerprint(
+    clip: Any, *, quality: str, outro: bool | None = None, watermark: bool | None = None
+) -> str:
     """Identity of what an export of `clip` at `quality` would contain."""
     payload = {
         "v": EXPORT_RENDER_VERSION,
@@ -44,23 +46,31 @@ def export_fingerprint(clip: Any, *, quality: str, outro: bool | None = None) ->
         "end": getattr(clip, "end_s", None),
         "dur": getattr(clip, "duration_s", None),
         "outro": outro,
+        # Plan branding: the corner mark is free-tier only, so a plan change flips it.
+        "wm": watermark,
     }
     raw = json.dumps(payload, sort_keys=True, default=str, separators=(",", ":"))
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
 
 
 async def current_fingerprint(db: Database, *, tenant_id: str, clip: Any, quality: str) -> str | None:
-    """Fingerprint including the tier / brand-kit outro decision. None when the
-    plan can't be read: then nothing cached can be proven current."""
-    from chalybclip.branding import TierUnknownError, outro_enabled_for_clip
+    """Fingerprint including the plan-branding decisions the renderer makes
+    (corner watermark, end-card outro), decided by the same helpers. None when
+    the plan can't be read: then nothing cached can be proven current."""
+    from chalybclip.branding import (
+        TierUnknownError,
+        outro_enabled_for_clip,
+        watermark_enabled_for_clip,
+    )
 
     try:
+        watermark = await watermark_enabled_for_clip(db, tenant_id=tenant_id)
         outro = await outro_enabled_for_clip(
             db, tenant_id=tenant_id, stream_id=getattr(clip, "stream_id", "") or ""
         )
     except TierUnknownError:
         return None
-    return export_fingerprint(clip, quality=quality, outro=outro)
+    return export_fingerprint(clip, quality=quality, outro=outro, watermark=watermark)
 
 
 def export_download_name(clip_id: str) -> str:
