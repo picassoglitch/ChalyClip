@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import datetime as dt
 
-from chalybclip.db import Database, StreamsRepo, TenantsRepo
-from chalybclip.db.models import StreamRow
+from chalybclip.db import ClipsRepo, Database, StreamsRepo, TenantsRepo
+from chalybclip.db.models import ClipRow, StreamRow
 from chalybclip.db.usage_repos import UsageJobsRepo, count_videos_since
 from chalybclip.tenancy import bound_tenant
 
@@ -26,6 +26,15 @@ async def _stream(db: Database, tenant_id: str, stream_id: str) -> None:
                 status="pending", created_at=MONTH,
             )
         )
+
+
+async def _clip(db: Database, tenant_id: str, stream_id: str) -> None:
+    with bound_tenant(tenant_id):
+        await ClipsRepo(db).upsert_many([
+            ClipRow(id=f"clp_{stream_id}", stream_id=stream_id, tenant_id=tenant_id,
+                    start_s=0.0, end_s=10.0, duration_s=10.0, width=1080, height=1920,
+                    path="/tmp/c.mp4", created_at=MONTH)
+        ])
 
 
 async def _job(db: Database, job_id: str, stream_id: str, status: str, *,
@@ -76,3 +85,26 @@ async def test_claimed_runs_this_month_count(migrated_db: Database) -> None:
     await _job(db, "j_running", "str_live", "running")
     await _job(db, "j_done", "str_y", "succeeded")
     assert await count() == 3
+
+
+async def test_failed_runs_free_the_slot_unless_they_left_clips(migrated_db: Database) -> None:
+    db = migrated_db
+    await TenantsRepo(db).create(tenant_id="ten_a", name="ten_a")
+    for sid in ("str_1", "str_2", "str_3", "str_4", "str_clips"):
+        await _stream(db, "ten_a", sid)
+    await _clip(db, "ten_a", "str_clips")
+
+    async def count() -> int:
+        return await count_videos_since(db, tenant_id="ten_a", operation="clips.pipeline",
+                                        since_iso=MONTH, stale_before_iso=STALE_BEFORE)
+
+    # Failed with no clips: the slot is free (up to 3 a month).
+    for n, sid in enumerate(("str_1", "str_2", "str_3"), start=1):
+        await _job(db, f"j_fail{n}", sid, "failed")
+        assert await count() == 0
+    # The 4th clipless failure counts.
+    await _job(db, "j_fail4", "str_4", "failed")
+    assert await count() == 1
+    # A failed run that still left clips counts.
+    await _job(db, "j_fail_clips", "str_clips", "failed")
+    assert await count() == 2
