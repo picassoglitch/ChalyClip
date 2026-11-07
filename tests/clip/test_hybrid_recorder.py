@@ -556,3 +556,74 @@ async def test_real_composite_matches_per_frame_sequence_and_reports_progress(
     assert out.exists() and out.stat().st_size > 0
     assert all(50 <= p <= 99 for p in seen)
     assert seen == sorted(seen)
+
+
+# ---- real 2K / 4K (2026-11-07: "Upscale for real") ----
+
+
+def _real_ffmpeg() -> bool:
+    import shutil as _sh
+
+    return _sh.which("ffmpeg") is not None and _sh.which("ffprobe") is not None
+
+
+@pytest.mark.skipif(not _real_ffmpeg(), reason="needs ffmpeg + ffprobe")
+@pytest.mark.parametrize(("width", "height"), [(1080, 1920), (1440, 2560), (2160, 3840)])
+def test_composite_outputs_exact_size_with_full_overlay(
+    tmp_path: Path, width: int, height: int
+) -> None:
+    """Real ffmpeg: the 1080x1920 cut is upscaled to the labelled size and the
+    full-size overlay lands whole — a marker in its bottom-right corner (which
+    the old crop-to-source threw away) must survive."""
+    import os
+    import subprocess as sp
+
+    src = tmp_path / "clip.mp4"
+    sp.run(["ffmpeg", "-y", "-loglevel", "error",
+            "-f", "lavfi", "-i", "color=c=blue:size=1080x1920:rate=30:duration=1",
+            "-f", "lavfi", "-i", "sine=frequency=440:duration=1",
+            "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", "-shortest", str(src)],
+           check=True)
+    frames = tmp_path / "frames"
+    frames.mkdir()
+    box = 120
+    first = frames / "overlay_00000000.png"
+    sp.run(["ffmpeg", "-y", "-loglevel", "error",
+            "-f", "lavfi", "-i", f"color=c=black:size={width}x{height},format=rgba",
+            "-vf", (f"geq=r='255*gte(X,{width - box})*gte(Y,{height - box})':g=0:b=0"
+                    f":a='255*gte(X,{width - box})*gte(Y,{height - box})'"),
+            "-frames:v", "1", str(first)],
+           check=True)
+    for i in range(1, 30):
+        os.link(first, frames / f"overlay_{i:08d}.png")
+    out = tmp_path / "out.mp4"
+
+    from structlog.testing import capture_logs
+
+    # Another suite can leave structlog bound to a closed stream; capture instead.
+    with capture_logs():
+        _ffmpeg_composite_alpha_over_source(
+            source_video=src, frames_dir=frames, output_path=out, fps=30,
+            duration_s=1.0, append_outro_enabled=False, width=width, height=height,
+        )
+
+    probe = sp.run(["ffprobe", "-v", "error", "-select_streams", "v:0",
+                    "-show_entries", "stream=width,height", "-of", "csv=p=0", str(out)],
+                   capture_output=True, text=True, check=True)
+    assert probe.stdout.strip() == f"{width},{height}"
+    rgb = sp.run(["ffmpeg", "-loglevel", "error", "-i", str(out), "-frames:v", "1",
+                  "-vf", f"crop=8:8:{width - box // 2}:{height - box // 2}",
+                  "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+                 capture_output=True, check=True).stdout
+    r, g, b = rgb[0], rgb[1], rgb[2]
+    assert r > 200 and g < 60 and b < 60, (r, g, b)  # overlay corner, not the blue source
+
+
+def test_encode_args_cap_rate_above_1080() -> None:
+    assert hybrid_recorder._encode_args(1080, 1920) == ["-crf", "14"]
+    assert hybrid_recorder._encode_args(1440, 2560) == [
+        "-crf", "16", "-maxrate", "24M", "-bufsize", "48M"]
+    assert hybrid_recorder._encode_args(2160, 3840) == [
+        "-crf", "18", "-maxrate", "45M", "-bufsize", "90M"]
+    # Horizontal 4K is the same pixel count.
+    assert hybrid_recorder._encode_args(3840, 2160)[1] == "18"

@@ -26,7 +26,7 @@ _log = structlog.get_logger(__name__)
 
 # Bump when the renderer's output changes for the same inputs, so exports
 # rendered by older code stop being served.
-EXPORT_RENDER_VERSION = "1"
+EXPORT_RENDER_VERSION = "2"
 
 # Download links are used right away; short-lived and never a cacheable public URL.
 _REDIRECT_TTL_S = 3600
