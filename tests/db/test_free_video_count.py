@@ -56,8 +56,9 @@ async def test_claimed_runs_this_month_count(migrated_db: Database) -> None:
                                         exclude_job_id=exclude)
 
     assert await count() == 0
-    # Released: cancelled/refused, last month, another tenant, another operation,
+    # Released: failed/cancelled/refused, last month, another tenant or operation,
     # and an upload abandoned before its stream existed, past the hold's TTL.
+    await _job(db, "j_failed", "str_x", "failed")
     await _job(db, "j_cancel", "str_live", "cancelled")
     await _job(db, "j_refused", "str_live", "refused")
     await _job(db, "j_old", "str_live", "succeeded", created_at=LAST_MONTH)
@@ -71,8 +72,7 @@ async def test_claimed_runs_this_month_count(migrated_db: Database) -> None:
     await _job(db, "j_uploading", "str_pending", "admitted")
     assert await count() == 1
     assert await count(exclude="j_uploading") == 0  # a re-admit doesn't count itself
-    # Any other status counts too (deny-list): running, failed, succeeded.
+    # Running and succeeded count; so does any other in-flight status.
     await _job(db, "j_running", "str_live", "running")
-    await _job(db, "j_failed", "str_x", "failed")
     await _job(db, "j_done", "str_y", "succeeded")
-    assert await count() == 4
+    assert await count() == 3

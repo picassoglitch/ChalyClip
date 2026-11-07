@@ -324,15 +324,16 @@ async def count_videos_since(
     stale_before_iso: str,
     exclude_job_id: str | None = None,
 ) -> int:
-    """Pipeline runs a tenant claimed since `since_iso`: every status but
-    cancelled/refused, in flight included. An upload admitted but never
-    completed (no stream row) stops counting once older than the hold's
-    TTL (`stale_before_iso`), as the hub expires its reservation."""
+    """Pipeline runs a tenant used since `since_iso`: succeeded ones and the
+    ones in flight (so two at once can't both pass). Failed, cancelled and
+    refused runs free the slot (owner 2026-11-07). An upload admitted but
+    never completed (no stream row) stops counting once older than the
+    hold's TTL (`stale_before_iso`), as the hub expires its reservation."""
     conn = await db.connect()
     cur = await conn.execute(
         "SELECT COUNT(*) AS n FROM usage_jobs j WHERE j.tenant_id = ? "
         "AND j.operation = ? AND j.job_class = 'job' AND j.created_at >= ? "
-        "AND j.id <> ? AND j.status NOT IN ('cancelled', 'refused') "
+        "AND j.id <> ? AND j.status NOT IN ('cancelled', 'refused', 'failed') "
         "AND NOT (j.status = 'admitted' AND j.updated_at < ? AND NOT EXISTS "
         "(SELECT 1 FROM streams s WHERE s.id = j.stream_id AND s.tenant_id = j.tenant_id))",
         (tenant_id, operation, since_iso, exclude_job_id or "", stale_before_iso),

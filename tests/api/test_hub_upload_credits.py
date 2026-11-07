@@ -30,7 +30,7 @@ from chalybclip.tenancy import bound_tenant
 
 _SECRET = "hub_credit_secret"
 _HUB = "https://chalyb.test/api/engines/chalybclip/usage"
-FREE_CREDITS = 65_000  # TIER_CAPS.FREE.tokensPerMonth (owner 2026-11-07)
+FREE_CREDITS = 75_000  # TIER_CAPS.FREE.tokensPerMonth (owner 2026-11-07)
 HUB_MARGIN_PERCENT = 160  # DEFAULT_USAGE_MARGIN_PERCENT
 
 
@@ -495,3 +495,45 @@ async def test_free_two_uploads_at_once_admit_only_one(
     assert codes == [200, 429], (a.text, b.text)
     refused = a if a.status_code == 429 else b
     assert refused.json()["error"]["reason"] == "videos_cap"
+
+
+async def _one_finished_video(
+    client: httpx.AsyncClient, db: Database, store: FakeStore,
+    monkeypatch: pytest.MonkeyPatch, hdr: dict[str, str], tenant_id: str, outcome: str,
+) -> None:
+    from chalybclip.db.usage_repos import UsageJobsRepo
+
+    up = (await client.post("/api/hub/v1/uploads", json=_upload(30), headers=hdr)).json()
+    assert (await _complete(client, store, monkeypatch, hdr, up, 0.5)).status_code == 200
+    job_id = hub_streams._read_ticket(
+        up["ticket"], tenant_id=tenant_id, stream_id=up["stream_id"]
+    )["job"]
+    await UsageJobsRepo(db).set_status(job_id, outcome)
+
+
+@pytest.mark.parametrize(
+    ("outcome", "second"),
+    [("failed", 200), ("succeeded", 429), ("running", 429)],
+)
+async def test_free_month_slot_by_how_the_first_run_ended(
+    outcome: str,
+    second: int,
+    client: httpx.AsyncClient,
+    db: Database,
+    tenants: dict[str, dict[str, str]],
+    store: FakeStore,
+    free_hub: FreeHub,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Owner 2026-11-07: a failed run frees the slot (retry); a successful or
+    # running one uses it.
+    free_hub.balance = 10_000_000
+    hdr = await _free_tenant(db, tenants["alice"]["id"])
+    await _one_finished_video(
+        client, db, store, monkeypatch, hdr, tenants["alice"]["id"], outcome
+    )
+    free_hub.holds.clear()
+    r = await client.post("/api/hub/v1/uploads", json=_upload(30), headers=hdr)
+    assert r.status_code == second, r.text
+    if second == 429:
+        assert r.json()["error"]["reason"] == "videos_cap"
