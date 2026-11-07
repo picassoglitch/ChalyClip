@@ -321,20 +321,21 @@ async def count_videos_since(
     tenant_id: str,
     operation: str,
     since_iso: str,
+    stale_before_iso: str,
     exclude_job_id: str | None = None,
 ) -> int:
-    """Pipeline runs a tenant started since `since_iso`: finished ones
-    (succeeded or failed — a failed run still spent) and admitted ones whose
-    stream exists. An upload admitted but never completed has no stream row,
-    so walking away from it doesn't use up the month."""
+    """Pipeline runs a tenant claimed since `since_iso`: every status but
+    cancelled/refused, in flight included. An upload admitted but never
+    completed (no stream row) stops counting once older than the hold's
+    TTL (`stale_before_iso`), as the hub expires its reservation."""
     conn = await db.connect()
     cur = await conn.execute(
         "SELECT COUNT(*) AS n FROM usage_jobs j WHERE j.tenant_id = ? "
         "AND j.operation = ? AND j.job_class = 'job' AND j.created_at >= ? "
-        "AND j.id <> ? AND (j.status IN ('succeeded', 'failed') OR "
-        "(j.status = 'admitted' AND EXISTS (SELECT 1 FROM streams s "
-        "WHERE s.id = j.stream_id AND s.tenant_id = j.tenant_id)))",
-        (tenant_id, operation, since_iso, exclude_job_id or ""),
+        "AND j.id <> ? AND j.status NOT IN ('cancelled', 'refused') "
+        "AND NOT (j.status = 'admitted' AND j.updated_at < ? AND NOT EXISTS "
+        "(SELECT 1 FROM streams s WHERE s.id = j.stream_id AND s.tenant_id = j.tenant_id))",
+        (tenant_id, operation, since_iso, exclude_job_id or "", stale_before_iso),
     )
     row = await cur.fetchone()
     return int(row["n"] or 0) if row is not None else 0

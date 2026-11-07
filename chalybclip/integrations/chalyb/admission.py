@@ -78,6 +78,12 @@ REFUSAL_MESSAGES: dict[str, tuple[int, str]] = {
         "Tu plan Gratis incluye 1 video al mes. Se renueva el día 1, o puedes "
         "mejorar tu plan.",
     ),
+    "length_unknown": (
+        422,
+        "No pudimos medir la duración de tu video. Tu plan Gratis permite videos "
+        f"de hasta {int(FREE_MAX_SOURCE_MINUTES)} minutos: súbelo en MP4 e "
+        "inténtalo de nuevo.",
+    ),
     "jobs_cap": (
         429,
         "Llegaste al límite de trabajos de este mes. Se renueva el próximo "
@@ -228,6 +234,7 @@ async def admit(
     is_free = normalize_tier(tenant.tier) == FREE
     if is_free:
         await _check_free_plan(db, tenant_id=tenant_id, request=request)
+        request = _free_unknown_length_hold(request)
 
     body: dict[str, Any] = {
         "external_user_id": tenant.external_user_id,
@@ -320,32 +327,55 @@ async def admit(
 async def _check_free_plan(db: Database, *, tenant_id: str, request: AdmitRequest) -> None:
     """Free = 1 video a month up to FREE_MAX_SOURCE_MINUTES. Refuse here, in
     the plan's words and before any bytes move; the hub's own caps
-    (minutes, credits) stay the backstop. Only pipeline runs count."""
+    (minutes, credits, one job at a time) stay the backstop. Only pipeline
+    runs count. A re-admit (the job is already recorded) must carry a
+    measured length: unknown at that point is refused, not waved through."""
     if request.job_class != "job" or request.operation != "clips.pipeline":
         return
-    if request.source_minutes > FREE_MAX_SOURCE_MINUTES:
+    # Rounded like the body the hub gets, so a "5:00" that probes at 300.2 s passes both.
+    if round(request.source_minutes, 2) > FREE_MAX_SOURCE_MINUTES:
         raise AdmissionRefused(
             "video_too_long",
             detail={"max_source_minutes": FREE_MAX_SOURCE_MINUTES},
             length_known=True,
             message=FREE_TOO_LONG_MESSAGE,
         )
-    from chalybclip.db.usage_repos import count_videos_since
+    from chalybclip.db.usage_repos import UsageJobsRepo, count_videos_since
 
+    readmit = await UsageJobsRepo(db).get(request.external_job_id) is not None
+    if readmit and request.source_minutes <= 0:
+        raise AdmissionRefused("length_unknown")
     now = _dt.datetime.now(_dt.UTC)
     # Calendar month in UTC, like the hub's usage_period_start().
     month_start = _dt.datetime(now.year, now.month, 1, tzinfo=_dt.UTC).isoformat()
+    ttl = int(get_settings().usage_reservation_ttl_s)
     used = await count_videos_since(
         db,
         tenant_id=tenant_id,
         operation=request.operation,
         since_iso=month_start,
+        stale_before_iso=(now - _dt.timedelta(seconds=ttl)).isoformat(),
         exclude_job_id=request.external_job_id,
     )
     if used >= FREE_VIDEOS_PER_MONTH:
         raise AdmissionRefused(
             "videos_cap", detail={"used": used, "cap": FREE_VIDEOS_PER_MONTH}
         )
+
+
+def _free_unknown_length_hold(request: AdmitRequest) -> AdmitRequest:
+    """A Free run of unknown length (link job, unreadable upload) holds what
+    its longest video costs, not the 10-min default that is more than Free's
+    month; the re-admit with the measured length re-sizes it."""
+    if request.operation != "clips.pipeline" or request.source_minutes > 0:
+        return request
+    from dataclasses import replace
+
+    from chalybclip.jobs.usage import estimate_tokens
+
+    return replace(
+        request, est_tokens=estimate_tokens(source_minutes=FREE_MAX_SOURCE_MINUTES)
+    )
 
 
 def _json_or_empty(resp: httpx.Response) -> dict[str, Any]:

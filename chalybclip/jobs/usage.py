@@ -124,6 +124,35 @@ async def admit_job(
     """Admit one run. Raises `AdmissionRefused` (refused, or hub down)."""
     job_id = job_id or new_id("ujob")
     upload_mb = max(0, int(upload_bytes)) / _MIB
+    # One admission per tenant at a time in this process, so a Free tenant's
+    # monthly count sees the run claimed just before (hub caps cover others).
+    async with _tenant_lock(tenant_id):
+        return await _admit_job_locked(
+            db, tenant_id=tenant_id, stream_id=stream_id, upload_mb=upload_mb,
+            source_minutes=source_minutes, boost=boost, operation=operation,
+            job_class=job_class, job_id=job_id,
+        )
+
+
+_TENANT_LOCKS: dict[str, asyncio.Lock] = {}
+
+
+def _tenant_lock(tenant_id: str) -> asyncio.Lock:
+    return _TENANT_LOCKS.setdefault(tenant_id, asyncio.Lock())
+
+
+async def _admit_job_locked(
+    db: Database,
+    *,
+    tenant_id: str,
+    stream_id: str,
+    upload_mb: float,
+    source_minutes: float,
+    boost: bool | None,
+    operation: str,
+    job_class: str,
+    job_id: str,
+) -> JobAdmission:
     stored_mb = await _stored_mb(db, tenant_id)
     result = await admit(
         db,

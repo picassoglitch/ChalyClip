@@ -177,15 +177,30 @@ async def test_unknown_length_hold_is_bigger_than_a_free_month(
     store: FakeStore,
     free_hub: FreeHub,
 ) -> None:
-    # The QA failure, reproduced: no length → 10-min estimate → refused.
-    # That figure isn't this video's cost, so the error carries no numbers.
+    # The QA failure: no length → 10-min estimate → more than a Free month,
+    # so a Paid-style hold would refuse every Free link job / unreadable upload.
+    assert math.ceil(estimate_tokens(source_minutes=0) * 2.6) > FREE_CREDITS
+    # Free holds its longest video instead; /complete re-sizes it.
     hdr = await _free_tenant(db, tenants["alice"]["id"])
     r = await client.post("/api/hub/v1/uploads", json=_upload(None), headers=hdr)
-    assert r.status_code == 402, r.text
-    err = r.json()["error"]
-    assert err["code"] == "no_credits" and err["reason"] == "no_tokens"
-    assert math.ceil(estimate_tokens(source_minutes=0) * 2.6) > FREE_CREDITS
-    assert "credits" not in err
+    assert r.status_code == 200, r.text
+    assert free_hub.asked[-1]["est_tokens"] == estimate_tokens(source_minutes=5)
+    assert free_hub.asked[-1]["source_minutes"] == 0
+
+
+async def test_free_five_minutes_and_a_fraction_rounds_like_the_hub(
+    client: httpx.AsyncClient,
+    db: Database,
+    tenants: dict[str, dict[str, str]],
+    store: FakeStore,
+    free_hub: FreeHub,
+) -> None:
+    # A "5:00" phone video that reads 300.2 s: 5.0 min to the hub, so admitted.
+    hdr = await _free_tenant(db, tenants["alice"]["id"])
+    r = await client.post("/api/hub/v1/uploads", json=_upload(300.2), headers=hdr)
+    assert r.status_code == 200, r.text
+    r = await client.post("/api/hub/v1/uploads", json=_upload(301.0), headers=hdr)
+    assert r.status_code == 413, r.text
 
 
 async def test_a_video_too_long_for_the_balance_says_what_it_takes(
@@ -290,8 +305,8 @@ async def test_unreadable_file_is_not_sized_by_the_declared_length(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # ffprobe can't read it → the client's figure is not trusted: the
-    # re-admit uses the 10-min estimate, more than Free has.
-    hdr = await _free_tenant(db, tenants["alice"]["id"])
+    # re-admit uses the 10-min estimate, more than this balance holds.
+    hdr = await _free_tenant(db, tenants["alice"]["id"], tier="pro")
     up = (await client.post("/api/hub/v1/uploads", json=_upload(20), headers=hdr)).json()
     monkeypatch.setattr(hub_streams, "_probe_minutes_url", lambda _url: 0.0)
     key = up["upload_url"].split("bucket.test/")[1].split("?")[0]
@@ -419,3 +434,64 @@ async def test_pro_long_video_goes_to_the_hub(
     r = await client.post("/api/hub/v1/uploads", json=_upload(6 * 60), headers=hdr)
     assert r.status_code == 200, r.text
     assert free_hub.asked[-1]["source_minutes"] == 6.0
+
+
+async def test_free_unreadable_length_is_refused_at_complete(
+    client: httpx.AsyncClient,
+    db: Database,
+    tenants: dict[str, dict[str, str]],
+    store: FakeStore,
+    free_hub: FreeHub,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    hdr = await _free_tenant(db, tenants["alice"]["id"])
+    up = (await client.post("/api/hub/v1/uploads", json=_upload(20), headers=hdr)).json()
+    asked = len(free_hub.asked)
+    r = await _complete(client, store, monkeypatch, hdr, up, 0.0)
+    assert r.status_code == 422, r.text
+    err = r.json()["error"]
+    assert err["reason"] == "length_unknown"
+    assert "hasta 5 minutos" in err["message"]
+    assert len(free_hub.asked) == asked  # refused here, not sized as 10 min
+    assert not store.objects  # the bytes are dropped
+
+
+async def test_free_declared_short_but_six_minutes_is_refused_at_complete(
+    client: httpx.AsyncClient,
+    db: Database,
+    tenants: dict[str, dict[str, str]],
+    store: FakeStore,
+    free_hub: FreeHub,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    hdr = await _free_tenant(db, tenants["alice"]["id"])
+    up = (await client.post("/api/hub/v1/uploads", json=_upload(4 * 60), headers=hdr)).json()
+    r = await _complete(client, store, monkeypatch, hdr, up, 6.0)
+    assert r.status_code == 413, r.text
+    assert r.json()["error"]["reason"] == "video_too_long"
+    assert not store.objects
+    # The refused upload doesn't use up the month (the hub dropped its hold).
+    free_hub.holds.clear()
+    r = await client.post("/api/hub/v1/uploads", json=_upload(60), headers=hdr)
+    assert r.status_code == 200, r.text
+
+
+async def test_free_two_uploads_at_once_admit_only_one(
+    client: httpx.AsyncClient,
+    db: Database,
+    tenants: dict[str, dict[str, str]],
+    store: FakeStore,
+    free_hub: FreeHub,
+) -> None:
+    import asyncio
+
+    free_hub.balance = 10_000_000  # credits aren't what stops the second one
+    hdr = await _free_tenant(db, tenants["alice"]["id"])
+    a, b = await asyncio.gather(
+        client.post("/api/hub/v1/uploads", json=_upload(30), headers=hdr),
+        client.post("/api/hub/v1/uploads", json=_upload(30), headers=hdr),
+    )
+    codes = sorted([a.status_code, b.status_code])
+    assert codes == [200, 429], (a.text, b.text)
+    refused = a if a.status_code == 429 else b
+    assert refused.json()["error"]["reason"] == "videos_cap"
