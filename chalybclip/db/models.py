@@ -659,11 +659,10 @@ class BrandKitRow(BaseModel):
     # tenants keep crediting until they explicitly opt out).
     show_chalybclip_credit: bool = True
 
-    # Pro-tier toggle for the end-card "outro" splash appended to every
-    # exported clip (the bundled chalybclip end card). Free tier ALWAYS
-    # gets it regardless of this value; pro+ tiers respect it (default
-    # ON, mirroring show_chalybclip_credit).
-    show_chalybclip_outro: bool = True
+    # Paid-tier opt-in for the Chalyb end card appended to exports. Free
+    # tier ALWAYS gets it regardless of this value; paid kits default OFF
+    # (owner, 2026-11-07; migration 062 flipped existing paid kits).
+    show_chalybclip_outro: bool = False
 
     # Publishing safe trap (migration 042). When `safe_schedule_enabled`,
     # auto-publish schedules into the next compliant window and the drain

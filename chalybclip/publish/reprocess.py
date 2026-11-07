@@ -80,12 +80,13 @@ async def _invalidate_render(clip: Any, tenant_id: str, settings: Settings) -> N
 
 async def _restamp_overlay(db: Database, tenant_id: str, clip: Any) -> None:
     """Re-stamp the viral default overlay: a freshly generated hook + captions
-    + a source-credit marca built from the clip's stream channel/platform."""
+    + a source-credit marca built from the clip's stream channel/platform.
+    No model-written hook → no headline (never a template line)."""
     from chalybclip.publish.compose import generate_hook_line
 
     hook = ""
     with contextlib.suppress(Exception):
-        hook = await generate_hook_line(db, tenant_id, clip.id)
+        hook = await generate_hook_line(db, tenant_id, clip.id, fallback=False)
     platform = channel = None
     with bound_tenant(tenant_id):
         stream = await StreamsRepo(db).get(clip.stream_id)

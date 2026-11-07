@@ -590,6 +590,20 @@ def _norm_hook(hook: str) -> str:
     return " ".join(hook.split()).casefold()
 
 
+def _existing_headline(overlay: Any) -> str:
+    """User-set headline the overlay already burns (title card or enabled,
+    non-auto top hook); '' when none. Avoids stamping a second header."""
+    if not isinstance(overlay, dict):
+        return ""
+    title = overlay.get("title_text")
+    if isinstance(title, str) and title.strip():
+        return title.strip()
+    top = overlay.get("top_hook")
+    if isinstance(top, dict) and top.get("enabled") and not top.get("auto"):
+        return str(top.get("text") or "").strip()
+    return ""
+
+
 async def _auto_hook_for_clip(
     *,
     clip: Any,
@@ -600,6 +614,25 @@ async def _auto_hook_for_clip(
     stream_title: str = "",
     avoid_hooks: tuple[str, ...] = (),
 ) -> str:
+    """Text-only view of `_auto_hook_with_source` (the title line, real or
+    deterministic)."""
+    hook, _generated = await _auto_hook_with_source(
+        clip=clip, persona=persona, language=language, tenant_id=tenant_id,
+        router=router, stream_title=stream_title, avoid_hooks=avoid_hooks,
+    )
+    return hook
+
+
+async def _auto_hook_with_source(
+    *,
+    clip: Any,
+    persona: Persona,
+    language: str | None,
+    tenant_id: str,
+    router: Any,
+    stream_title: str = "",
+    avoid_hooks: tuple[str, ...] = (),
+) -> tuple[str, bool]:
     """Generate ONE viral hook (title line) from the clip's transcript
     snippet. Best-effort — returns '' on any failure so a hook hiccup never
     breaks the pipeline. The snippet already lives on the clip's candidate
@@ -612,7 +645,11 @@ async def _auto_hook_for_clip(
     When the LLM path fails (billing cap, provider outage) the clip still
     gets a title via the deterministic generator — a hookless clip cascades
     into a degenerate one-word caption downstream, which is worse than a
-    heuristic title."""
+    heuristic title.
+
+    Returns `(hook, generated)`: `generated` is True only when the model
+    wrote the line for this clip. Only those become the burned headline —
+    a deterministic line stays a caption title (owner, 2026-11-07)."""
     from chalybclip.variants.deterministic import deterministic_hook
     from chalybclip.variants.hooks import generate_hooks
 
@@ -650,7 +687,7 @@ async def _auto_hook_for_clip(
         _log.info("pipeline.auto_hook_duplicate_discarded", clip_id=clip.id)
         hook = ""
     if hook:
-        return hook
+        return hook, True
     hook = deterministic_hook(
         transcript_snippet=snippet,
         stream_title=stream_title,
@@ -660,7 +697,7 @@ async def _auto_hook_for_clip(
         avoid=set(avoid_hooks),
     )
     _log.info("pipeline.auto_hook_deterministic_fallback", clip_id=clip.id)
-    return hook
+    return hook, False
 
 
 async def _run_pipeline(
@@ -1306,7 +1343,8 @@ async def _run_pipeline(
     # Contiguous clips are one long moment → "Parte 1/N" series titles;
     # every hook in the batch must be unique across the whole stream.
     series_parts = _series_parts(clips)
-    series_base: dict[int, str] = {}
+    # series id → (base hook, model-written?) so every part inherits both.
+    series_base: dict[int, tuple[str, bool]] = {}
     used_hooks: list[str] = []
     used_norms: set[str] = set()
     with _step("variants", db=db, clip_count=len(clips), n=n_variants):
@@ -1319,30 +1357,53 @@ async def _run_pipeline(
             variants_path = clip.path.parent / "variants.json"
             cached = None if force else _load_stub_variants(variants_path)
             part = series_parts.get(clip.id)
+            # An editor headline kept across a re-run wins: no second header,
+            # no LLM call for it.
+            existing_headline = ""
+            if db is not None:
+                try:
+                    row = await ClipsRepo(db).get(clip.id)
+                    existing_headline = _existing_headline(
+                        row.overlay_config if row is not None else None
+                    )
+                except Exception as e:
+                    _log.warning(
+                        "pipeline.overlay_read_failed", clip_id=clip.id, error=str(e),
+                    )
             if cached is not None:
                 variants = cached
                 auto_hook = variants[0].title_card_text or ""
+                headline_ok = _load_stub_headline(variants_path)
                 # A partially cached series still needs its base for the
                 # uncached parts — recover it from the tagged hook.
                 if part and auto_hook and part[2] not in series_base:
-                    series_base[part[2]] = _SERIES_TAG_RE.sub("", auto_hook)
+                    series_base[part[2]] = (
+                        _SERIES_TAG_RE.sub("", auto_hook), headline_ok,
+                    )
             else:
                 auto_hook = ""
-                if auto_hook_enabled:
+                headline_ok = False
+                if existing_headline:
+                    auto_hook = existing_headline
+                    if part and part[2] not in series_base:
+                        series_base[part[2]] = (
+                            _SERIES_TAG_RE.sub("", existing_headline), False,
+                        )
+                elif auto_hook_enabled:
                     if part and part[2] in series_base:
+                        base, headline_ok = series_base[part[2]]
                         auto_hook = _series_hook(
-                            series_base[part[2]], part[0], part[1],
-                            language=hook_language,
+                            base, part[0], part[1], language=hook_language,
                         )
                     else:
-                        base = await _auto_hook_for_clip(
+                        base, headline_ok = await _auto_hook_with_source(
                             clip=clip, persona=persona, language=hook_language,
                             tenant_id=tenant_id, router=router,
                             stream_title=stream.title or "",
                             avoid_hooks=tuple(used_hooks),
                         )
                         if part:
-                            series_base[part[2]] = base
+                            series_base[part[2]] = (base, headline_ok)
                             auto_hook = _series_hook(
                                 base, part[0], part[1], language=hook_language,
                             )
@@ -1378,7 +1439,10 @@ async def _run_pipeline(
                 ]
                 variants_path.write_text(
                     json.dumps(
-                        {"variants": [v.model_dump() for v in variants]},
+                        {
+                            "variants": [v.model_dump() for v in variants],
+                            "headline": headline_ok,
+                        },
                         ensure_ascii=False,
                         indent=2,
                     ),
@@ -1389,21 +1453,16 @@ async def _run_pipeline(
             if auto_hook and _norm_hook(auto_hook) not in used_norms:
                 used_norms.add(_norm_hook(auto_hook))
                 used_hooks.append(auto_hook)
-            # Stamp the viral default overlay so the clip ships non-plain even
-            # when it never passes through the editor: captions on, the hook as
-            # the top headline, and a source-credit "marca" banner carrying the
-            # original streamer's name styled for the source platform (Kick /
-            # YouTube / Twitch). The editor + auto-publish both burn this in;
-            # the operator can still override it. (build_post reads the variant
-            # title for the published caption text.)
-            if db is not None:
+            # Viral default overlay (captions + source marca). Headline only for a
+            # model-written hook, never a template line (owner, 2026-11-07).
+            if db is not None and not existing_headline:
                 try:
                     await ClipsRepo(db).set_overlay_config(
                         clip.id,
                         overlay_config=default_overlay_config(
                             platform=stream.platform,
                             channel=stream.channel,
-                            hook=auto_hook,
+                            hook=auto_hook if headline_ok else "",
                         ),
                     )
                 except Exception as e:
@@ -1523,6 +1582,16 @@ async def _run_pipeline(
             )
 
     return manifest
+
+
+def _load_stub_headline(path: Path) -> bool:
+    """Whether the cached stub's hook was model-written (burnable headline).
+    Caches from before the flag can't prove it, so they burn none."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return bool(data.get("headline", False))
+    except Exception:
+        return False
 
 
 def _load_stub_variants(path: Path) -> list[Variant] | None:

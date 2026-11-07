@@ -5511,7 +5511,7 @@ async def brand_kits_create(
     auto_publish_delay_min: int = Form(60),
     forward_phrases: str = Form(""),
     retroactive_phrases: str = Form(""),
-    show_chalybclip_outro: str = Form("1"),
+    show_chalybclip_outro: str = Form(""),
     tenant_id: str = Depends(tenant_binder),
     db: Database = Depends(get_db),
 ) -> Response:

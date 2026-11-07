@@ -175,3 +175,26 @@ async def test_no_scheduled_is_clean_noop(tmp_path) -> None:
     assert summary.scheduled_found == 0
     assert summary.clips_reset == 0
     await db.close()
+
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("fallback", "has_line"), [(True, True), (False, False)])
+async def test_hook_line_fallback_flag(tmp_path, monkeypatch, fallback, has_line) -> None:
+    """Model down: the caption path still gets a template line, while the
+    headline path (`fallback=False`, used by the reprocess re-stamp) gets
+    nothing — no generic burned headline (owner, 2026-11-07)."""
+    import chalybclip.variants as variants_mod
+    from chalybclip.publish.compose import generate_hook_line
+
+    async def boom(**_kw):
+        raise RuntimeError("llm down")
+
+    monkeypatch.setattr(variants_mod, "generate_hooks", boom)
+    db = Database(tmp_path / "x.db")
+    await apply_migrations(db)
+    await _seed(db, "ten_h", clip_id="clp_1", post_id="post_1")
+    with bound_tenant("ten_h"):
+        line = await generate_hook_line(db, "ten_h", "clp_1", fallback=fallback)
+    await db.close()
+    assert bool(line.strip()) is has_line

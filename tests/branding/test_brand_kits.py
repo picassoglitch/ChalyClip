@@ -118,7 +118,9 @@ async def test_outro_paid_tier_respects_toggle_off(migrated_db: Database) -> Non
     ) is False
 
 
-async def test_outro_paid_tier_default_on(migrated_db: Database) -> None:
+async def test_outro_paid_tier_default_off(migrated_db: Database) -> None:
+    """A new paid kit leaves the end card off until the user opts in
+    (owner, 2026-11-07)."""
     tenant_id = await _seed_tenant(migrated_db)
     await _set_tier(migrated_db, tenant_id, "pro")
     with bound_tenant(tenant_id):
@@ -128,7 +130,7 @@ async def test_outro_paid_tier_default_on(migrated_db: Database) -> None:
         )
     assert await outro_enabled_for_clip(
         migrated_db, tenant_id=tenant_id, stream_id="str_x"
-    ) is True
+    ) is False
 
 
 @pytest.mark.parametrize("tier", ["pro", "all_access", "vip"])

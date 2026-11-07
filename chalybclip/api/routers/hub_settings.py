@@ -449,7 +449,8 @@ class BrandKitIn(BaseModel):
     safe_schedule_enabled: bool = False
     content_timezone: str = Field(default="UTC", max_length=64)
     safety_preset: str = Field(default="recommended", max_length=20)
-    show_chalybclip_outro: bool = True
+    # Paid kits opt in (owner, 2026-11-07); None on update keeps the stored value.
+    show_chalybclip_outro: bool | None = None
     is_default: bool = False
 
 
@@ -476,7 +477,7 @@ def _validate_kit(body: BrandKitIn, tier: str) -> dict[str, Any]:
         "caption_style": _preset_by_id(body.caption_preset).model_dump(),  # type: ignore[arg-type]
         "safety_policy": policy_overrides_for_preset(body.safety_preset),
         # Free tier keeps the end card (the renderer forces it on as well).
-        "outro": True if tier == "free" else body.show_chalybclip_outro,
+        "outro": True if tier == "free" else body.show_chalybclip_outro,  # None = keep
     }
 
 
@@ -505,7 +506,7 @@ async def hub_brand_kit_create(
         safe_schedule_enabled=body.safe_schedule_enabled,
         safety_policy=v["safety_policy"],
         content_timezone=body.content_timezone or "UTC",
-        show_chalybclip_outro=v["outro"],
+        show_chalybclip_outro=bool(v["outro"]),
     )
     return {"kit": _kit_json(kit, full=True)}
 

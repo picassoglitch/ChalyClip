@@ -120,6 +120,7 @@ async def generate_hook_line(
     *,
     tone: str = "default",
     persona_id: str | None = None,
+    fallback: bool = True,
 ) -> str:
     """Best-effort single viral-hook line for a clip via the LLM.
 
@@ -128,7 +129,8 @@ async def generate_hook_line(
     LLM path fails (billing cap, outage) it falls back to the deterministic
     generator, so callers get a usable line whenever the clip exists.
     Returns "" only on total failure (e.g. unknown clip) — this must never
-    raise into a publish path."""
+    raise into a publish path. `fallback=False` skips the deterministic line
+    and returns "" instead: a burned headline must be model-written."""
     import json as _json
     from pathlib import Path
 
@@ -251,7 +253,7 @@ async def generate_hook_line(
             hook_text = hooks[0].text.strip() if hooks else ""
         except Exception:
             hook_text = ""
-        if not hook_text:
+        if not hook_text and fallback:
             from chalybclip.variants.deterministic import deterministic_hook
 
             hook_text = deterministic_hook(
