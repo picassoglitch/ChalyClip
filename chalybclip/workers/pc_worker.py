@@ -350,6 +350,19 @@ def create_worker_app(*, runner: PipelineRunner | None = None) -> FastAPI:
             req = ExportRequest.from_payload(payload)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
+        # The recorder carries a signed query to base_url: only our own configured origin.
+        from chalybclip.jobs.export import configured_render_origin, render_origin
+
+        allowed = configured_render_origin()
+        if allowed is None or render_origin(req.base_url) != allowed:
+            _log.warning(
+                "worker.export_base_url_refused", clip_id=req.clip_id,
+                configured=allowed is not None,
+            )
+            raise HTTPException(status_code=400, detail="base_url is not this service's origin")
+        import dataclasses
+
+        req = dataclasses.replace(req, base_url=allowed)
 
         key = req.job_key
         task = exports.get(key)

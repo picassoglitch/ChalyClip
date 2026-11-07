@@ -30,13 +30,42 @@ _ACCEPT_TIMEOUT_S = 90.0
 _drains: set[asyncio.Task[None]] = set()
 
 
+# What the operator sees; the status, body and exception go to the logs only.
+EXPORT_DISPATCH_USER_ERROR = "No pudimos iniciar la exportación. Reintenta."
+
+
 class ExportDispatchError(ChalybClipError):
-    """The worker never accepted the export (unreachable, refused, misconfigured)."""
+    """The worker never accepted the export (unreachable, refused, misconfigured).
+    The message is for logs; show EXPORT_DISPATCH_USER_ERROR to the operator."""
 
 
 class ExportWorkerMissingError(ExportDispatchError):
     """The endpoint has no /exports route (an older worker or the Modal app):
     the API renders in-process instead."""
+
+
+def configured_render_origin() -> str | None:
+    """`scheme://host[:port]` the export recorder may load /render from, from
+    settings only (CHALYBCLIP_EXPORT_RENDER_BASE_URL, else PUBLIC_URL). None when
+    unset or not http(s): callers fail closed."""
+    from chalybclip.settings import get_settings
+
+    return render_origin(getattr(get_settings(), "export_render_base_url", None))
+
+
+def render_origin(url: str | None) -> str | None:
+    """Normalized origin of `url`, or None when it isn't a usable http(s) URL."""
+    raw = (url or "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = httpx.URL(raw)
+    except Exception:
+        return None
+    if parsed.scheme not in ("http", "https") or not parsed.host:
+        return None
+    port = f":{parsed.port}" if parsed.port else ""
+    return f"{parsed.scheme}://{parsed.host}{port}"
 
 
 def export_worker_url() -> str | None:

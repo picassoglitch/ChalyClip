@@ -48,6 +48,7 @@ def worker_env(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     monkeypatch.setenv("DATABASE_URL", "postgresql://x/test")
     monkeypatch.setenv("CHALYBCLIP_OBJECT_STORAGE_BUCKET", "bucket")
     monkeypatch.setenv("CHALYBCLIP_DEFAULT_OUTPUT_DIR", str(tmp_path))
+    monkeypatch.setenv("CHALYBCLIP_EXPORT_RENDER_BASE_URL", "https://api.example")
     from chalybclip.settings import get_settings
 
     get_settings.cache_clear()
@@ -409,3 +410,56 @@ async def test_api_dispatcher_speaks_the_export_protocol(
     await drain_exports()
     (req,) = seen
     assert (req.quality, req.width, req.height, req.deadline_ts) == ("2k", 1440, 2560, 9e9)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "base_url",
+    ["https://evil.example", "http://169.254.169.254", "https://api.example.evil.example", "file:///etc"],
+)
+async def test_export_refuses_a_base_url_that_is_not_our_origin(
+    worker_env: None, monkeypatch: pytest.MonkeyPatch, base_url: str
+) -> None:
+    """The recorder carries a signed render query to base_url: never to another host."""
+    ran: list[Any] = []
+
+    async def _run(req: Any) -> dict[str, Any]:
+        ran.append(req)
+        return {"status": "ready", "error": None}
+
+    monkeypatch.setattr("chalybclip.workers.export_job.run_export", _run)
+    async with _client(create_worker_app()) as client:
+        r = await client.post("/exports", json=_export_body(base_url=base_url))
+    assert r.status_code == 400
+    assert ran == []
+
+
+@pytest.mark.asyncio
+async def test_export_fails_closed_without_a_configured_origin(
+    worker_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from chalybclip.settings import get_settings
+
+    monkeypatch.delenv("CHALYBCLIP_EXPORT_RENDER_BASE_URL")
+    monkeypatch.delenv("PUBLIC_URL", raising=False)
+    get_settings.cache_clear()
+    async with _client(create_worker_app()) as client:
+        r = await client.post("/exports", json=_export_body())
+    assert r.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_export_renders_against_the_configured_origin(
+    worker_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[Any] = []
+
+    async def _run(req: Any) -> dict[str, Any]:
+        seen.append(req)
+        return {"status": "ready", "error": None}
+
+    monkeypatch.setattr("chalybclip.workers.export_job.run_export", _run)
+    async with _client(create_worker_app()) as client:
+        r = await client.post("/exports", json=_export_body(base_url="https://api.example/x/y"))
+    assert r.status_code == 200
+    assert seen[0].base_url == "https://api.example"

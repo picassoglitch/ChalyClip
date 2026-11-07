@@ -121,3 +121,31 @@ async def test_endpoint_without_exports_route_is_reported_as_missing(
 
     with pytest.raises(ExportWorkerMissingError):
         await _dispatch(handler, monkeypatch)
+
+
+@pytest.mark.parametrize(
+    ("url", "origin"),
+    [
+        ("https://chalybclip.chalyb.com", "https://chalybclip.chalyb.com"),
+        ("https://chalybclip.chalyb.com/", "https://chalybclip.chalyb.com"),
+        ("http://127.0.0.1:58100/x", "http://127.0.0.1:58100"),
+        ("", None),
+        (None, None),
+        ("ftp://host", None),
+        ("not a url", None),
+    ],
+)
+def test_render_origin(url: str | None, origin: str | None) -> None:
+    from chalybclip.jobs.export import render_origin
+
+    assert render_origin(url) == origin
+
+
+def test_render_origin_reads_public_url_alias(monkeypatch: pytest.MonkeyPatch) -> None:
+    from chalybclip.settings import Settings
+
+    monkeypatch.delenv("CHALYBCLIP_EXPORT_RENDER_BASE_URL", raising=False)
+    monkeypatch.setenv("PUBLIC_URL", "https://chalybclip.chalyb.com")
+    assert Settings().export_render_base_url == "https://chalybclip.chalyb.com"
+    monkeypatch.setenv("CHALYBCLIP_EXPORT_RENDER_BASE_URL", "https://render.internal")
+    assert Settings().export_render_base_url == "https://render.internal"

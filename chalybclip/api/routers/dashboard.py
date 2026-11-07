@@ -3939,9 +3939,14 @@ async def _export_redirect(tenant_id: str, clip_id: str, quality: str) -> Respon
 
 
 def _render_base_url(request: Request) -> str:
-    """Origin the headless recorder loads /render from (API or worker side)."""
+    """Origin the in-process recorder loads /render from. Configured origin
+    first; request headers only as the local-dev fallback (pre-existing)."""
+    from chalybclip.jobs.export import configured_render_origin
     from chalybclip.settings import get_settings
 
+    configured = configured_render_origin()
+    if configured:
+        return configured
     explicit_base = (get_settings().public_url or "").strip()
     if explicit_base and explicit_base != "http://localhost:8000":
         return explicit_base
@@ -4491,7 +4496,13 @@ async def _dispatch_export_to_worker(
     import time as _time
 
     from chalybclip.api.routers.internal import sign_render_query
-    from chalybclip.jobs.export import ExportDispatchError, ExportWorkerMissingError, dispatch_export
+    from chalybclip.jobs.export import (
+        EXPORT_DISPATCH_USER_ERROR,
+        ExportDispatchError,
+        ExportWorkerMissingError,
+        configured_render_origin,
+        dispatch_export,
+    )
 
     clip_id = clip.id
     repo = ClipsRepo(db)
@@ -4503,6 +4514,12 @@ async def _dispatch_export_to_worker(
     # before the API would call it dead, however long dispatch and its queue took.
     deadline_ts = _time.time() + max(60, limit_s - 60)
     try:
+        # Never from request headers: the worker opens this URL with a signed query.
+        base_url = configured_render_origin()
+        if base_url is None:
+            raise ExportDispatchError(
+                "no render origin configured (CHALYBCLIP_EXPORT_RENDER_BASE_URL / PUBLIC_URL)"
+            )
         # The page is opened once the job leaves the worker's queue; sign for the whole budget.
         auth_query = sign_render_query(
             clip_id=clip_id, tenant_id=tenant_id, ttl_seconds=limit_s + 300
@@ -4510,7 +4527,7 @@ async def _dispatch_export_to_worker(
         await dispatch_export(
             url=worker_url, tenant_id=tenant_id, clip_id=clip_id,
             quality=resolved_key, width=width, height=height,
-            base_url=_render_base_url(request), auth_query=auth_query,
+            base_url=base_url, auth_query=auth_query,
             render_started_at=started_at, deadline_ts=deadline_ts,
         )
     except ExportWorkerMissingError as e:
@@ -4520,11 +4537,12 @@ async def _dispatch_export_to_worker(
         )
         return "in_process"
     except (ExportDispatchError, RuntimeError) as e:
-        error = f"could not start the export: {e}"[:500]
         import structlog
         structlog.get_logger("chalybclip.api.dashboard").warning(
-            "clip_download.export_dispatch_failed", clip_id=clip_id, error=error,
+            "clip_download.export_dispatch_failed", clip_id=clip_id,
+            error=f"{type(e).__name__}: {e}"[:500],
         )
+        error = EXPORT_DISPATCH_USER_ERROR
         await repo.mark_render_failed(clip_id, error=error, if_started_at=started_at or None)
         return JSONResponse(
             status_code=409,

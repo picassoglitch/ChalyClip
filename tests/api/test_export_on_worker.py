@@ -65,6 +65,7 @@ def env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]:
         "default_output_dir": str(tmp_path),
         "db_path": str(tmp_path / "x.db"),
         "public_url": "https://chalybclip.chalyb.com",
+        "export_render_base_url": "https://chalybclip.chalyb.com",
         "object_storage_presign_ttl_s": 3600,
     })()
     monkeypatch.setattr("chalybclip.settings.get_settings", lambda: settings)
@@ -154,10 +155,10 @@ async def test_worker_refusal_fails_the_click_with_retry(
     assert r.status_code == 409
     body = r.json()
     assert body["state"] == "failed"
-    assert "unreachable" in body["error"]
+    assert body["error"] == "No pudimos iniciar la exportación. Reintenta."
     assert body["retry_url"].endswith("/render-retry?quality=1080")
     row = await _clip(db, tenant_id)
-    assert row.render_state == "failed" and "unreachable" in (row.render_error or "")
+    assert row.render_state == "failed" and row.render_error == body["error"]
 
 
 async def test_finished_export_in_bucket_is_ready_and_downloads_from_any_instance(
@@ -338,3 +339,59 @@ async def test_bucket_export_of_one_quality_downloads_while_another_renders(
     d = await client.get("/dashboard/clips/clp_test/download", headers=auth(tenants["alice"]["token"]))
     assert d.status_code == 302
     assert d.headers["location"] == f"https://storage.example/{key}?sig=1"
+
+
+async def test_forged_host_header_never_reaches_the_worker(
+    client: httpx.AsyncClient, db: Database, tenants: dict[str, dict[str, str]],
+    env: dict[str, Any],
+) -> None:
+    tenant_id = tenants["alice"]["id"]
+    await _seed_clip(db, tenant_id, output_dir=env["tmp"])
+    h = {**auth(tenants["alice"]["token"]), "Host": "evil.example", "X-Forwarded-Proto": "http"}
+    r = await client.get("/dashboard/clips/clp_test/download", headers=h)
+    assert r.status_code == 202
+    assert env["dispatched"][0]["base_url"] == "https://chalybclip.chalyb.com"
+
+
+async def test_no_configured_origin_fails_closed(
+    client: httpx.AsyncClient, db: Database, tenants: dict[str, dict[str, str]],
+    env: dict[str, Any], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from chalybclip.jobs.export import EXPORT_DISPATCH_USER_ERROR
+
+    monkeypatch.setattr("chalybclip.jobs.export.configured_render_origin", lambda: None)
+    tenant_id = tenants["alice"]["id"]
+    await _seed_clip(db, tenant_id, output_dir=env["tmp"])
+    r = await client.get(
+        "/dashboard/clips/clp_test/download",
+        headers={**auth(tenants["alice"]["token"]), "Host": "evil.example"},
+    )
+    assert r.status_code == 409
+    assert r.json()["error"] == EXPORT_DISPATCH_USER_ERROR
+    assert env["dispatched"] == []
+
+
+async def test_dispatch_failure_detail_stays_in_logs(
+    client: httpx.AsyncClient, db: Database, tenants: dict[str, dict[str, str]],
+    env: dict[str, Any], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from structlog.testing import capture_logs
+
+    from chalybclip.jobs.export import EXPORT_DISPATCH_USER_ERROR, ExportDispatchError
+
+    async def _boom(**_kw: Any) -> None:
+        raise ExportDispatchError("export worker answered HTTP 500: DATABASE_URL=postgres://secret")
+
+    monkeypatch.setattr("chalybclip.jobs.export.dispatch_export", _boom)
+    tenant_id = tenants["alice"]["id"]
+    await _seed_clip(db, tenant_id, output_dir=env["tmp"])
+    with capture_logs() as logs:
+        r = await client.get(
+            "/dashboard/clips/clp_test/download", headers=auth(tenants["alice"]["token"])
+        )
+    assert r.json()["error"] == EXPORT_DISPATCH_USER_ERROR
+    assert "secret" not in r.text
+    row = await _clip(db, tenant_id)
+    assert row.render_error == EXPORT_DISPATCH_USER_ERROR
+    assert any("secret" in str(e.get("error")) for e in logs
+               if e.get("event") == "clip_download.export_dispatch_failed")
