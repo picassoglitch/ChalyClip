@@ -23,6 +23,7 @@ one) is also admitted with a warning, since there's no user to bill.
 from __future__ import annotations
 
 import asyncio
+import datetime as _dt
 import logging
 from dataclasses import dataclass, field
 from typing import Any
@@ -32,6 +33,12 @@ import httpx
 from chalybclip.db import Database, TenantsRepo
 from chalybclip.errors import ChalybClipError
 from chalybclip.settings import get_settings
+from chalybclip.tiers import (
+    FREE,
+    FREE_MAX_SOURCE_MINUTES,
+    FREE_VIDEOS_PER_MONTH,
+    normalize_tier,
+)
 
 _log = logging.getLogger("chalybclip.chalyb.admission")
 
@@ -65,6 +72,11 @@ REFUSAL_MESSAGES: dict[str, tuple[int, str]] = {
         429,
         "Llegaste al límite de minutos procesados de este mes. Se renueva el "
         "próximo ciclo, o puedes mejorar tu plan.",
+    ),
+    "videos_cap": (
+        429,
+        "Tu plan Gratis incluye 1 video al mes. Se renueva el día 1, o puedes "
+        "mejorar tu plan.",
     ),
     "jobs_cap": (
         429,
@@ -108,6 +120,10 @@ REFUSAL_MESSAGES: dict[str, tuple[int, str]] = {
         "de nuevo en unos minutos.",
     ),
 }
+FREE_TOO_LONG_MESSAGE = (
+    f"Tu plan Gratis permite videos de hasta {int(FREE_MAX_SOURCE_MINUTES)} minutos. "
+    "Recórtalo o mejora tu plan."
+)
 _UNKNOWN_REFUSAL = (
     429,
     "Tu plan no permite procesar este video en este momento.",
@@ -124,8 +140,10 @@ class AdmissionRefused(ChalybClipError):
         *,
         detail: dict[str, Any] | None = None,
         length_known: bool = False,
+        message: str | None = None,
     ):
-        status, message = REFUSAL_MESSAGES.get(reason, _UNKNOWN_REFUSAL)
+        status, default_message = REFUSAL_MESSAGES.get(reason, _UNKNOWN_REFUSAL)
+        message = message or default_message
         super().__init__(message)
         self.reason = reason
         self.status_code = status
@@ -207,6 +225,10 @@ async def admit(
         )
         return _local_result()
 
+    is_free = normalize_tier(tenant.tier) == FREE
+    if is_free:
+        await _check_free_plan(db, tenant_id=tenant_id, request=request)
+
     body: dict[str, Any] = {
         "external_user_id": tenant.external_user_id,
         "external_job_id": request.external_job_id,
@@ -273,7 +295,10 @@ async def admit(
             request.external_job_id,
         )
         raise AdmissionRefused(
-            reason, detail=data, length_known=request.source_minutes > 0
+            reason,
+            detail=data,
+            length_known=request.source_minutes > 0,
+            message=FREE_TOO_LONG_MESSAGE if is_free and reason == "video_too_long" else None,
         )
 
     result = AdmitResult(
@@ -290,6 +315,37 @@ async def admit(
         body["est_tokens"],
     )
     return result
+
+
+async def _check_free_plan(db: Database, *, tenant_id: str, request: AdmitRequest) -> None:
+    """Free = 1 video a month up to FREE_MAX_SOURCE_MINUTES. Refuse here, in
+    the plan's words and before any bytes move; the hub's own caps
+    (minutes, credits) stay the backstop. Only pipeline runs count."""
+    if request.job_class != "job" or request.operation != "clips.pipeline":
+        return
+    if request.source_minutes > FREE_MAX_SOURCE_MINUTES:
+        raise AdmissionRefused(
+            "video_too_long",
+            detail={"max_source_minutes": FREE_MAX_SOURCE_MINUTES},
+            length_known=True,
+            message=FREE_TOO_LONG_MESSAGE,
+        )
+    from chalybclip.db.usage_repos import count_videos_since
+
+    now = _dt.datetime.now(_dt.UTC)
+    # Calendar month in UTC, like the hub's usage_period_start().
+    month_start = _dt.datetime(now.year, now.month, 1, tzinfo=_dt.UTC).isoformat()
+    used = await count_videos_since(
+        db,
+        tenant_id=tenant_id,
+        operation=request.operation,
+        since_iso=month_start,
+        exclude_job_id=request.external_job_id,
+    )
+    if used >= FREE_VIDEOS_PER_MONTH:
+        raise AdmissionRefused(
+            "videos_cap", detail={"used": used, "cap": FREE_VIDEOS_PER_MONTH}
+        )
 
 
 def _json_or_empty(resp: httpx.Response) -> dict[str, Any]:

@@ -315,6 +315,31 @@ async def tenant_storage_bytes(db: Database, tenant_id: str) -> int:
     return int(row["n"] or 0) if row is not None else 0
 
 
+async def count_videos_since(
+    db: Database,
+    *,
+    tenant_id: str,
+    operation: str,
+    since_iso: str,
+    exclude_job_id: str | None = None,
+) -> int:
+    """Pipeline runs a tenant started since `since_iso`: finished ones
+    (succeeded or failed — a failed run still spent) and admitted ones whose
+    stream exists. An upload admitted but never completed has no stream row,
+    so walking away from it doesn't use up the month."""
+    conn = await db.connect()
+    cur = await conn.execute(
+        "SELECT COUNT(*) AS n FROM usage_jobs j WHERE j.tenant_id = ? "
+        "AND j.operation = ? AND j.job_class = 'job' AND j.created_at >= ? "
+        "AND j.id <> ? AND (j.status IN ('succeeded', 'failed') OR "
+        "(j.status = 'admitted' AND EXISTS (SELECT 1 FROM streams s "
+        "WHERE s.id = j.stream_id AND s.tenant_id = j.tenant_id)))",
+        (tenant_id, operation, since_iso, exclude_job_id or ""),
+    )
+    row = await cur.fetchone()
+    return int(row["n"] or 0) if row is not None else 0
+
+
 async def set_stream_storage_bytes(
     db: Database, *, tenant_id: str, stream_id: str, storage_bytes: int
 ) -> None:
