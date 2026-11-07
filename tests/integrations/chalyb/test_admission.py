@@ -45,9 +45,13 @@ def chalyb_env(monkeypatch: pytest.MonkeyPatch):
     get_settings.cache_clear()
 
 
-async def _linked_tenant(db: Database) -> str:
+async def _linked_tenant(db: Database, tier: str = "pro") -> str:
+    # Paid by default: Free's engine-side limits live in test_hub_upload_credits.py.
     t = await TenantsRepo(db).create(name="T")
     await TenantsRepo(db).set_external_user_id(t.id, "user-uuid")
+    conn = await db.connect()
+    await conn.execute("UPDATE tenants SET tier = ? WHERE id = ?", (tier, t.id))
+    await conn.commit()
     return t.id
 
 
@@ -80,6 +84,7 @@ def test_every_contract_reason_has_a_message() -> None:
     contract = {
         "upload_too_large", "video_too_long", "storage_full", "minutes_cap",
         "jobs_cap", "concurrency", "streams_cap", "no_tokens", "boost_unavailable",
+        "videos_cap",
     }
     assert contract <= set(REFUSAL_MESSAGES)
 
