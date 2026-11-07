@@ -3127,7 +3127,7 @@ class BrandKitsRepo:
         safe_schedule_enabled: bool = False,
         safety_policy: dict[str, object] | None = None,
         content_timezone: str = "UTC",
-        show_chalybclip_outro: bool = True,
+        show_chalybclip_outro: bool = False,
     ) -> BrandKitRow:
         tenant_id = current_tenant_id()
         kit_id = new_id("brk")

@@ -117,9 +117,9 @@ async def test_migration_keeps_every_reference_and_backfills(tmp_path: Path) -> 
         )
         await conn.commit()
 
-        assert await apply_migrations(db) == 61
+        assert await apply_migrations(db) == 62
         # Idempotent.
-        assert await apply_migrations(db) == 61
+        assert await apply_migrations(db) == 62
 
         cur = await conn.execute(
             "SELECT tenant_id, name, voice_prompt FROM personas WHERE id = 'default' "

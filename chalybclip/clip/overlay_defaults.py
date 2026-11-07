@@ -71,7 +71,10 @@ def default_overlay_config(
     }
     hook = (hook or "").strip()
     if hook:
-        cfg["top_hook"] = {"enabled": True, "text": hook, "style": "white_rounded"}
+        # `auto` tells a pipeline stamp apart from an editor headline on re-runs.
+        cfg["top_hook"] = {
+            "enabled": True, "text": hook, "style": "white_rounded", "auto": True,
+        }
     banner = source_banner(platform, channel)
     if banner:
         cfg["banner"] = banner

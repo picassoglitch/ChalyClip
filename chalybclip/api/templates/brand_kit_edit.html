@@ -215,24 +215,23 @@
       it (Aldo, 2026-10-15). The stamp itself is unchanged. -#}
   {%- set _tier = (request.state.tenant_tier if request and request.state else 'free') -%}
 
-  {#- ChalyClip end-card outro toggle (migration 050).
+  {#- Chalyb end-card outro toggle (migration 050).
 
-      A short bundled chalybclip end card is appended to every exported
-      clip. Free tenants always get it (hidden value=1 + info chip);
-      paid tenants can switch it off via `show_chalybclip_outro`. The
-      server forces it ON for free tier regardless of what's posted. -#}
+      Free tenants always get the end card (hidden value=1 + info chip;
+      the server forces it ON regardless of what's posted). Paid kits
+      start with it OFF and can opt in (owner, 2026-11-07). -#}
   <div class="nc-panel">
     <div class="nc-panel__header">
       <i class="ti ti-movie" aria-hidden="true" style="color: var(--nc-lime, #c8ff5c);"></i>
-      <span class="nc-panel__title">Cierre ChalyClip</span>
-      <small>— una breve placa final de ChalyClip al terminar cada clip</small>
+      <span class="nc-panel__title">Cierre Chalyb</span>
+      <small>— una breve placa final de Chalyb al terminar cada clip</small>
     </div>
     <div class="nc-panel__body">
       {% if _tier == 'free' %}
       <div class="nc-empty" style="margin: 0; padding: 12px 14px; text-align: left;">
         <strong style="color: var(--nc-lime, #c8ff5c);">Plan gratis</strong>
         <span style="color: var(--nc-text-muted);">
-          — la placa final de ChalyClip se añade a todos tus clips.
+          — la placa final de Chalyb se añade a todos tus clips.
           Pásate a un plan Pro para quitarla.
         </span>
       </div>
@@ -240,10 +239,10 @@
       {% else %}
       <label class="nc-checkbox">
         <input type="checkbox" name="show_chalybclip_outro" value="1"
-               {% if not kit or kit.show_chalybclip_outro %}checked{% endif %}>
-        <span>Añadir la placa final de ChalyClip a tus clips
+               {% if kit and kit.show_chalybclip_outro %}checked{% endif %}>
+        <span>Añadir la placa final de Chalyb a tus clips
           <small style="display:block;color:var(--nc-text-muted);">
-            Activado por defecto. Apágalo para terminar el clip sin cierre de marca.
+            Desactivado por defecto. Actívalo para cerrar cada clip con la placa de Chalyb.
           </small>
         </span>
       </label>

@@ -11,7 +11,7 @@ from chalybclip.db.migrations import MigrationError, _discover_migrations
 
 from .._db_backend import pg_enabled
 
-_CURRENT_HEAD = 61  # bumped each time we add a migration (061_backfill_default_personas)
+_CURRENT_HEAD = 62  # bumped each time we add a migration (062_paid_brand_kits_outro_off)
 
 # These assert SQLite implementation details (sqlite_master, PRAGMA). The
 # Postgres schema + FK enforcement are covered by test_pg_migration.py.
