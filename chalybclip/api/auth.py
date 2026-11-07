@@ -307,6 +307,9 @@ def _unauthorized(request: Request, detail: str) -> Response:
         except Exception:  # noqa: BLE001 — settings unreachable, hardcode default
             login_url = ""
         target = login_url or "https://chalyb.com/login"
+        from chalybclip.api.hub_links import hub_url, request_hub_lang
+
+        target = hub_url(target, request_hub_lang(request))
         return RedirectResponse(url=target, status_code=status.HTTP_303_SEE_OTHER)
     return JSONResponse(
         status_code=status.HTTP_401_UNAUTHORIZED,

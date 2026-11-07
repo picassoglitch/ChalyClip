@@ -755,12 +755,14 @@ async def _merged_personas(db: Database) -> list[object]:
 
 
 @router.post("/logout")
-async def logout() -> Response:
+async def logout(request: Request) -> Response:
     """Clear our session cookie + bounce to chalyb. No in-house login
     page exists anymore for the redirect to land on."""
+    from chalybclip.api.hub_links import hub_url, request_hub_lang
     from chalybclip.settings import get_settings
+
     target = (get_settings().chalyb_login_url or "https://chalyb.com/login").strip()
-    response = RedirectResponse(url=target, status_code=303)
+    response = RedirectResponse(url=hub_url(target, request_hub_lang(request)), status_code=303)
     response.delete_cookie(_COOKIE_NAME)
     return response
 

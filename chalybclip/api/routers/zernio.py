@@ -1784,7 +1784,9 @@ def autopilot_allowed_tier(tier: str | None) -> bool:
     return normalize_tier(tier) in TOP_TIERS
 
 
-def _autopilot_paywall() -> HTTPException:
+def _autopilot_paywall(request: Request) -> HTTPException:
+    from chalybclip.api.hub_links import hub_url, request_hub_lang
+
     return HTTPException(
         status_code=402,
         detail={
@@ -1793,7 +1795,7 @@ def _autopilot_paywall() -> HTTPException:
                 "El piloto automático es parte del plan VIP. Puedes publicar "
                 "y programar tus clips a mano, o subir tu plan."
             ),
-            "upgrade_url": "https://chalyb.com/app/planes",
+            "upgrade_url": hub_url("https://chalyb.com/app/planes", request_hub_lang(request)),
         },
     )
 _AUTOPUBLISH_POST_MODES = ("queue", "now")
@@ -1850,7 +1852,7 @@ async def zernio_autopublish_save(
     if bool(data.get("enabled")) and not autopilot_allowed_tier(
         getattr(request.state, "tenant_tier", None)
     ):
-        raise _autopilot_paywall()
+        raise _autopilot_paywall(request)
     mode = str(data.get("mode") or "on_approve")
     if mode not in _AUTOPUBLISH_MODES:
         mode = "on_approve"

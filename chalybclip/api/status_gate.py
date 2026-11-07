@@ -32,6 +32,8 @@ from __future__ import annotations
 
 from fastapi import HTTPException, Request, status
 
+from chalybclip.api.hub_links import hub_url, request_hub_lang
+
 
 def require_active_tenant(request: Request) -> None:
     """Refuse the request if the bound tenant is paused or cancelled.
@@ -101,7 +103,7 @@ def require_paid_tier(request: Request) -> None:
                 "descargar el clip con la marca de agua de ChalyClip, o subir "
                 "tu plan."
             ),
-            "upgrade_url": "https://chalyb.com/app/subscription",
+            "upgrade_url": hub_url("https://chalyb.com/app/subscription", request_hub_lang(request)),
         },
     )
 
@@ -131,6 +133,6 @@ def require_top_tier(request: Request) -> None:
                 "VIP. Puedes descargar el clip y publicarlo "
                 "manualmente, o subir tu plan."
             ),
-            "upgrade_url": "https://chalyb.com/app/subscription",
+            "upgrade_url": hub_url("https://chalyb.com/app/subscription", request_hub_lang(request)),
         },
     )
