@@ -88,10 +88,18 @@ class ArtifactStore(Protocol):
     """
 
     async def upload(
-        self, *, local_path: Path, key: str, content_type: str | None = None
+        self,
+        *,
+        local_path: Path,
+        key: str,
+        content_type: str | None = None,
+        content_disposition: str | None = None,
+        metadata: dict[str, str] | None = None,
     ) -> None: ...
 
     async def download(self, *, key: str, dest: Path) -> Path | None: ...
+
+    async def metadata(self, *, key: str) -> dict[str, str] | None: ...
 
     async def presigned_url(self, *, key: str, ttl_seconds: int) -> str: ...
 
@@ -137,13 +145,25 @@ class S3ArtifactStore:
         return f"{self._public_base}/{self._full(key)}"
 
     async def upload(
-        self, *, local_path: Path, key: str, content_type: str | None = None
+        self,
+        *,
+        local_path: Path,
+        key: str,
+        content_type: str | None = None,
+        content_disposition: str | None = None,
+        metadata: dict[str, str] | None = None,
     ) -> None:
-        extra = {"ContentType": content_type} if content_type else None
+        extra: dict[str, Any] = {}
+        if content_type:
+            extra["ContentType"] = content_type
+        if content_disposition:
+            extra["ContentDisposition"] = content_disposition
+        if metadata:
+            extra["Metadata"] = dict(metadata)
         await asyncio.to_thread(
             self._client.upload_file,
             str(local_path), self._bucket, self._full(key),
-            extra,  # ExtraArgs (positional in boto3.upload_file)
+            extra or None,  # ExtraArgs (positional in boto3.upload_file)
         )
 
     async def download(self, *, key: str, dest: Path) -> Path | None:
@@ -192,6 +212,23 @@ class S3ArtifactStore:
 
         return await asyncio.to_thread(_head)
 
+    async def metadata(self, *, key: str) -> dict[str, str] | None:
+        """The object's user metadata (lower-cased keys), or None when the
+        object doesn't exist. An existing object without metadata → {}.
+        Other errors (403, timeouts) raise: they must not read as "missing"."""
+
+        def _head() -> dict[str, str] | None:
+            try:
+                resp = self._client.head_object(Bucket=self._bucket, Key=self._full(key))
+            except Exception as e:
+                if _is_not_found(e):
+                    return None
+                raise
+            raw = resp.get("Metadata") or {}
+            return {str(k).lower(): str(v) for k, v in raw.items()}
+
+        return await asyncio.to_thread(_head)
+
     async def exists(self, *, key: str) -> bool:
         def _head() -> bool:
             try:
@@ -208,6 +245,14 @@ class S3ArtifactStore:
                 self._client.delete_object,
                 Bucket=self._bucket, Key=self._full(key),
             )
+
+
+def _is_not_found(e: Exception) -> bool:
+    """botocore ClientError for a missing key (HEAD answers a bare 404)."""
+    err = getattr(e, "response", None) or {}
+    code = str((err.get("Error") or {}).get("Code") or "")
+    status = (err.get("ResponseMetadata") or {}).get("HTTPStatusCode")
+    return code in ("404", "NoSuchKey", "NotFound") or status == 404
 
 
 def _s3_config() -> Any:
@@ -290,6 +335,7 @@ def build_recording_store(settings: Settings) -> RecordingStore | None:
 
 
 from .keys import (  # noqa: E402 — re-export the key builders
+    clip_export_key,
     clip_key_family,
     clip_landscape_key,
     clip_media_key,
@@ -305,6 +351,7 @@ __all__ = [
     "S3RecordingStore",
     "build_artifact_store",
     "build_recording_store",
+    "clip_export_key",
     "clip_key_family",
     "clip_landscape_key",
     "clip_media_key",

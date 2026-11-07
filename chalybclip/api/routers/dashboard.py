@@ -13,6 +13,7 @@ import contextlib
 import json
 from collections.abc import Mapping
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from fastapi import (
     APIRouter,
@@ -49,11 +50,14 @@ from chalybclip.db import (
     VariantsRepo,
     ZernioPublishesRepo,
 )
-from chalybclip.db.models import CustomTriggerPhrases
+from chalybclip.db.models import ClipRow, CustomTriggerPhrases
 from chalybclip.errors import ChalybClipError
 from chalybclip.integrations.chalyb.admission import AdmissionRefused
 from chalybclip.jobs.usage import admit_job, cancel_admission, readmit_job
 from chalybclip.settings import resolve_db_target
+
+if TYPE_CHECKING:
+    from chalybclip.integrations.storage import ArtifactStore
 
 from .._admission import parse_boost, refusal_http
 from .._pipeline import PipelineKickoff
@@ -3894,6 +3898,58 @@ def _resolve_export_resolution(tier: str, choice: str) -> tuple[str, int, int]:
     return requested, w, h
 
 
+def _export_store() -> ArtifactStore | None:
+    from chalybclip.integrations.storage import build_artifact_store
+    from chalybclip.settings import get_settings
+
+    return build_artifact_store(get_settings())
+
+
+async def _bucket_export_ready(
+    db: Database, tenant_id: str, clip: ClipRow, quality: str, *, skip_while_rendering: bool = False
+) -> bool:
+    """A finished export of the clip's current state is in the bucket. The 1/s
+    status poll skips it mid-render so it doesn't HEAD the bucket every second."""
+    if skip_while_rendering and clip.render_state == "rendering":
+        return False
+    from chalybclip.clip.export_cache import export_in_bucket
+
+    try:
+        return await export_in_bucket(
+            _export_store(), db, tenant_id=tenant_id, clip=clip, quality=quality
+        )
+    except Exception as e:  # unreadable bucket: re-render rather than 500, but say so
+        import structlog
+        structlog.get_logger("chalybclip.api.dashboard").warning(
+            "clip_export.bucket_check_failed", clip_id=clip.id, quality=quality,
+            error=f"{type(e).__name__}: {e}"[:300],
+        )
+        return False
+
+
+async def _export_redirect(tenant_id: str, clip_id: str, quality: str) -> Response:
+    from fastapi.responses import RedirectResponse
+
+    from chalybclip.clip.export_cache import export_redirect_url
+
+    store = _export_store()
+    assert store is not None  # only called after _bucket_export_ready found the object
+    url = await export_redirect_url(store, tenant_id=tenant_id, clip_id=clip_id, quality=quality)
+    return RedirectResponse(url=url, status_code=302)
+
+
+def _render_base_url(request: Request) -> str:
+    """Origin the headless recorder loads /render from (API or worker side)."""
+    from chalybclip.settings import get_settings
+
+    explicit_base = (get_settings().public_url or "").strip()
+    if explicit_base and explicit_base != "http://localhost:8000":
+        return explicit_base
+    scheme = request.headers.get("x-forwarded-proto") or request.url.scheme or "https"
+    host = request.headers.get("host") or request.url.netloc
+    return f"{scheme}://{host}"
+
+
 @router.get("/clips/{clip_id}/render-status")
 async def clip_render_status(
     request: Request,
@@ -3973,6 +4029,16 @@ async def clip_render_status(
             except OSError:
                 pass
 
+    if await _bucket_export_ready(db, tenant_id, clip, resolved_key, skip_while_rendering=True):
+        return JSONResponse(
+            {
+                "state": "ready",
+                "progress_pct": 100,
+                "error": None,
+                "download_url": f"/dashboard/clips/{clip_id}/download?quality={quality}",
+            }
+        )
+
     # Render Migration R6 — zombie detection. The background runner
     # SHOULD mark_render_failed before returning, but R5 + the outer
     # guard in render_clip_in_background only fix that going forward;
@@ -4032,10 +4098,14 @@ async def clip_render_status(
             # current state.
             pass
 
+    state = clip.render_state or "idle"
+    if state == "ready":
+        # Ready for another quality or an older edit; nothing servable for this one.
+        state = "idle"
     return JSONResponse(
         {
-            "state": clip.render_state or "idle",
-            "progress_pct": int(clip.render_progress_pct or 0),
+            "state": state,
+            "progress_pct": int(clip.render_progress_pct or 0) if state != "idle" else 0,
             "error": clip.render_error,
             # No download_url until state="ready" — UI keeps the button
             # disabled.
@@ -4092,6 +4162,17 @@ async def clip_render_retry(
             p.unlink(missing_ok=True)
         except OSError:
             pass
+    from chalybclip.clip.export_cache import drop_export
+
+    try:
+        await drop_export(
+            _export_store(), tenant_id=tenant_id, clip_id=clip_id, quality=resolved_key
+        )
+    except Exception as e:  # retry still resets state; the edit fingerprint guards staleness
+        import structlog
+        structlog.get_logger("chalybclip.api.dashboard").warning(
+            "clip_export.bucket_drop_failed", clip_id=clip_id, error=f"{type(e).__name__}: {e}"[:300],
+        )
     await ClipsRepo(db).reset_render_state(clip_id)
     return JSONResponse(
         {
@@ -4232,6 +4313,9 @@ async def clip_download(
         except Exception:  # noqa: BLE001 — best-effort
             pass
 
+    if await _bucket_export_ready(db, tenant_id, clip, resolved_key):
+        return await _export_redirect(tenant_id, clip_id, resolved_key)
+
     # Failed render — surface the error + tell UI to show retry button.
     if clip.render_state == "failed":
         return JSONResponse(
@@ -4299,6 +4383,27 @@ async def clip_download(
     # Idle (default) — schedule the background render. The repo
     # transition is atomic on (state != 'rendering') so a concurrent
     # request for the same clip is a no-op.
+    from chalybclip.jobs.export import export_worker_url
+
+    status_body = {
+        "state": "rendering",
+        "progress_pct": 0,
+        "error": None,
+        "status_url": f"/dashboard/clips/{clip_id}/render-status?quality={quality}",
+    }
+    worker_url = export_worker_url()
+    if worker_url is not None:
+        # The worker pulls the source from the bucket itself; nothing to rehydrate here.
+        outcome = await _dispatch_export_to_worker(
+            request, db, clip, worker_url,
+            tenant_id=tenant_id, quality=quality, resolved_key=resolved_key,
+            width=target_w, height=target_h,
+        )
+        if outcome is None:
+            return JSONResponse(status_code=202, content=status_body)
+        if outcome != "in_process":
+            return outcome  # type: ignore[return-value]
+
     if not original.exists():
         # Phase 2a — the local copy may have been reclaimed (retention,
         # or the pipeline ran on a worker). The render needs real local
@@ -4313,23 +4418,12 @@ async def clip_download(
             )
 
     await ClipsRepo(db).mark_render_started(clip_id)
+    started = await ClipsRepo(db).get(clip_id)
+    uploader = await _bucket_uploader(db, tenant_id, started or clip, resolved_key)
 
-    # Build the base URL the background recorder uses to dial back
-    # into this server. Same logic the legacy inline path used.
     from chalybclip.settings import get_settings
     settings = get_settings()
     cookie_val = request.cookies.get("chalybclip_token", "")
-    explicit_base = (settings.public_url or "").strip()
-    if explicit_base and explicit_base != "http://localhost:8000":
-        base_url = explicit_base
-    else:
-        scheme = (
-            request.headers.get("x-forwarded-proto")
-            or request.url.scheme
-            or "https"
-        )
-        host = request.headers.get("host") or request.url.netloc
-        base_url = f"{scheme}://{host}"
 
     from chalybclip.api._clip_render import render_clip_in_background
     background_tasks.add_task(
@@ -4339,21 +4433,109 @@ async def clip_download(
         duration_s=float(clip.duration_s),
         audio_source_path=original,
         output_path=rendered,
-        base_url=base_url,
+        base_url=_render_base_url(request),
         auth_cookie_value=cookie_val or None,
         width=target_w,
         height=target_h,
         db_path=resolve_db_target(settings),
+        on_rendered=uploader,
+        render_started_at=getattr(started, "render_started_at", None),
     )
-    return JSONResponse(
-        status_code=202,
-        content={
-            "state": "rendering",
-            "progress_pct": 0,
-            "error": None,
-            "status_url": f"/dashboard/clips/{clip_id}/render-status?quality={quality}",
-        },
-    )
+    return JSONResponse(status_code=202, content=status_body)
+
+
+async def _bucket_uploader(db: Database, tenant_id: str, clip: ClipRow, quality: str) -> Any:
+    """Also park an in-process export in the bucket so other instances serve it.
+    Best-effort: the local MP4 is still served when the upload fails."""
+    store = _export_store()
+    if store is None:
+        return None
+    from chalybclip.clip.export_cache import current_fingerprint, upload_export
+
+    fingerprint = await current_fingerprint(db, tenant_id=tenant_id, clip=clip, quality=quality)
+    if fingerprint is None:
+        return None
+
+    async def _upload(path: Path) -> None:
+        try:
+            await upload_export(
+                store,
+                tenant_id=tenant_id, clip_id=clip.id, quality=quality,
+                fingerprint=fingerprint, local_path=path,
+            )
+        except Exception as e:  # the local file still serves this instance
+            import structlog
+            structlog.get_logger("chalybclip.api.dashboard").warning(
+                "clip_export.bucket_upload_failed", clip_id=clip.id,
+                error=f"{type(e).__name__}: {e}"[:300],
+            )
+
+    return _upload
+
+
+async def _dispatch_export_to_worker(
+    request: Request,
+    db: Database,
+    clip: ClipRow,
+    worker_url: str,
+    *,
+    tenant_id: str,
+    quality: str,
+    resolved_key: str,
+    width: int,
+    height: int,
+) -> Response | str | None:
+    """Flip to rendering and hand the export to the worker. None once it's
+    accepted; "in_process" when the endpoint has no /exports (render here);
+    otherwise the 409 failed answer."""
+    import time as _time
+
+    from chalybclip.api.routers.internal import sign_render_query
+    from chalybclip.jobs.export import ExportDispatchError, ExportWorkerMissingError, dispatch_export
+
+    clip_id = clip.id
+    repo = ClipsRepo(db)
+    await repo.mark_render_started(clip_id)
+    started = await repo.get(clip_id)
+    started_at = getattr(started, "render_started_at", None) or ""
+    limit_s = _render_zombie_timeout_s(clip.duration_s, quality)
+    # Absolute deadline from the zombie clock's start: the worker gives up a minute
+    # before the API would call it dead, however long dispatch and its queue took.
+    deadline_ts = _time.time() + max(60, limit_s - 60)
+    try:
+        # The page is opened once the job leaves the worker's queue; sign for the whole budget.
+        auth_query = sign_render_query(
+            clip_id=clip_id, tenant_id=tenant_id, ttl_seconds=limit_s + 300
+        )
+        await dispatch_export(
+            url=worker_url, tenant_id=tenant_id, clip_id=clip_id,
+            quality=resolved_key, width=width, height=height,
+            base_url=_render_base_url(request), auth_query=auth_query,
+            render_started_at=started_at, deadline_ts=deadline_ts,
+        )
+    except ExportWorkerMissingError as e:
+        import structlog
+        structlog.get_logger("chalybclip.api.dashboard").warning(
+            "clip_download.export_worker_missing", clip_id=clip_id, error=str(e)[:200],
+        )
+        return "in_process"
+    except (ExportDispatchError, RuntimeError) as e:
+        error = f"could not start the export: {e}"[:500]
+        import structlog
+        structlog.get_logger("chalybclip.api.dashboard").warning(
+            "clip_download.export_dispatch_failed", clip_id=clip_id, error=error,
+        )
+        await repo.mark_render_failed(clip_id, error=error, if_started_at=started_at or None)
+        return JSONResponse(
+            status_code=409,
+            content={
+                "state": "failed",
+                "progress_pct": 0,
+                "error": error,
+                "retry_url": f"/dashboard/clips/{clip_id}/render-retry?quality={quality}",
+            },
+        )
+    return None
 
 
 async def _resolve_overlay_context(db: Database, clip: object) -> dict:

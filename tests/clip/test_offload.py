@@ -208,3 +208,13 @@ def test_render_key_matches_publish_router_contract() -> None:
         artifact_key_for_clip("ten_a", "clp_1")
         == "clips/ten_a/clp_1/clip_render_1080.mp4"
     )
+
+
+def test_key_family_covers_every_export_resolution() -> None:
+    from chalybclip.integrations.storage import clip_export_key
+
+    fam = clip_key_family("ten_a", "clp_1")
+    for q in ("1080", "2k", "4k"):
+        assert clip_export_key("ten_a", "clp_1", resolution=q) in fam
+    # The export never shares the publish render's key (Retry drops it).
+    assert clip_export_key("ten_a", "clp_1") != clip_render_key("ten_a", "clp_1")

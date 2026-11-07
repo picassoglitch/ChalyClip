@@ -5,6 +5,7 @@ One key family per clip, tenant-namespaced under `clips/`:
     clips/<tenant_id>/<clip_id>/clip.mp4              — the cut original
     clips/<tenant_id>/<clip_id>/thumbnail.jpg          — inbox-card thumbnail
     clips/<tenant_id>/<clip_id>/clip_render_1080.mp4   — burned publish render
+    clips/<tenant_id>/<clip_id>/export_<res>.mp4       — editor "Descargar video" export
 
 Lives here (not in `chalybclip/api`) so the pipeline and retention can build
 keys without importing the API layer. `api/routers/internal.py` re-exports
@@ -29,6 +30,16 @@ def clip_render_key(tenant_id: str, clip_id: str, *, resolution: str = "1080") -
     return f"clips/{tenant_id}/{clip_id}/clip_render_{resolution}.mp4"
 
 
+# Export resolutions an editor download can produce (dashboard _EXPORT_RESOLUTIONS).
+EXPORT_RESOLUTIONS: tuple[str, ...] = ("1080", "2k", "4k")
+
+
+def clip_export_key(tenant_id: str, clip_id: str, *, resolution: str = "1080") -> str:
+    """Key for the editor's downloadable export at `resolution`. Separate from
+    the publish render so a Retry can drop it without breaking a scheduled post."""
+    return f"clips/{tenant_id}/{clip_id}/export_{resolution}.mp4"
+
+
 def clip_landscape_key(tenant_id: str, clip_id: str) -> str:
     """Key for the full-frame cut (`clip_landscape.mp4`) the horizontal and
     square formats are derived from (chalybclip.clip.formats)."""
@@ -49,10 +60,13 @@ def clip_key_family(tenant_id: str, clip_id: str) -> list[str]:
         clip_thumbnail_key(tenant_id, clip_id),
         clip_render_key(tenant_id, clip_id),
         clip_landscape_key(tenant_id, clip_id),
+        *(clip_export_key(tenant_id, clip_id, resolution=r) for r in EXPORT_RESOLUTIONS),
     ]
 
 
 __all__ = [
+    "EXPORT_RESOLUTIONS",
+    "clip_export_key",
     "clip_key_family",
     "clip_landscape_key",
     "clip_media_key",

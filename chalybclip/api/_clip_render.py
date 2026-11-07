@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -150,6 +151,29 @@ def _safe_unlink(path: Path) -> None:
         )
 
 
+class _RenderGeneration:
+    """ClipsRepo render-state writes limited to one render generation."""
+
+    def __init__(self, repo: object, started_at: str | None) -> None:
+        self._repo = repo
+        self._started_at = started_at
+
+    async def update_render_progress(self, clip_id: str, *, pct: int) -> None:
+        await self._repo.update_render_progress(  # type: ignore[attr-defined]
+            clip_id, pct=pct, if_started_at=self._started_at
+        )
+
+    async def mark_render_ready(self, clip_id: str) -> None:
+        await self._repo.mark_render_ready(  # type: ignore[attr-defined]
+            clip_id, if_started_at=self._started_at
+        )
+
+    async def mark_render_failed(self, clip_id: str, *, error: str) -> None:
+        await self._repo.mark_render_failed(  # type: ignore[attr-defined]
+            clip_id, error=error, if_started_at=self._started_at
+        )
+
+
 async def render_clip_in_background(
     *,
     clip_id: str,
@@ -163,8 +187,16 @@ async def render_clip_in_background(
     height: int,
     db_path: str,
     auth_query: str = "",
+    on_rendered: Callable[[Path], Awaitable[None]] | None = None,
+    render_started_at: str | None = None,
 ) -> None:
     """Run the headless-Chromium recorder and update clip.render_state.
+
+    `on_rendered` runs on the validated MP4 before the clip flips to ready
+    (the export worker uploads it to the bucket there); if it raises, the
+    render is marked failed instead. `render_started_at` pins every state
+    write to that render generation, so a superseded render can't clobber
+    a newer one's progress, ready or failed.
 
     This is the function the download endpoint schedules via
     BackgroundTasks. It opens its own DB connection (the request's
@@ -199,6 +231,9 @@ async def render_clip_in_background(
 
     db = Database(db_path)
     await db.connect()
+
+    def _gen(repo: ClipsRepo) -> _RenderGeneration:
+        return _RenderGeneration(repo, render_started_at)
     # Render Migration R5 — outer guard. ANY unhandled exception below
     # leaves state stuck at 'rendering' → operator's UI polls forever
     # with no way to retry. Wrap the whole body so a stray crash (in
@@ -223,7 +258,7 @@ async def render_clip_in_background(
             last_pct_written["ts"] = now
             try:
                 with bound_tenant(tenant_id):
-                    await ClipsRepo(db).update_render_progress(
+                    await _gen(ClipsRepo(db)).update_render_progress(
                         clip_id, pct=pct,
                     )
             except Exception:  # noqa: BLE001 — observability never blocks
@@ -307,7 +342,7 @@ async def render_clip_in_background(
             # Plan unknown → fail retryable instead of guessing paid vs free branding.
             _safe_unlink(output_path)
             with bound_tenant(tenant_id):
-                await ClipsRepo(db).mark_render_failed(
+                await _gen(ClipsRepo(db)).mark_render_failed(
                     clip_id, error="No pudimos leer tu plan. Reintenta la descarga.",
                 )
             _log.warning("render_clip.tier_unknown clip=%s error=%s", clip_id, e)
@@ -368,7 +403,7 @@ async def render_clip_in_background(
             # doesn't read as "going backwards" after the hybrid bailed.
             try:
                 with bound_tenant(tenant_id):
-                    await ClipsRepo(db).update_render_progress(
+                    await _gen(ClipsRepo(db)).update_render_progress(
                         clip_id, pct=0,
                     )
             except Exception:  # noqa: BLE001
@@ -406,7 +441,7 @@ async def render_clip_in_background(
             # ahead of the 409 + retry hint.
             _safe_unlink(output_path)
             with bound_tenant(tenant_id):
-                await ClipsRepo(db).mark_render_failed(
+                await _gen(ClipsRepo(db)).mark_render_failed(
                     clip_id, error=f"recorder: {e}",
                 )
             _log.warning(
@@ -416,7 +451,7 @@ async def render_clip_in_background(
         except Exception as e:  # noqa: BLE001 — catch-all so state lands
             _safe_unlink(output_path)
             with bound_tenant(tenant_id):
-                await ClipsRepo(db).mark_render_failed(
+                await _gen(ClipsRepo(db)).mark_render_failed(
                     clip_id, error=f"{type(e).__name__}: {e}",
                 )
             _log.exception(
@@ -441,7 +476,7 @@ async def render_clip_in_background(
         if not ok:
             _safe_unlink(output_path)
             with bound_tenant(tenant_id):
-                await ClipsRepo(db).mark_render_failed(
+                await _gen(ClipsRepo(db)).mark_render_failed(
                     clip_id,
                     error=f"output failed validation: {reason}",
                 )
@@ -451,8 +486,23 @@ async def render_clip_in_background(
             )
             return
 
+        if on_rendered is not None:
+            try:
+                await on_rendered(output_path)
+            except Exception as e:  # ready only once it is stored
+                _safe_unlink(output_path)
+                with bound_tenant(tenant_id):
+                    await _gen(ClipsRepo(db)).mark_render_failed(
+                        clip_id,
+                        error=f"could not store the export: {type(e).__name__}: {e}"[:500],
+                    )
+                _log.warning(
+                    "render_clip.store_failed clip=%s error=%s", clip_id, str(e)[:300],
+                )
+                return
+
         with bound_tenant(tenant_id):
-            await ClipsRepo(db).mark_render_ready(clip_id)
+            await _gen(ClipsRepo(db)).mark_render_ready(clip_id)
         _log.info(
             "render_clip.ready clip=%s output=%s renderer=%s "
             "bytes=%d duration_s=%.2f",
@@ -479,7 +529,7 @@ async def render_clip_in_background(
         _safe_unlink(output_path)
         try:
             with bound_tenant(tenant_id):
-                await ClipsRepo(db).mark_render_failed(
+                await _gen(ClipsRepo(db)).mark_render_failed(
                     clip_id,
                     error=f"runner crashed: {type(e).__name__}: {e}",
                 )

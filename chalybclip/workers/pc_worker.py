@@ -10,6 +10,9 @@ ZERO code changes to use it — just point
     GET  /jobs/{id}   → 303 (self) while running     [poll_until_terminal]
                       → 200 {stream_id, status: done|failed, error,
                              n_clips, elapsed_s} when finished
+    POST /exports     {auth_token, tenant_id, clip_id, quality, ...}
+        → 200 NDJSON: accepted, heartbeat…, done {status, error}
+                        (editor exports — chalybclip.jobs.export)
 
 Why hold jobs behind the redirect-poll instead of the open POST: pipeline
 runs take minutes-to-hours and tunnels/proxies kill idle requests long
@@ -51,6 +54,9 @@ _log = structlog.get_logger(__name__)
 # Completed-job results are kept in memory for the dispatcher to collect;
 # cap the ledger so a long-lived worker doesn't grow unbounded.
 _MAX_FINISHED_JOBS = 200
+
+# How often a running export's response stream sends a keep-alive line.
+_EXPORT_HEARTBEAT_S = 15.0
 
 
 @dataclass
@@ -309,6 +315,69 @@ def create_worker_app(*, runner: PipelineRunner | None = None) -> FastAPI:
             status_code=r.status_code,
             media_type=r.headers.get("content-type", "application/json"),
         )
+
+    # Editor exports in flight, keyed by tenant, clip, quality and render generation:
+    # a re-sent request joins its render; a newer click (after an edit) never does.
+    exports: dict[tuple[str, str, str, str], asyncio.Task[dict[str, Any]]] = {}
+
+    @app.post("/exports", response_model=None)
+    async def submit_export(request: Request) -> Response:
+        """Render one editor export. Answers 200 with an NDJSON stream: an
+        `accepted` line at once, a `heartbeat` every few seconds, then the
+        `done` line. The open request keeps Cloud Run from reaping this
+        instance as idle mid-render; the render itself is a detached task,
+        so a dropped connection (API deploy) doesn't stop it."""
+        from fastapi.responses import StreamingResponse
+
+        from chalybclip.workers.export_job import ExportRequest, run_export
+
+        try:
+            payload = await request.json()
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail="body is not JSON") from e
+        if not isinstance(payload, dict):
+            raise HTTPException(status_code=400, detail="body must be a JSON object")
+        expected = _expected_token()
+        provided = str(payload.get("auth_token", "") or "")
+        if not expected or not hmac.compare_digest(
+            provided.encode("utf-8"), expected.encode("utf-8")
+        ):
+            raise HTTPException(status_code=401, detail="invalid bearer token")
+        preflight = _preflight_error()
+        if preflight is not None:
+            raise HTTPException(status_code=500, detail=preflight)
+        try:
+            req = ExportRequest.from_payload(payload)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+        key = req.job_key
+        task = exports.get(key)
+        if task is None or task.done():
+            task = asyncio.create_task(run_export(req))
+            exports[key] = task
+            task.add_done_callback(
+                lambda t, k=key: exports.pop(k, None) if exports.get(k) is t else None
+            )
+            _log.info(
+                "worker.export_start", clip_id=req.clip_id, quality=req.quality,
+                tenant_id=req.tenant_id,
+            )
+
+        async def _lines() -> Any:
+            yield json.dumps({"event": "accepted"}) + "\n"
+            while True:
+                done, _ = await asyncio.wait({task}, timeout=_EXPORT_HEARTBEAT_S)
+                if done:
+                    break
+                yield json.dumps({"event": "heartbeat"}) + "\n"
+            try:
+                result = task.result()
+            except BaseException as e:  # report, never re-raise
+                result = {"status": "failed", "error": f"{type(e).__name__}: {e}"}
+            yield json.dumps({"event": "done", **result}) + "\n"
+
+        return StreamingResponse(_lines(), media_type="application/x-ndjson")
 
     @app.get("/jobs/{job_id}", response_model=None)
     async def poll(job_id: str, t: str = "") -> Response:

@@ -894,6 +894,9 @@ async def _render_media(
         raise HTTPException(status_code=404, detail="not found")
     rendered = Path(clip.path).parent / f"clip_render_{q}.mp4"
     if not is_servable_cached_mp4(rendered):
+        # Rendered on the worker (or another instance): the bucket copy, if current.
+        if await dash._bucket_export_ready(db, tenant_id, clip, q):
+            return await dash._export_redirect(tenant_id, clip_id, q)
         raise HTTPException(status_code=404, detail="not found")
     name = f"chalybclip_{clip_id}.mp4"
     return video_file_response(

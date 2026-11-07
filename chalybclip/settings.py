@@ -314,6 +314,11 @@ class Settings(BaseSettings):
     # "modal" hands the job off to a Modal app (planned in F.10+ once
     # the chalyb deployment lands).
     job_dispatcher: str = "in_process"
+    # Editor exports render on the pipeline worker (chalybclip.jobs.export) when
+    # job_dispatcher="modal" and object storage is set. False → render in the API.
+    export_on_worker: bool = Field(
+        default=True, validation_alias="CHALYBCLIP_EXPORT_ON_WORKER"
+    )
     # Hard cap on the transcribe step. faster-whisper occasionally hangs on
     # CUDA — silent stall, no exception, the asyncio.to_thread call never
     # returns. Without a timeout the whole pipeline waits forever and the
