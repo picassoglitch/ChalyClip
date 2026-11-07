@@ -14,8 +14,8 @@
                             template; same helper used in editor
                             + export so a single normalization
                             rule applies)
-     render_watermark     — bool; whether to paint the CHALYBCLIP
-                            stamp (tier-gated in the handler)
+     render_watermark     — bool; whether to paint the CHALYB
+                            stamp (free tier only)
      show_live_pill       — bool; only relevant for the kick
                             repost-page banner variant, where
                             the operator can toggle a LIVE NOW
@@ -75,8 +75,8 @@
      data-animation="{{ _captions.get('animation') or 'pop' }}"></div>
 {% endif %}
 
-{# Watermark — tier-gated; handler resolves whether to paint
-   based on tenant tier + brand_kit.show_chalybclip_credit. #}
+{# Watermark — free tier only; handler resolves it via
+   branding.watermark_enabled_for_clip. #}
 {% if render_watermark %}
-<div class="nc-pv-watermark">CHALYBCLIP</div>
+<div class="nc-pv-watermark">CHALYB</div>
 {% endif %}

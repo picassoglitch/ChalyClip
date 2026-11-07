@@ -1203,13 +1203,13 @@ def _top_hook_filter(
 
 
 def _watermark_filter(*, output_w: int, output_h: int, fontfile: Path | None) -> str | None:
-    """Slice O.12 — top-right "CHALYBCLIP" brand wordmark watermark.
+    """Slice O.12 — top-right "CHALYB" brand wordmark watermark.
 
     Replaces the original slice O.1 bottom-right "chalybclip.com" URL.
     The URL-style text felt link-ish ("subscribe to my channel" vibe);
     the wordmark reads as a clean brand stamp instead — same role as
     the corner brand mark on a TV-news lower-third. Lime fill so it
-    matches the CHALYBCLIP wordmark in the dashboard nav.
+    matches the Chalyb wordmark in the dashboard nav.
 
     Position: top-right (a more visible / TV-broadcast-style spot than
     bottom-right, where it often collided with platform UI chrome —
@@ -1217,8 +1217,8 @@ def _watermark_filter(*, output_w: int, output_h: int, fontfile: Path | None) ->
     bar). Margin auto-scales with frame width so it looks sensible at
     both 720×1280 (mobile) and 1920×1080 (landscape).
 
-    Burned on every clip when the tenant is on `free` tier OR pro+ tier
-    with `show_chalybclip_credit` on. Caller decides via render_watermark.
+    Burned on free-tier clips only (branding.watermark_enabled_for_clip).
+    Caller decides via render_watermark.
     """
     if fontfile is None:
         return None
@@ -1234,7 +1234,7 @@ def _watermark_filter(*, output_w: int, output_h: int, fontfile: Path | None) ->
     # so it reads against bright snow / sky shots without disappearing.
     return (
         f"drawtext=fontfile='{_ff_escape_path(fontfile)}'"
-        f":text='CHALYBCLIP'"
+        f":text='CHALYB'"
         f":fontcolor=0xC8FF5C@0.78"
         f":fontsize={fontsize}"
         # Top-right anchor. x = video_width - text_width - margin_x;
@@ -1264,10 +1264,9 @@ def burn_overlays(
     `target_path`. Returns True on success, False when there's
     nothing to burn (no overlays enabled and no captions to render).
 
-    Slice O.1 — `render_watermark=True` appends the "chalybclip.com"
-    bottom-right credit to the filter graph (free tier always; pro+
-    when `brand_kit.show_chalybclip_credit` is on). Caller decides;
-    this layer just renders the bytes.
+    `render_watermark=True` appends the top-right "CHALYB" mark to the
+    filter graph (free tier only). Caller decides; this layer just
+    renders the bytes.
 
     Raises RuntimeError on ffmpeg failure with the stderr inline so
     the caller can show the operator what went wrong.

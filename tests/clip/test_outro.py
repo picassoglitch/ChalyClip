@@ -179,3 +179,30 @@ def test_append_outro_ffmpeg_failure_leaves_original(tmp_path: Path, monkeypatch
 
 def test_append_outro_missing_file_is_noop(tmp_path: Path) -> None:
     assert append_outro(tmp_path / "nope.mp4") is False
+
+
+# The NEXOCLIP / nexo-ai.world end card that shipped before 2026-11-06.
+_LEGACY_NEXOCLIP_SHA256 = "0a81afb36deb621f53852125a630a7553afabe586a25117545c1fa3d067059db"
+
+
+def test_bundled_asset_is_not_legacy_nexoclip_card() -> None:
+    """QA 2026-11-06: exports ended in the old NEXOCLIP end card. Users
+    only ever see "Chalyb"; the legacy asset must never ship again."""
+    import hashlib
+
+    digest = hashlib.sha256(outro_asset_path().read_bytes()).hexdigest()
+    assert digest != _LEGACY_NEXOCLIP_SHA256
+
+
+def test_bundled_asset_is_vertical_1080p() -> None:
+    if shutil.which("ffprobe") is None:
+        import pytest
+
+        pytest.skip("ffprobe not installed")
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0",
+         "-show_entries", "stream=width,height", "-of", "csv=p=0",
+         str(outro_asset_path())],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    assert out == "1080,1920"

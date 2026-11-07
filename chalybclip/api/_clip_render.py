@@ -288,22 +288,30 @@ async def render_clip_in_background(
             )
 
         # Resolve the end-card outro decision ONCE and pass it to
-        # whichever recorder runs. Free tier always gets it; paid tiers
-        # respect their brand kit's show_chalybclip_outro toggle. Failure
-        # defaults to ON (free-like) so a lookup hiccup never silently
-        # strips the credit.
-        append_outro_enabled = True
+        # whichever recorder runs. Free tier always; paid tiers only when
+        # their brand kit opts in (outro_enabled_for_clip).
+        from chalybclip.branding import TierUnknownError, outro_enabled_for_clip
+
+        _outro_stream_id = ""
         try:
-            from chalybclip.branding import outro_enabled_for_clip
             with bound_tenant(tenant_id):
                 _clip = await ClipsRepo(db).get(clip_id)
+            _outro_stream_id = _clip.stream_id if _clip else ""
+        except Exception:  # noqa: BLE001 — helper still applies the tier rule
+            _outro_stream_id = ""
+        try:
             append_outro_enabled = await outro_enabled_for_clip(
-                db,
-                tenant_id=tenant_id,
-                stream_id=(_clip.stream_id if _clip else ""),
+                db, tenant_id=tenant_id, stream_id=_outro_stream_id
             )
-        except Exception:  # noqa: BLE001 — best-effort; default to on
-            append_outro_enabled = True
+        except TierUnknownError as e:
+            # Plan unknown → fail retryable instead of guessing paid vs free branding.
+            _safe_unlink(output_path)
+            with bound_tenant(tenant_id):
+                await ClipsRepo(db).mark_render_failed(
+                    clip_id, error="No pudimos leer tu plan. Reintenta la descarga.",
+                )
+            _log.warning("render_clip.tier_unknown clip=%s error=%s", clip_id, e)
+            return
 
         hybrid_failed_with: str | None = None
         try:

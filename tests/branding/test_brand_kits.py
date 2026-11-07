@@ -15,10 +15,12 @@ from pathlib import Path
 import pytest
 
 from chalybclip.branding import (
+    TierUnknownError,
     merged_trigger_phrases_for_speaker,
     outro_enabled_for_clip,
     resolve_brand_kit_for_candidate,
     resolve_brand_kit_for_speaker,
+    watermark_enabled_for_clip,
 )
 from chalybclip.db import (
     BrandKitsRepo,
@@ -129,13 +131,47 @@ async def test_outro_paid_tier_default_on(migrated_db: Database) -> None:
     ) is True
 
 
-async def test_outro_paid_tier_no_kit_defaults_on(migrated_db: Database) -> None:
-    """No default kit → nothing to read a toggle from → keep the card."""
+@pytest.mark.parametrize("tier", ["pro", "all_access", "vip"])
+async def test_outro_paid_tier_no_kit_is_off(migrated_db: Database, tier: str) -> None:
+    """QA 2026-11-06: a Pro account that never set up a brand kit got the
+    end card appended. No kit means the user never opted in → no outro."""
     tenant_id = await _seed_tenant(migrated_db)
-    await _set_tier(migrated_db, tenant_id, "pro")
+    await _set_tier(migrated_db, tenant_id, tier)
+    assert await outro_enabled_for_clip(
+        migrated_db, tenant_id=tenant_id, stream_id="str_x"
+    ) is False
+
+
+async def test_outro_free_tier_no_kit_is_on(migrated_db: Database) -> None:
+    tenant_id = await _seed_tenant(migrated_db)
     assert await outro_enabled_for_clip(
         migrated_db, tenant_id=tenant_id, stream_id="str_x"
     ) is True
+
+
+# ---- corner watermark tier gating ----
+
+
+async def test_watermark_free_tier_on(migrated_db: Database) -> None:
+    tenant_id = await _seed_tenant(migrated_db)
+    assert await watermark_enabled_for_clip(migrated_db, tenant_id=tenant_id) is True
+
+
+@pytest.mark.parametrize("with_kit", [False, True])
+@pytest.mark.parametrize("tier", ["pro", "all_access", "vip"])
+async def test_watermark_paid_tier_off(
+    migrated_db: Database, tier: str, with_kit: bool
+) -> None:
+    """Paid plans carry no watermark — with or without a brand kit (a new
+    kit stores show_chalybclip_credit=1 and no UI can turn it off)."""
+    tenant_id = await _seed_tenant(migrated_db)
+    await _set_tier(migrated_db, tenant_id, tier)
+    if with_kit:
+        with bound_tenant(tenant_id):
+            await BrandKitsRepo(migrated_db).create(
+                name="K", primary_color="#fff", accent_color="#000", is_default=True,
+            )
+    assert await watermark_enabled_for_clip(migrated_db, tenant_id=tenant_id) is False
 
 
 async def test_set_default_demotes_previous(migrated_db: Database) -> None:
@@ -429,3 +465,42 @@ async def test_merged_phrases_speaker_none_skips_lookup(
         )
     assert fwd == ["a"]
     assert retro == ["b"]
+
+
+# ---- lookup failures: unknown tier raises, paid kit miss is unbranded ----
+
+
+async def test_tier_lookup_failure_raises_not_guesses(
+    migrated_db: Database, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Codex P2: a failed tier read must not brand a paid export as free."""
+    async def boom(self, tenant_id):  # type: ignore[no-untyped-def]
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(TenantsRepo, "get", boom)
+    with pytest.raises(TierUnknownError):
+        await watermark_enabled_for_clip(migrated_db, tenant_id="ten_x")
+    with pytest.raises(TierUnknownError):
+        await outro_enabled_for_clip(migrated_db, tenant_id="ten_x", stream_id="str_x")
+
+
+async def test_missing_tenant_raises(migrated_db: Database) -> None:
+    with pytest.raises(TierUnknownError):
+        await watermark_enabled_for_clip(migrated_db, tenant_id="ten_missing")
+
+
+async def test_paid_kit_lookup_failure_drops_outro(
+    migrated_db: Database, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import chalybclip.branding.service as svc
+
+    tenant_id = await _seed_tenant(migrated_db)
+    await _set_tier(migrated_db, tenant_id, "pro")
+
+    async def boom(*a, **k):  # type: ignore[no-untyped-def]
+        raise RuntimeError("kit lookup failed")
+
+    monkeypatch.setattr(svc, "resolve_brand_kit_for_candidate", boom)
+    assert await outro_enabled_for_clip(
+        migrated_db, tenant_id=tenant_id, stream_id="str_x"
+    ) is False
