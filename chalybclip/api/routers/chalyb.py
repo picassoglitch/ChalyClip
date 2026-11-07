@@ -30,6 +30,7 @@ from fastapi import APIRouter, Header, HTTPException, Query, Request, Response, 
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field, field_validator
 
+from chalybclip.api.hub_links import hub_url, request_hub_lang
 from chalybclip.db import Database
 from chalybclip.integrations.chalyb import (
     SsoTokenError,
@@ -352,7 +353,7 @@ _SSO_FAILURE_HTML_TEMPLATE = """<!doctype html>
     <h1>{title}</h1>
     <p>{body}</p>
     {reason_block}
-    <a class="nc-btn" href="https://chalyb.com/login">{cta}</a>
+    <a class="nc-btn" href="{login_url}">{cta}</a>
   </main>
 </body>
 </html>"""
@@ -401,6 +402,7 @@ def _render_sso_failure(request: Request, reason: str | None = None) -> str:
         title=t("sso.fail.title", locale),
         body=t("sso.fail.body", locale),
         cta=t("sso.fail.cta", locale),
+        login_url=hub_url("https://chalyb.com/login", request_hub_lang(request)),
         reason_block=reason_block,
     )
 
@@ -542,7 +544,16 @@ async def sso_finalize(
         samesite="lax",
         path="/",
     )
-    return response
+    # Hub PR #174 sends `lang` only for English; no lang means a Spanish hub, so
+    # drop a stale choice instead of sending a Spanish user to /en/….
+    from chalybclip.api.auth import _remember_locale
+    from chalybclip.api.i18n import LOCALE_COOKIE, LOCALE_QUERY_PARAM, SUPPORTED_LOCALES
+
+    requested = (request.query_params.get(LOCALE_QUERY_PARAM) or "").strip().lower()
+    if requested.split("-", 1)[0] not in SUPPORTED_LOCALES:
+        response.delete_cookie(LOCALE_COOKIE, path="/")
+        return response
+    return _remember_locale(request, response)
 
 
 # ── GET /api/admin/sso-diag ──────────────────────────────────────────────

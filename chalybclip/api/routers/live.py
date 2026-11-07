@@ -100,7 +100,9 @@ async def live_dashboard(
     chalyb_base = _os.environ.get(
         "CHALYB_BASE_URL", "https://chalyb.com"
     ).rstrip("/")
-    chalybobs_url = f"{chalyb_base}/auth/launch/chalybobs"
+    from chalybclip.api.hub_links import hub_url, request_hub_lang
+
+    chalybobs_url = hub_url(f"{chalyb_base}/auth/launch/chalybobs", request_hub_lang(request))
 
     # Bidirectional connection switch state + full-access gate.
     tenant = await TenantsRepo(db).get(tenant_id)

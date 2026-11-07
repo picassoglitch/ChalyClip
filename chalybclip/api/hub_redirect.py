@@ -83,7 +83,10 @@ class HubRedirectMiddleware(BaseHTTPMiddleware):
                 base = (
                     os.environ.get("CHALYB_BASE_URL", "").strip() or "https://www.chalyb.com"
                 ).rstrip("/")
-                return RedirectResponse(url=f"{base}{target}", status_code=303)
+                from chalybclip.api.hub_links import hub_url, request_hub_lang
+
+                url = hub_url(f"{base}{target}", request_hub_lang(request))
+                return RedirectResponse(url=url, status_code=303)
         return await call_next(request)
 
 
