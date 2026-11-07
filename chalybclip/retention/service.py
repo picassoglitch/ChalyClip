@@ -35,6 +35,7 @@ import structlog
 from chalybclip.db import Database, TenantsRepo
 from chalybclip.tenancy import bound_tenant
 from chalybclip.tiers import (
+    BUCKET_RETENTION_DAYS,
     LONGEST_RETENTION_DAYS,
     resolve_tier_alias,
     retention_days,
@@ -78,20 +79,33 @@ class RetentionPolicy(NamedTuple):
         vod_days: int | None = None,
         clip_days: int | None = None,
         transcript_days: int | None = None,
+        tenant_id: str | None = None,
     ) -> RetentionPolicy:
         plan_days = retention_days(tier)
         known = plan_days is not None
         window = plan_days if plan_days is not None else LONGEST_RETENTION_DAYS
 
         # A stored 0 or negative would put the cutoff at (or after) now and
-        # wipe the tenant; treat it as unset.
-        def pick(override: int | None) -> int:
-            return override if override is not None and override > 0 else window
+        # wipe the tenant; treat it as unset. Above the bucket's delete age
+        # the objects would vanish before the rows, so clamp to it.
+        def pick(scope: str, override: int | None) -> int:
+            if override is None or override <= 0:
+                return window
+            if override > BUCKET_RETENTION_DAYS:
+                _log.warning(
+                    "retention.override_clamped",
+                    tenant_id=tenant_id,
+                    scope=scope,
+                    override_days=override,
+                    effective_days=BUCKET_RETENTION_DAYS,
+                )
+                return BUCKET_RETENTION_DAYS
+            return override
 
         return cls(
-            vod_days=pick(vod_days),
-            clip_days=pick(clip_days),
-            transcript_days=pick(transcript_days),
+            vod_days=pick("vod", vod_days),
+            clip_days=pick("clip", clip_days),
+            transcript_days=pick("transcript", transcript_days),
             tier=resolve_tier_alias(tier) or (tier or ""),
             tier_known=known,
         )
@@ -471,6 +485,7 @@ async def sweep_retention(
             vod_days=t.retention_vod_days,
             clip_days=t.retention_clip_days,
             transcript_days=t.retention_transcript_days,
+            tenant_id=t.id,
         )
         if not policy.tier_known:
             _log.warning(

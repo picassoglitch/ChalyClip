@@ -23,6 +23,8 @@ from typing import TYPE_CHECKING
 
 import typer
 
+from chalybclip.tiers import BUCKET_RETENTION_DAYS
+
 if TYPE_CHECKING:
     from chalybclip.db import Database
     from chalybclip.db.models import ApiTokenRow, Tenant
@@ -1029,20 +1031,26 @@ def tenants_set_retention_cmd(
     vod_days: int | None = typer.Option(
         None,
         "--vod-days",
-        help="Days to keep raw VODs. Pass 0 to clear back to the plan window.",
+        help="Days to keep raw VODs (max 30, the bucket's delete age). "
+        "Pass 0 to clear back to the plan window.",
         min=0,
+        max=BUCKET_RETENTION_DAYS,
     ),
     clip_days: int | None = typer.Option(
         None,
         "--clip-days",
-        help="Days to keep rendered clips. Pass 0 to clear back to the plan window.",
+        help="Days to keep rendered clips (max 30, the bucket's delete age). "
+        "Pass 0 to clear back to the plan window.",
         min=0,
+        max=BUCKET_RETENTION_DAYS,
     ),
     transcript_days: int | None = typer.Option(
         None,
         "--transcript-days",
-        help="Days to keep Whisper transcripts. Pass 0 to clear back to the plan window.",
+        help="Days to keep Whisper transcripts (max 30, the bucket's delete age). "
+        "Pass 0 to clear back to the plan window.",
         min=0,
+        max=BUCKET_RETENTION_DAYS,
     ),
     db_path: Path | None = typer.Option(None, "--db-path"),
 ) -> None:

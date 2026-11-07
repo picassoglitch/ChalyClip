@@ -73,6 +73,12 @@ RETENTION_DAYS: Final[dict[str, int]] = {
 # What an unrecognized tier gets: never delete a paying user's data early.
 LONGEST_RETENTION_DAYS: Final[int] = max(RETENTION_DAYS.values())
 
+# The media bucket deletes every object at this age (chalyb
+# infra/terraform var.media_retention_days). No window may exceed it, or
+# the bucket drops objects whose DB rows are still kept.
+BUCKET_RETENTION_DAYS: Final[int] = 30
+assert LONGEST_RETENTION_DAYS <= BUCKET_RETENTION_DAYS
+
 
 def retention_days(raw: str | None) -> int | None:
     """Plan retention window for a (possibly aliased) tier label, or None
@@ -130,6 +136,7 @@ def normalize_tier(raw: str | None) -> str:
 
 __all__ = [
     "ALL_ACCESS",
+    "BUCKET_RETENTION_DAYS",
     "CANONICAL_TIERS",
     "FREE",
     "LONGEST_RETENTION_DAYS",

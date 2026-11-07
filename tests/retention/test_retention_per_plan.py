@@ -608,3 +608,53 @@ async def test_odd_clip_path_never_removes_a_shared_dir(
 
     assert r.clips_deleted == 1
     assert (shared / "clp_keep" / "clip.mp4").exists()
+
+
+# ---- overrides capped at the bucket's delete age ----
+
+
+def test_override_above_bucket_age_is_clamped_and_logged() -> None:
+    from structlog.testing import capture_logs
+
+    with capture_logs() as logs:
+        p = RetentionPolicy.from_tenant(
+            tier="pro", vod_days=45, clip_days=30, transcript_days=None, tenant_id="ten_x"
+        )
+
+    assert (p.vod_days, p.clip_days, p.transcript_days) == (30, 30, 30)
+    clamped = [e for e in logs if e["event"] == "retention.override_clamped"]
+    assert clamped == [
+        {
+            "event": "retention.override_clamped",
+            "log_level": "warning",
+            "tenant_id": "ten_x",
+            "scope": "vod",
+            "override_days": 45,
+            "effective_days": 30,
+        }
+    ]
+
+
+def test_plan_windows_never_exceed_bucket_age() -> None:
+    from chalybclip.tiers import BUCKET_RETENTION_DAYS, RETENTION_DAYS
+
+    assert BUCKET_RETENTION_DAYS == 30
+    assert RETENTION_DAYS == {"free": 7, "pro": 30, "all_access": 30}
+    assert max(RETENTION_DAYS.values()) <= BUCKET_RETENTION_DAYS
+
+
+async def test_stored_override_above_bucket_age_sweeps_at_30(
+    retention_db: Database, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _use_store(monkeypatch, _FakeS3())
+    tid = await _tenant(retention_db, "pro")
+    conn = await retention_db.connect()
+    await conn.execute("UPDATE tenants SET retention_clip_days = 90 WHERE id = ?", (tid,))
+    await conn.commit()
+    await _stream(retention_db, tid, "str_1", tmp_path, _iso(1))
+    await _clip(retention_db, tid, "str_1", "clp_old", tmp_path, _iso(31))
+
+    [r] = await sweep_retention(retention_db, output_dir=tmp_path)
+
+    assert r.policy.clip_days == 30
+    assert r.clips_deleted == 1
