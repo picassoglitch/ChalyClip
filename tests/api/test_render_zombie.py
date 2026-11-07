@@ -352,3 +352,114 @@ async def test_download_does_not_recover_fresh_render(
     assert body["state"] == "rendering"
     # No new schedule — the existing task is presumed alive.
     assert scheduled == []
+
+
+# ---- QA 2026-11-06: timeout scales with clip length x export resolution ----
+
+
+def test_zombie_timeout_scales_with_duration_and_quality() -> None:
+    from chalybclip.api.routers.dashboard import _render_zombie_timeout_s
+
+    # Short 1080 clips keep the historic 15 min floor.
+    assert _render_zombie_timeout_s(20.0, "1080") == 15 * 60
+    assert _render_zombie_timeout_s(None, "4k") == 15 * 60
+    # 90 s at 1080 → 30 min; 20 s at 4K (the QA clip) → 24 min.
+    assert _render_zombie_timeout_s(90.0, "1080") == 30 * 60
+    assert _render_zombie_timeout_s(20.0, "4k") == 24 * 60
+    assert _render_zombie_timeout_s(20.0, "4K") == 24 * 60
+    # Unknown quality falls back to 1080; long 4K exports cap at 1 h.
+    assert _render_zombie_timeout_s(90.0, "8k") == 30 * 60
+    assert _render_zombie_timeout_s(600.0, "4k") == 60 * 60
+
+
+async def test_render_status_4k_still_rendering_past_15_min(
+    client: httpx.AsyncClient,
+    db: Database,
+    tenants: dict[str, dict[str, str]],
+    tmp_path: Path,
+) -> None:
+    """A 30 s 4K export 20 min in is within its 36 min budget: keep
+    polling instead of failing it like the flat 15 min ceiling did."""
+    tenant_id = tenants["alice"]["id"]
+    await _seed_clip_in_state(
+        db, tenant_id,
+        clip_id="clp_4k_slow",
+        render_state="rendering",
+        render_started_at=_ago(20),
+        tmp_path=tmp_path,
+    )
+    r = await client.get(
+        "/dashboard/clips/clp_4k_slow/render-status?quality=4k",
+        headers=auth(tenants["alice"]["token"]),
+    )
+    body = r.json()
+    assert body["state"] == "rendering"
+    assert "retry_url" not in body
+
+
+async def test_render_status_4k_past_budget_fails_with_clear_reason(
+    client: httpx.AsyncClient,
+    db: Database,
+    tenants: dict[str, dict[str, str]],
+    tmp_path: Path,
+) -> None:
+    tenant_id = tenants["alice"]["id"]
+    await _seed_clip_in_state(
+        db, tenant_id,
+        clip_id="clp_4k_dead",
+        render_state="rendering",
+        render_started_at=_ago(40),
+        tmp_path=tmp_path,
+    )
+    r = await client.get(
+        "/dashboard/clips/clp_4k_dead/render-status?quality=4k",
+        headers=auth(tenants["alice"]["token"]),
+    )
+    body = r.json()
+    assert body["state"] == "failed"
+    err = body["error"]
+    assert "timed out" in err
+    assert "limit 36 min" in err
+    assert "restarted" in err
+    assert body["retry_url"].endswith("render-retry?quality=4k")
+    with bound_tenant(tenant_id):
+        clip = await __import__(
+            "chalybclip.db", fromlist=["ClipsRepo"]
+        ).ClipsRepo(db).get("clp_4k_dead")
+    assert clip is not None
+    assert clip.render_state == "failed"
+    assert "limit 36 min" in (clip.render_error or "")
+
+
+async def test_download_does_not_recover_4k_render_within_budget(
+    client: httpx.AsyncClient,
+    db: Database,
+    tenants: dict[str, dict[str, str]],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Re-clicking Download on a 4K export 20 min in must not reset it
+    and start a duplicate render."""
+    tenant_id = tenants["alice"]["id"]
+    await _seed_clip_in_state(
+        db, tenant_id,
+        clip_id="clp_4k_dl",
+        render_state="rendering",
+        render_started_at=_ago(20),
+        tmp_path=tmp_path,
+    )
+    scheduled: list[dict] = []
+
+    async def fake_runner(**kwargs: object) -> None:
+        scheduled.append(dict(kwargs))
+
+    monkeypatch.setattr(
+        "chalybclip.api._clip_render.render_clip_in_background", fake_runner,
+    )
+    r = await client.get(
+        "/dashboard/clips/clp_4k_dl/download?quality=4k",
+        headers=auth(tenants["alice"]["token"]),
+    )
+    assert r.status_code == 202
+    assert r.json()["state"] == "rendering"
+    assert scheduled == []
