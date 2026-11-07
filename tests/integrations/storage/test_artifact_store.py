@@ -114,3 +114,69 @@ def test_build_artifact_store_none_without_bucket() -> None:
 
 def test_s3_artifact_store_satisfies_protocol() -> None:
     assert isinstance(_store(_FakeS3()), ArtifactStore)
+
+
+async def test_upload_sends_disposition_and_metadata_and_reads_them_back(tmp_path: Path) -> None:
+    class _MetaS3(_FakeS3):
+        def __init__(self) -> None:
+            super().__init__()
+            self.extra: dict[str, Any] = {}
+
+        def upload_file(self, Filename: str, Bucket: str, Key: str, ExtraArgs: Any = None) -> None:  # noqa: N803
+            super().upload_file(Filename, Bucket, Key, ExtraArgs)
+            self.extra[Key] = ExtraArgs
+
+        def head_object(self, *, Bucket: str, Key: str) -> dict[str, Any]:  # noqa: N803
+            if Key not in self.store:
+                from botocore.exceptions import ClientError
+
+                raise ClientError({"Error": {"Code": "404"}}, "HeadObject")
+            out = super().head_object(Bucket=Bucket, Key=Key)
+            # boto3 hands user metadata back without the x-amz-meta- prefix.
+            out["Metadata"] = dict((self.extra.get(Key) or {}).get("Metadata") or {})
+            return out
+
+    s3 = _MetaS3()
+    store = _store(s3)
+    f = tmp_path / "e.mp4"
+    f.write_bytes(b"x")
+    await store.upload(
+        local_path=f, key="clips/t/c/export_4k.mp4", content_type="video/mp4",
+        content_disposition='attachment; filename="c.mp4"', metadata={"fp": "abc"},
+    )
+    assert s3.extra["artifacts/clips/t/c/export_4k.mp4"] == {
+        "ContentType": "video/mp4",
+        "ContentDisposition": 'attachment; filename="c.mp4"',
+        "Metadata": {"fp": "abc"},
+    }
+    assert await store.metadata(key="clips/t/c/export_4k.mp4") == {"fp": "abc"}
+    assert await store.metadata(key="clips/t/c/missing.mp4") is None
+
+
+async def test_plain_upload_still_sends_no_extra_args(tmp_path: Path) -> None:
+    calls: list[Any] = []
+
+    class _S3(_FakeS3):
+        def upload_file(self, Filename: str, Bucket: str, Key: str, ExtraArgs: Any = None) -> None:  # noqa: N803
+            calls.append(ExtraArgs)
+            super().upload_file(Filename, Bucket, Key, ExtraArgs)
+
+    f = tmp_path / "a.bin"
+    f.write_bytes(b"x")
+    await _store(_S3()).upload(local_path=f, key="k")
+    assert calls == [None]
+
+
+async def test_metadata_raises_on_denied_but_not_on_missing() -> None:
+    import pytest
+    from botocore.exceptions import ClientError
+
+    class _S3(_FakeS3):
+        def head_object(self, *, Bucket: str, Key: str) -> dict[str, Any]:  # noqa: N803
+            code = "404" if Key.endswith("missing") else "403"
+            raise ClientError({"Error": {"Code": code}, "ResponseMetadata": {"HTTPStatusCode": int(code)}}, "HeadObject")
+
+    store = _store(_S3())
+    assert await store.metadata(key="k/missing") is None
+    with pytest.raises(ClientError):
+        await store.metadata(key="k/denied")

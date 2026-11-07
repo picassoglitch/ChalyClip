@@ -48,6 +48,7 @@ def worker_env(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     monkeypatch.setenv("DATABASE_URL", "postgresql://x/test")
     monkeypatch.setenv("CHALYBCLIP_OBJECT_STORAGE_BUCKET", "bucket")
     monkeypatch.setenv("CHALYBCLIP_DEFAULT_OUTPUT_DIR", str(tmp_path))
+    monkeypatch.setenv("CHALYBCLIP_EXPORT_RENDER_BASE_URL", "https://api.example")
     from chalybclip.settings import get_settings
 
     get_settings.cache_clear()
@@ -299,3 +300,166 @@ async def test_parked_upload_fields_reach_the_kickoff(worker_env: None) -> None:
             await asyncio.sleep(0.01)
     assert ran[0].source_object_key == "uploads/ten_w/str_w1/source.mp4"
     assert ran[0].title == "clip.mp4"
+
+
+# ---- editor exports (POST /exports) ---------------------------------------
+
+
+def _export_body(**over: Any) -> dict[str, Any]:
+    body: dict[str, Any] = {
+        "auth_token": _TOKEN, "tenant_id": "ten_w", "clip_id": "clp_w", "quality": "4k",
+        "width": 2160, "height": 3840, "base_url": "https://api.example",
+        "auth_query": "tenant=ten_w&exp=1&sig=s", "render_started_at": "s1", "deadline_ts": 9e9,
+    }
+    body.update(over)
+    return body
+
+
+def _events(text: str) -> list[dict[str, Any]]:
+    import json
+
+    return [json.loads(line) for line in text.splitlines() if line.strip()]
+
+
+@pytest.mark.asyncio
+async def test_export_streams_accepted_heartbeat_done(
+    worker_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from chalybclip.workers import pc_worker
+
+    seen: list[Any] = []
+
+    async def _run(req: Any) -> dict[str, Any]:
+        seen.append(req)
+        await asyncio.sleep(0.25)
+        return {"status": "ready", "error": None}
+
+    monkeypatch.setattr("chalybclip.workers.export_job.run_export", _run)
+    monkeypatch.setattr(pc_worker, "_EXPORT_HEARTBEAT_S", 0.05)
+    async with _client(create_worker_app()) as client:
+        resp = await client.post("/exports", json=_export_body())
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("application/x-ndjson")
+    events = _events(resp.text)
+    assert events[0] == {"event": "accepted"}
+    assert {"event": "heartbeat"} in events[1:-1]
+    assert events[-1] == {"event": "done", "status": "ready", "error": None}
+    (req,) = seen
+    assert (req.clip_id, req.quality, req.width, req.height) == ("clp_w", "4k", 2160, 3840)
+
+
+@pytest.mark.asyncio
+async def test_export_rejects_bad_token_payload_and_missing_bucket(
+    worker_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async with _client(create_worker_app()) as client:
+        assert (await client.post("/exports", json=_export_body(auth_token="nope"))).status_code == 401
+        assert (await client.post("/exports", json=_export_body(quality="8k"))).status_code == 400
+        monkeypatch.delenv("CHALYBCLIP_OBJECT_STORAGE_BUCKET")
+        assert (await client.post("/exports", json=_export_body())).status_code == 500
+
+
+@pytest.mark.asyncio
+async def test_export_resend_joins_the_running_render(
+    worker_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    release = asyncio.Event()
+    runs = 0
+
+    async def _run(_req: Any) -> dict[str, Any]:
+        nonlocal runs
+        runs += 1
+        await release.wait()
+        return {"status": "ready", "error": None}
+
+    monkeypatch.setattr("chalybclip.workers.export_job.run_export", _run)
+    async with _client(create_worker_app()) as client:
+        first = asyncio.create_task(client.post("/exports", json=_export_body()))
+        second = asyncio.create_task(client.post("/exports", json=_export_body()))
+        await asyncio.sleep(0.05)
+        release.set()
+        r1, r2 = await first, await second
+    assert runs == 1
+    assert _events(r1.text)[-1]["status"] == _events(r2.text)[-1]["status"] == "ready"
+
+
+@pytest.mark.asyncio
+async def test_api_dispatcher_speaks_the_export_protocol(
+    worker_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The API's dispatch_export against the real worker app (in-memory)."""
+    from chalybclip.jobs.export import dispatch_export, drain_exports
+
+    monkeypatch.setenv("CHALYBCLIP_MODAL_TOKEN", _TOKEN)
+    from chalybclip.settings import get_settings
+
+    get_settings.cache_clear()
+    seen: list[Any] = []
+
+    async def _run(req: Any) -> dict[str, Any]:
+        seen.append(req)
+        return {"status": "failed", "error": "boom"}
+
+    monkeypatch.setattr("chalybclip.workers.export_job.run_export", _run)
+    transport = httpx.ASGITransport(app=create_worker_app())
+    await dispatch_export(
+        url="http://worker.test/exports", tenant_id="ten_w", clip_id="clp_w", quality="2k",
+        width=1440, height=2560, base_url="https://api.example", auth_query="q=1",
+        render_started_at="2026-11-07T00:00:00+00:00", deadline_ts=9e9, transport=transport,
+    )
+    await drain_exports()
+    (req,) = seen
+    assert (req.quality, req.width, req.height, req.deadline_ts) == ("2k", 1440, 2560, 9e9)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "base_url",
+    ["https://evil.example", "http://169.254.169.254", "https://api.example.evil.example", "file:///etc"],
+)
+async def test_export_refuses_a_base_url_that_is_not_our_origin(
+    worker_env: None, monkeypatch: pytest.MonkeyPatch, base_url: str
+) -> None:
+    """The recorder carries a signed render query to base_url: never to another host."""
+    ran: list[Any] = []
+
+    async def _run(req: Any) -> dict[str, Any]:
+        ran.append(req)
+        return {"status": "ready", "error": None}
+
+    monkeypatch.setattr("chalybclip.workers.export_job.run_export", _run)
+    async with _client(create_worker_app()) as client:
+        r = await client.post("/exports", json=_export_body(base_url=base_url))
+    assert r.status_code == 400
+    assert ran == []
+
+
+@pytest.mark.asyncio
+async def test_export_fails_closed_without_a_configured_origin(
+    worker_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from chalybclip.settings import get_settings
+
+    monkeypatch.delenv("CHALYBCLIP_EXPORT_RENDER_BASE_URL")
+    monkeypatch.delenv("PUBLIC_URL", raising=False)
+    get_settings.cache_clear()
+    async with _client(create_worker_app()) as client:
+        r = await client.post("/exports", json=_export_body())
+    assert r.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_export_renders_against_the_configured_origin(
+    worker_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[Any] = []
+
+    async def _run(req: Any) -> dict[str, Any]:
+        seen.append(req)
+        return {"status": "ready", "error": None}
+
+    monkeypatch.setattr("chalybclip.workers.export_job.run_export", _run)
+    async with _client(create_worker_app()) as client:
+        r = await client.post("/exports", json=_export_body(base_url="https://api.example/x/y"))
+    assert r.status_code == 200
+    assert seen[0].base_url == "https://api.example"

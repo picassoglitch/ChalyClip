@@ -1487,6 +1487,15 @@ def _candidate_from_row(row: aiosqlite.Row) -> CandidateRow:
     return CandidateRow.model_validate(d)
 
 
+def _started_guard(if_started_at: str | None) -> str:
+    """Extra WHERE clause pinning a render-state write to one render generation."""
+    return " AND render_started_at = ?" if if_started_at else ""
+
+
+def _started_arg(if_started_at: str | None) -> tuple[str, ...]:
+    return (if_started_at,) if if_started_at else ()
+
+
 class ClipsRepo:
     """Clips. Inserts are INSERT OR IGNORE so the same (id) on resume is a no-op."""
 
@@ -1680,7 +1689,7 @@ class ClipsRepo:
         await conn.commit()
 
     async def update_render_progress(
-        self, clip_id: str, *, pct: int
+        self, clip_id: str, *, pct: int, if_started_at: str | None = None
     ) -> None:
         """Bump the visible progress percentage without touching state.
 
@@ -1693,26 +1702,30 @@ class ClipsRepo:
         conn = await self._db.connect()
         await conn.execute(
             "UPDATE clips SET render_progress_pct = ? "
-            "WHERE id = ? AND tenant_id = ? AND render_state = 'rendering'",
-            (clamped, clip_id, tenant_id),
+            "WHERE id = ? AND tenant_id = ? AND render_state = 'rendering'"
+            + _started_guard(if_started_at),
+            (clamped, clip_id, tenant_id, *_started_arg(if_started_at)),
         )
         await conn.commit()
 
-    async def mark_render_ready(self, clip_id: str) -> None:
+    async def mark_render_ready(
+        self, clip_id: str, *, if_started_at: str | None = None
+    ) -> None:
         """Terminal: render finished, MP4 is on disk. Clear any prior
-        error from a previous failed attempt."""
+        error from a previous failed attempt. `if_started_at` limits the
+        write to the render generation that started at that instant."""
         tenant_id = current_tenant_id()
         conn = await self._db.connect()
         await conn.execute(
             "UPDATE clips SET render_state = 'ready', "
             "render_progress_pct = 100, render_error = NULL "
-            "WHERE id = ? AND tenant_id = ?",
-            (clip_id, tenant_id),
+            "WHERE id = ? AND tenant_id = ?" + _started_guard(if_started_at),
+            (clip_id, tenant_id, *_started_arg(if_started_at)),
         )
         await conn.commit()
 
     async def mark_render_failed(
-        self, clip_id: str, *, error: str
+        self, clip_id: str, *, error: str, if_started_at: str | None = None
     ) -> None:
         """Terminal: render blew up. UI surfaces the message + a retry
         button. Error truncated to 300 chars so a ffmpeg essay doesn't
@@ -1723,8 +1736,8 @@ class ClipsRepo:
         await conn.execute(
             "UPDATE clips SET render_state = 'failed', "
             "render_error = ? "
-            "WHERE id = ? AND tenant_id = ?",
-            (truncated, clip_id, tenant_id),
+            "WHERE id = ? AND tenant_id = ?" + _started_guard(if_started_at),
+            (truncated, clip_id, tenant_id, *_started_arg(if_started_at)),
         )
         await conn.commit()
 
