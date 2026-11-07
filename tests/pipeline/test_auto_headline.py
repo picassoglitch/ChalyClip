@@ -204,6 +204,60 @@ def test_existing_headline_is_kept_and_not_doubled(
     assert [v.title_card_text for v in asyncio.run(_variants())] == ["Mi titular"]
 
 
+def test_overlay_read_failure_never_overwrites(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Codex #106 P2: if the overlay read fails, the stored overlay (custom
+    settings, no headline) is left as is and no hook is bought."""
+    import chalybclip.pipeline as pipeline_mod
+
+    fake = FakeProvider("anthropic")
+    fake.queue_success(_hook_payload())
+    fake.queue_success({"hooks": [{"text": "OTRO HOOK"}]})
+    first = _run(tmp_path, monkeypatch, fake)
+    clip = first.clip_entries[0].clip
+    custom = {"captions": {"enabled": False}, "banner": {"enabled": True, "url": "mio"}}
+
+    async def _edit() -> None:
+        db = Database(tmp_path / "t.db")
+        try:
+            with bound_tenant("default"):
+                await ClipsRepo(db).set_overlay_config(clip.id, overlay_config=custom)
+        finally:
+            await db.close()
+
+    asyncio.run(_edit())
+    (clip.path.parent / "variants.json").unlink()
+
+    class _FlakyRead(ClipsRepo):
+        """The pipeline's read blips; the write path (incl. its own lookup) works."""
+
+        _writing = False
+
+        async def get(self, clip_id: str) -> Any:
+            if not self._writing:
+                raise RuntimeError("db blip")
+            return await super().get(clip_id)
+
+        async def set_overlay_config(self, clip_id: str, **kw: Any) -> Any:
+            self._writing = True
+            return await super().set_overlay_config(clip_id, **kw)
+
+    async def _no_auto_correct(*_a: Any, **_k: Any) -> dict[str, object]:
+        return {}  # isolate the variants step from the auto-correct pass
+
+    import chalybclip.clip as clip_pkg
+
+    monkeypatch.setattr(clip_pkg, "auto_correct_clip", _no_auto_correct)
+    monkeypatch.setattr(pipeline_mod, "ClipsRepo", _FlakyRead)
+    second = _run(tmp_path, monkeypatch, fake, stream_id=first.stream.id)
+    monkeypatch.undo()
+    [row] = _clip_rows(tmp_path, second.stream.id)
+    assert row.overlay_config == custom
+    assert len(fake.calls) == 1  # no hook bought for an overlay we won't write
+    assert second.clip_entries[0].variants[0].title_card_text.strip()
+
+
 @pytest.mark.parametrize(
     ("overlay", "expected"),
     [

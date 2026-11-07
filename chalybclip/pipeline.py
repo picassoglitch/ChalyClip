@@ -632,6 +632,7 @@ async def _auto_hook_with_source(
     router: Any,
     stream_title: str = "",
     avoid_hooks: tuple[str, ...] = (),
+    use_llm: bool = True,
 ) -> tuple[str, bool]:
     """Generate ONE viral hook (title line) from the clip's transcript
     snippet. Best-effort — returns '' on any failure so a hook hiccup never
@@ -666,20 +667,22 @@ async def _auto_hook_with_source(
     if reason:
         context_bits.append(f"Why it was clipped: {reason}")
     hook = ""
-    try:
-        hooks = await generate_hooks(
-            tenant_id=tenant_id,
-            persona_voice=persona.voice_prompt,
-            persona_language=language or persona.primary_language or "es",
-            transcript_snippet=snippet,
-            clip_context=" — ".join(context_bits),
-            n=1,
-            avoid_hooks=avoid_hooks,
-            router=router,
-        )
-        hook = hooks[0].text.strip() if hooks else ""
-    except Exception as e:
-        _log.warning("pipeline.auto_hook_failed", clip_id=clip.id, error=str(e))
+    # use_llm=False: the headline can't be stamped, so don't pay for one.
+    if use_llm:
+        try:
+            hooks = await generate_hooks(
+                tenant_id=tenant_id,
+                persona_voice=persona.voice_prompt,
+                persona_language=language or persona.primary_language or "es",
+                transcript_snippet=snippet,
+                clip_context=" — ".join(context_bits),
+                n=1,
+                avoid_hooks=avoid_hooks,
+                router=router,
+            )
+            hook = hooks[0].text.strip() if hooks else ""
+        except Exception as e:
+            _log.warning("pipeline.auto_hook_failed", clip_id=clip.id, error=str(e))
     # Cross-clip uniqueness is a hard rule: if the model converged on a
     # line a sibling clip already ships, discard it — the deterministic
     # generator below honors the avoid-set structurally.
@@ -1360,6 +1363,7 @@ async def _run_pipeline(
             # An editor headline kept across a re-run wins: no second header,
             # no LLM call for it.
             existing_headline = ""
+            overlay_read_ok = db is not None
             if db is not None:
                 try:
                     row = await ClipsRepo(db).get(clip.id)
@@ -1367,6 +1371,8 @@ async def _run_pipeline(
                         row.overlay_config if row is not None else None
                     )
                 except Exception as e:
+                    # Unknown overlay → never overwrite it; a later pass can stamp.
+                    overlay_read_ok = False
                     _log.warning(
                         "pipeline.overlay_read_failed", clip_id=clip.id, error=str(e),
                     )
@@ -1401,6 +1407,7 @@ async def _run_pipeline(
                             tenant_id=tenant_id, router=router,
                             stream_title=stream.title or "",
                             avoid_hooks=tuple(used_hooks),
+                            use_llm=overlay_read_ok or db is None,
                         )
                         if part:
                             series_base[part[2]] = (base, headline_ok)
@@ -1455,7 +1462,7 @@ async def _run_pipeline(
                 used_hooks.append(auto_hook)
             # Viral default overlay (captions + source marca). Headline only for a
             # model-written hook, never a template line (owner, 2026-11-07).
-            if db is not None and not existing_headline:
+            if overlay_read_ok and not existing_headline:
                 try:
                     await ClipsRepo(db).set_overlay_config(
                         clip.id,
