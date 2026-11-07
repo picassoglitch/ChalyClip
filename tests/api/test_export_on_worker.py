@@ -395,3 +395,60 @@ async def test_dispatch_failure_detail_stays_in_logs(
     assert row.render_error == EXPORT_DISPATCH_USER_ERROR
     assert any("secret" in str(e.get("error")) for e in logs
                if e.get("event") == "clip_download.export_dispatch_failed")
+
+
+async def _set_tier(db: Database, tenant_id: str, tier: str) -> None:
+    conn = await db.connect()
+    await conn.execute("UPDATE tenants SET tier = ? WHERE id = ?", (tier, tenant_id))
+    await conn.commit()
+
+
+@pytest.mark.parametrize(("cached_on", "now_on"), [("pro", "free"), ("free", "pro")])
+async def test_plan_change_after_export_is_a_cache_miss(
+    client: httpx.AsyncClient, db: Database, tenants: dict[str, dict[str, str]],
+    env: dict[str, Any], cached_on: str, now_on: str,
+) -> None:
+    """Post-merge review of #107: a Pro export (no corner mark) must not be served
+    once the tenant is Free, nor a Free one (with mark) after upgrading."""
+    from chalybclip.db import BrandKitsRepo
+
+    tenant_id = tenants["alice"]["id"]
+    await _seed_clip(db, tenant_id, output_dir=env["tmp"], render_state="ready")
+    # Paid kit opted into the end card: outro is on for both plans, so only the
+    # corner watermark tells them apart.
+    with bound_tenant(tenant_id):
+        await BrandKitsRepo(db).create(
+            name="K", primary_color="#fff", accent_color="#000",
+            is_default=True, show_chalybclip_outro=True,
+        )
+    await _set_tier(db, tenant_id, cached_on)
+    await _park_export(env, db, tenant_id)
+    h = auth(tenants["alice"]["token"])
+    assert (await client.get("/dashboard/clips/clp_test/render-status", headers=h)).json()["state"] == "ready"
+
+    await _set_tier(db, tenant_id, now_on)
+    s = await client.get("/dashboard/clips/clp_test/render-status", headers=h)
+    assert s.json()["state"] == "idle"
+    d = await client.get("/dashboard/clips/clp_test/download", headers=h)
+    assert d.status_code == 202  # re-render with the current plan's branding
+    assert len(env["dispatched"]) == 1
+
+
+async def test_unreadable_plan_never_serves_the_cache(
+    client: httpx.AsyncClient, db: Database, tenants: dict[str, dict[str, str]],
+    env: dict[str, Any], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from chalybclip.branding import TierUnknownError
+
+    tenant_id = tenants["alice"]["id"]
+    await _seed_clip(db, tenant_id, output_dir=env["tmp"], render_state="ready")
+    await _park_export(env, db, tenant_id)
+
+    async def _unknown(*_a: Any, **_k: Any) -> bool:
+        raise TierUnknownError("tier lookup failed")
+
+    monkeypatch.setattr("chalybclip.branding.watermark_enabled_for_clip", _unknown)
+    h = auth(tenants["alice"]["token"])
+    assert (await client.get("/dashboard/clips/clp_test/render-status", headers=h)).json()["state"] == "idle"
+    d = await client.get("/dashboard/clips/clp_test/download", headers=h)
+    assert d.status_code != 302
