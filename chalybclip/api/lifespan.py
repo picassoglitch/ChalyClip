@@ -5,20 +5,18 @@ background loops at boot:
 
   * webhook dispatch      every 30s   per active tenant
   * metrics ingest        every 1h    per active tenant
-  * retention sweep       every 24h   all tenants (runs shortly after boot)
+  * orphan-dir reclaim    every 24h   local disk (runs shortly after boot)
   * usage outbox drain    every 30s   all tenants (runs at boot)
 
 The legacy publish_jobs drain was removed (Etapa A): publishing now goes
 through Zernio, not the per-platform worker. `publish_interval_s` is kept
 on the signatures for back-compat but no longer starts a loop.
 
-The retention loop is what actually enforces the per-tenant retention
-windows. `sweep_retention` was previously only reachable via the CLI
-(`chalybclip retention sweep`), so unless an operator SSH'd in and ran it by
-hand, nothing on disk was ever reclaimed and the volume grew without bound.
-The loop runs once shortly after boot (so a fresh deploy reclaims space
-promptly even if redeploys happen more often than once a day) and then on
-the 24h cadence.
+Per-plan retention (`sweep_retention`) does NOT run here: with Cloud Run
+scale-to-zero an in-process 24h loop only ran when an instance happened to
+be up, and re-ran a real delete on every boot. A daily Cloud Run job
+(`chalybclip retention sweep`, chalyb Terraform) owns it. This loop only
+reclaims this instance's orphaned local stream dirs.
 
 Each loop iterates `TenantsRepo.list_all()` and runs the drain serially
 for each tenant. Per-tenant errors are logged and swallowed so a single
@@ -53,12 +51,9 @@ _DEFAULT_METRICS_INTERVAL_S = 3600.0
 # Channel polling is comparatively expensive (a yt-dlp listing per watch
 # plus a full pipeline run per new VOD) — keep it slow.
 _DEFAULT_CHANNEL_POLL_INTERVAL_S = 900.0
-# Retention only needs to run daily — aged-out artifacts don't get more
-# aged-out by sweeping more often, and the scan touches every tenant.
+# The orphan-dir reclaim (the "retention loop") only needs to run daily.
 _DEFAULT_RETENTION_INTERVAL_S = 86400.0
-# Delay before the FIRST retention sweep after boot. Long enough to let
-# migrations + warm-up finish and not contend with startup I/O, short
-# enough that a deploy reclaims disk within minutes rather than a day.
+# Delay before its FIRST pass after boot, clear of startup I/O.
 _DEFAULT_RETENTION_INITIAL_DELAY_S = 120.0
 # Pipeline-recovery cadence. The in-process dispatcher drops background
 # tasks on a restart, freezing URL ingests at `pending`; this loop
@@ -184,27 +179,20 @@ async def _retention_loop(
     interval_s: float,
     initial_delay_s: float = _DEFAULT_RETENTION_INITIAL_DELAY_S,
 ) -> None:
-    """Sweep per-tenant retention windows on a loop, hard-deleting aged
-    artifacts (raw VODs, old clips, stale transcripts).
+    """Reclaim local stream dirs whose rows are gone, on a loop.
 
-    Runs once after `initial_delay_s` (so a fresh deploy reclaims disk
-    promptly even when redeploys are more frequent than the interval),
-    then every `interval_s`. `sweep_retention` already logs per-tenant
-    outcomes and swallows per-tenant errors, so a single bad tenant won't
-    stall the loop.
+    Runs once after `initial_delay_s`, then every `interval_s`. Dirs whose
+    rows were torn down (by the retention job, the SQLite->Postgres cutover,
+    by hand) are invisible to every row-driven reclaimer. Per-plan retention
+    runs in its own scheduled job — see the module docstring.
     """
-    from chalybclip.retention import reclaim_orphan_dirs, sweep_retention
+    from chalybclip.retention import reclaim_orphan_dirs
 
     first = True
     while True:
         try:
             await asyncio.sleep(initial_delay_s if first else interval_s)
             first = False
-            await sweep_retention(db, output_dir=output_dir)
-            # Orphan pass AFTER the row-driven sweep: dirs whose rows are
-            # gone (torn down by the sweep, lost in the SQLite->Postgres
-            # cutover, deleted by hand) are invisible to every row-driven
-            # reclaimer and would ratchet the volume up forever.
             await reclaim_orphan_dirs(db, output_dir=output_dir)
         except asyncio.CancelledError:
             raise

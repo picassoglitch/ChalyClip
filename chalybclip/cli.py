@@ -1029,19 +1029,19 @@ def tenants_set_retention_cmd(
     vod_days: int | None = typer.Option(
         None,
         "--vod-days",
-        help="Days to keep raw VODs. Pass 0 to clear back to the system default (7).",
+        help="Days to keep raw VODs. Pass 0 to clear back to the plan window.",
         min=0,
     ),
     clip_days: int | None = typer.Option(
         None,
         "--clip-days",
-        help="Days to keep rendered clips. Pass 0 to clear back to the default (90).",
+        help="Days to keep rendered clips. Pass 0 to clear back to the plan window.",
         min=0,
     ),
     transcript_days: int | None = typer.Option(
         None,
         "--transcript-days",
-        help="Days to keep Whisper transcripts. Pass 0 to clear back to the default (365).",
+        help="Days to keep Whisper transcripts. Pass 0 to clear back to the plan window.",
         min=0,
     ),
     db_path: Path | None = typer.Option(None, "--db-path"),
@@ -1078,9 +1078,9 @@ def tenants_set_retention_cmd(
 
     updated = asyncio.run(_run())
     typer.echo(
-        f"  vod_days={updated.retention_vod_days or 'default(7)'}  "
-        f"clip_days={updated.retention_clip_days or 'default(90)'}  "
-        f"transcript_days={updated.retention_transcript_days or 'default(365)'}"
+        f"  vod_days={updated.retention_vod_days or 'plan'}  "
+        f"clip_days={updated.retention_clip_days or 'plan'}  "
+        f"transcript_days={updated.retention_transcript_days or 'plan'}"
     )
 
 
@@ -1106,7 +1106,7 @@ def retention_sweep_cmd(
 ) -> None:
     """Sweep per-tenant retention windows. Hard-deletes past-cutoff artifacts.
 
-    Wire as a daily cron in production (`docs/production_deploy.md` §6).
+    Prod runs it daily as the Cloud Run job chalybclip-retention-sweep.
     """
     import json as _json
 
@@ -1119,7 +1119,8 @@ def retention_sweep_cmd(
     async def _run() -> list[dict[str, object]]:
         db = _open_db(db_path)
         try:
-            await apply_migrations(db)
+            if not dry_run:  # a dry run must not change the schema either
+                await apply_migrations(db)
             reports = await sweep_retention(
                 db,
                 output_dir=out_dir,
@@ -1129,12 +1130,19 @@ def retention_sweep_cmd(
             return [
                 {
                     "tenant_id": r.tenant_id,
+                    "tier": r.policy.tier,
+                    "tier_known": r.policy.tier_known,
                     "vod_days": r.policy.vod_days,
                     "clip_days": r.policy.clip_days,
                     "transcript_days": r.policy.transcript_days,
                     "vods_deleted": r.vods_deleted,
+                    "streams_deleted": r.streams_deleted,
                     "clips_deleted": r.clips_deleted,
                     "transcripts_deleted": r.transcripts_deleted,
+                    "objects_deleted": r.objects_deleted,
+                    "skipped_in_flight": r.skipped_in_flight,
+                    "skipped_bad_timestamp": r.skipped_bad_timestamp,
+                    "failed": r.failed,
                     "bytes_freed": r.bytes_freed,
                     "dry_run": r.dry_run,
                 }
@@ -1155,8 +1163,9 @@ def retention_sweep_cmd(
     for r in rows:
         mb_freed = r["bytes_freed"] / (1024 * 1024) if r["bytes_freed"] else 0  # type: ignore[operator]
         typer.echo(
-            f"  [{label}] {r['tenant_id']}  "
-            f"vods={r['vods_deleted']}  clips={r['clips_deleted']}  "
+            f"  [{label}] {r['tenant_id']}  tier={r['tier']} ({r['clip_days']}d)  "
+            f"vods={r['vods_deleted']}  streams={r['streams_deleted']}  "
+            f"clips={r['clips_deleted']}  "
             f"transcripts={r['transcripts_deleted']}  freed={mb_freed:.1f} MB"
         )
 

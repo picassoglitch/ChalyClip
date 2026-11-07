@@ -172,11 +172,11 @@ def test_tenants_set_retention_persists_overrides(tmp_path: Path) -> None:
     assert "vod_days=7" in r.output
     assert "clip_days=30" in r.output
     # transcript_days untouched -> still NULL -> rendered as default(365).
-    assert "transcript_days=default(365)" in r.output
+    assert "transcript_days=plan" in r.output
 
 
 def test_tenants_set_retention_zero_clears_to_default(tmp_path: Path) -> None:
-    """vod_days=0 means 'go back to the system default', NOT '0 days'."""
+    """vod_days=0 means 'go back to the plan window', NOT '0 days'."""
     db_path = tmp_path / "x.db"
     runner = CliRunner()
     runner.invoke(app, ["db", "init", "--db-path", str(db_path)])
@@ -208,7 +208,7 @@ def test_tenants_set_retention_zero_clears_to_default(tmp_path: Path) -> None:
         ],
     )
     assert r.exit_code == 0, r.output
-    assert "vod_days=default(7)" in r.output
+    assert "vod_days=plan" in r.output
 
 
 def test_tenants_set_retention_no_args_exits_2(tmp_path: Path) -> None:

@@ -42,6 +42,26 @@ def upload_source_key(tenant_id: str, stream_id: str, suffix: str = ".mp4") -> s
     return f"uploads/{tenant_id}/{stream_id}/source{suffix or '.mp4'}"
 
 
+def _segment(value: str) -> str:
+    """One non-empty path segment. A blank or slashed id would widen a
+    retention prefix to a whole tenant (or the whole bucket)."""
+    v = (value or "").strip()
+    if not v or "/" in v or v in {".", ".."}:
+        raise ValueError(f"unsafe object-key segment: {value!r}")
+    return v
+
+
+def clip_prefix(tenant_id: str, clip_id: str) -> str:
+    """Every object of one clip (all render resolutions included)."""
+    return f"clips/{_segment(tenant_id)}/{_segment(clip_id)}/"
+
+
+def stream_prefixes(tenant_id: str, stream_id: str) -> list[str]:
+    """Every stream-level object: the parked upload and the worker's audio."""
+    t, s = _segment(tenant_id), _segment(stream_id)
+    return [f"uploads/{t}/{s}/", f"work/{t}/{s}/"]
+
+
 def clip_key_family(tenant_id: str, clip_id: str) -> list[str]:
     """Every key retention must drop when the clip row is deleted."""
     return [
@@ -56,7 +76,9 @@ __all__ = [
     "clip_key_family",
     "clip_landscape_key",
     "clip_media_key",
+    "clip_prefix",
     "clip_render_key",
     "clip_thumbnail_key",
+    "stream_prefixes",
     "upload_source_key",
 ]

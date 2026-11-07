@@ -27,14 +27,8 @@ class Tenant(BaseModel):
     daily_llm_budget_usd_micros: int | None = None
     daily_publish_limit: int | None = None
     rescore_concurrency_cap: int = 4
-    # Retention windows (voice-markers spec slice E.1 / §9 locked defaults).
-    # NULL means the tenant inherits the system default:
-    #   - retention_vod_days        → 7
-    #   - retention_clip_days       → 90
-    #   - retention_transcript_days → 365
-    # The sweeper resolves NULL → default at scan time; storing NULL keeps
-    # "factory default" distinguishable from "tenant explicitly chose this
-    # number" for ops debugging.
+    # Retention overrides. NULL = the tenant's plan window
+    # (chalybclip.tiers.RETENTION_DAYS: free 7, paid 30), resolved at sweep time.
     retention_vod_days: int | None = None
     retention_clip_days: int | None = None
     retention_transcript_days: int | None = None

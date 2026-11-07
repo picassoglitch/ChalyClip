@@ -86,27 +86,30 @@ async def test_background_drains_lifespan_starts_named_loops(
     assert chalybclip_tasks == []
 
 
-async def test_retention_loop_runs_sweep_shortly_after_boot(
+async def test_retention_loop_reclaims_orphans_but_never_sweeps(
     db: Database,
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    """The retention loop fires `sweep_retention` after its initial delay,
-    well before the full 24h interval, so a deploy reclaims disk promptly.
-
-    Without this loop nothing ever enforced the retention windows —
-    `sweep_retention` was only reachable via the CLI.
-    """
+    """The boot loop only reclaims orphaned local dirs. Per-plan deletes run
+    in the scheduled Cloud Run job: an in-process sweep re-ran a real delete
+    on every scale-from-zero boot, with no dry run first."""
     from chalybclip.api.lifespan import _retention_loop
 
-    calls: list[Path] = []
-    swept = asyncio.Event()
+    orphan_calls: list[Path] = []
+    swept: list[bool] = []
+    ran = asyncio.Event()
 
-    async def _fake_sweep(_db: Database, *, output_dir: Path, **_kw: object) -> list:
-        calls.append(output_dir)
-        swept.set()
+    async def _fake_orphans(_db: Database, *, output_dir: Path, **_kw: object):
+        orphan_calls.append(output_dir)
+        ran.set()
+        return 0, 0
+
+    async def _fake_sweep(*_a: object, **_kw: object) -> list:
+        swept.append(True)
         return []
 
+    monkeypatch.setattr("chalybclip.retention.reclaim_orphan_dirs", _fake_orphans)
     monkeypatch.setattr("chalybclip.retention.sweep_retention", _fake_sweep)
 
     out = tmp_path / "out"
@@ -119,10 +122,11 @@ async def test_retention_loop_runs_sweep_shortly_after_boot(
         )
     )
     try:
-        await asyncio.wait_for(swept.wait(), timeout=2.0)
+        await asyncio.wait_for(ran.wait(), timeout=2.0)
     finally:
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await task
 
-    assert calls == [out]
+    assert orphan_calls == [out]
+    assert swept == []

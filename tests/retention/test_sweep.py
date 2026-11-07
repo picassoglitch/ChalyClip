@@ -19,9 +19,6 @@ from chalybclip.db.models import (
     TranscriptRow,
 )
 from chalybclip.retention import (
-    DEFAULT_RETENTION_CLIP_DAYS,
-    DEFAULT_RETENTION_TRANSCRIPT_DAYS,
-    DEFAULT_RETENTION_VOD_DAYS,
     RetentionPolicy,
     sweep_retention,
 )
@@ -143,24 +140,26 @@ async def _seed_transcript(
 # ---- RetentionPolicy.from_tenant ----
 
 
-def test_policy_falls_back_to_defaults_on_null_columns() -> None:
+def test_policy_falls_back_to_plan_window_on_null_columns() -> None:
     p = RetentionPolicy.from_tenant(
-        vod_days=None, clip_days=None, transcript_days=None
+        tier="free", vod_days=None, clip_days=None, transcript_days=None
     )
-    assert p.vod_days == DEFAULT_RETENTION_VOD_DAYS
-    assert p.clip_days == DEFAULT_RETENTION_CLIP_DAYS
-    assert p.transcript_days == DEFAULT_RETENTION_TRANSCRIPT_DAYS
+    assert (p.vod_days, p.clip_days, p.transcript_days) == (7, 7, 7)
 
 
 def test_policy_honors_tenant_overrides() -> None:
-    p = RetentionPolicy.from_tenant(vod_days=7, clip_days=14, transcript_days=30)
-    assert p == (7, 14, 30)
+    p = RetentionPolicy.from_tenant(
+        tier="free", vod_days=7, clip_days=14, transcript_days=30
+    )
+    assert (p.vod_days, p.clip_days, p.transcript_days) == (7, 14, 30)
 
 
-def test_policy_zero_is_an_override_not_a_fallback() -> None:
-    """`vod_days=0` means 'delete immediately', NOT 'use the default 30'."""
-    p = RetentionPolicy.from_tenant(vod_days=0, clip_days=None, transcript_days=None)
-    assert p.vod_days == 0
+def test_policy_zero_or_negative_override_falls_back_to_plan() -> None:
+    """A stored 0 / negative would wipe the tenant; it means 'unset'."""
+    p = RetentionPolicy.from_tenant(
+        tier="pro", vod_days=0, clip_days=-3, transcript_days=None
+    )
+    assert (p.vod_days, p.clip_days, p.transcript_days) == (30, 30, 30)
 
 
 # ---- sweep_retention end-to-end ----
@@ -222,7 +221,7 @@ async def test_sweep_deletes_aged_vod_files_and_row(
 async def test_sweep_deletes_aged_clips_and_unlinks_clip_dir(
     retention_db: Database, tmp_path: Path
 ) -> None:
-    """A clip past 90 days is removed but its (younger) stream stays."""
+    """A clip past the window is removed but its (younger) stream stays."""
     out_dir = tmp_path / "out"
     t = await TenantsRepo(retention_db).create(name="Aldo")
     # Stream is still inside the VOD window. Only the clip ages out.
@@ -257,8 +256,8 @@ async def test_sweep_deletes_aged_clips_and_unlinks_clip_dir(
 async def test_sweep_past_vod_window_preserves_in_window_clips(
     retention_db: Database, tmp_path: Path
 ) -> None:
-    """A stream past the VOD window (30d) keeps clips that are still inside
-    the clip window (90d). Only the raw source is reclaimed.
+    """A stream past the window keeps clips that are still inside it (clips
+    are cut after their stream). Only the raw source is reclaimed.
 
     Regression: the sweeper used to nuke the whole stream dir + cascade-
     delete the row at the VOD cutoff, which destroyed in-window clips (and
@@ -272,16 +271,16 @@ async def test_sweep_past_vod_window_preserves_in_window_clips(
         tenant_id=t.id,
         stream_id="str_mixed",
         output_dir=out_dir,
-        age_days=45,  # past 30-day VOD window
+        age_days=45,  # past the window
     )
-    # Clip at 45 days — past VOD window but well inside the 90-day clip one.
+    # Clip at 5 days — inside free's 7-day window.
     clip_path = await _seed_clip(
         retention_db,
         tenant_id=t.id,
         stream_id="str_mixed",
         clip_id="clp_keep",
         output_dir=out_dir,
-        age_days=45,
+        age_days=5,
     )
     source_dir = out_dir / "str_mixed" / "source"
     assert source_dir.exists()
@@ -303,7 +302,7 @@ async def test_sweep_past_vod_window_preserves_in_window_clips(
 async def test_sweep_deletes_aged_transcripts(
     retention_db: Database, tmp_path: Path
 ) -> None:
-    """Transcripts past 365 days are dropped; the stream survives."""
+    """Transcripts past the window are dropped; the stream survives."""
     out_dir = tmp_path / "out"
     t = await TenantsRepo(retention_db).create(name="Aldo")
     await _seed_stream(
@@ -311,7 +310,7 @@ async def test_sweep_deletes_aged_transcripts(
         tenant_id=t.id,
         stream_id="str_for_tx",
         output_dir=out_dir,
-        age_days=10,
+        age_days=3,
     )
     await _seed_transcript(
         retention_db,
@@ -325,14 +324,18 @@ async def test_sweep_deletes_aged_transcripts(
     assert r.transcripts_deleted == 1
     with bound_tenant(t.id):
         assert await TranscriptsRepo(retention_db).get("str_for_tx") is None
+        assert await StreamsRepo(retention_db).get("str_for_tx") is not None
 
 
 async def test_sweep_honors_per_tenant_override(
     retention_db: Database, tmp_path: Path
 ) -> None:
-    """A tenant with retention_vod_days=7 nukes streams older than a week."""
+    """A Pro tenant (30d plan) with retention_vod_days=7 drops week-old VODs."""
     out_dir = tmp_path / "out"
     t = await TenantsRepo(retention_db).create(name="Aldo")
+    conn = await retention_db.connect()
+    await conn.execute("UPDATE tenants SET tier = 'pro' WHERE id = ?", (t.id,))
+    await conn.commit()
     await TenantsRepo(retention_db).set_retention(t.id, retention_vod_days=7)
     await _seed_stream(
         retention_db,

@@ -14,7 +14,7 @@ import pytest
 import chalybclip.integrations.storage as storage_mod
 from chalybclip.db import CandidatesRepo, ClipsRepo, Database, StreamsRepo, TenantsRepo
 from chalybclip.db.models import CandidateRow, ClipRow, StreamRow
-from chalybclip.integrations.storage import clip_key_family
+from chalybclip.integrations.storage import clip_prefix
 from chalybclip.retention import sweep_retention
 from chalybclip.tenancy import bound_tenant
 
@@ -22,13 +22,14 @@ from .conftest import days_ago_iso
 
 
 class _RecordingStore:
-    """Fake ArtifactStore that records deletes."""
+    """Fake ArtifactStore that records prefix deletes."""
 
     def __init__(self) -> None:
         self.deleted: list[str] = []
 
-    async def delete(self, *, key: str) -> None:
-        self.deleted.append(key)
+    async def delete_prefix(self, *, prefix: str) -> int:
+        self.deleted.append(prefix)
+        return 1
 
 
 async def _seed_stream_with_clip(
@@ -109,7 +110,8 @@ async def test_sweep_deletes_bucket_objects_for_expired_clips(
     reports = await sweep_retention(retention_db, output_dir=tmp_path)
 
     assert reports[0].clips_deleted == 1
-    assert sorted(store.deleted) == sorted(clip_key_family(t.id, "clp_1"))
+    # One prefix covers every render resolution, not just the 1080 key.
+    assert store.deleted == [clip_prefix(t.id, "clp_1")]
 
 
 async def test_sweep_leaves_bucket_alone_inside_window(
