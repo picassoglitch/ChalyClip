@@ -109,8 +109,6 @@ class FreeHub:
                     "allowed": False,
                     "reason": "no_tokens",
                     "detail": {"remaining": remaining, "needed": needed},
-                    "remaining": remaining,
-                    "needed": needed,
                     "limits": {},
                 },
             )
@@ -179,16 +177,32 @@ async def test_unknown_length_hold_is_bigger_than_a_free_month(
     store: FakeStore,
     free_hub: FreeHub,
 ) -> None:
-    # The QA failure, reproduced: no length → 10-min estimate → refused,
-    # and the refusal now says how much it takes and how much there is.
+    # The QA failure, reproduced: no length → 10-min estimate → refused.
+    # That figure isn't this video's cost, so the error carries no numbers.
     hdr = await _free_tenant(db, tenants["alice"]["id"])
     r = await client.post("/api/hub/v1/uploads", json=_upload(None), headers=hdr)
     assert r.status_code == 402, r.text
     err = r.json()["error"]
     assert err["code"] == "no_credits" and err["reason"] == "no_tokens"
-    needed = math.ceil(estimate_tokens(source_minutes=0) * 2.6)
+    assert math.ceil(estimate_tokens(source_minutes=0) * 2.6) > FREE_CREDITS
+    assert "credits" not in err
+
+
+async def test_a_video_too_long_for_the_balance_says_what_it_takes(
+    client: httpx.AsyncClient,
+    db: Database,
+    tenants: dict[str, dict[str, str]],
+    store: FakeStore,
+    free_hub: FreeHub,
+) -> None:
+    # Known length, really over the balance: the hub's figures (nested in
+    # its `detail`, as route.ts answers) reach the error body.
+    hdr = await _free_tenant(db, tenants["alice"]["id"])
+    r = await client.post("/api/hub/v1/uploads", json=_upload(9 * 60), headers=hdr)
+    assert r.status_code == 402, r.text
+    needed = math.ceil(estimate_tokens(source_minutes=9) * 2.6)
     assert needed > FREE_CREDITS
-    assert err["credits"] == {"needed": needed, "remaining": FREE_CREDITS}
+    assert r.json()["error"]["credits"] == {"needed": needed, "remaining": FREE_CREDITS}
 
 
 @pytest.mark.parametrize("seconds", [20.0, 100.0])

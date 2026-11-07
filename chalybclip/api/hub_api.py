@@ -193,14 +193,19 @@ def from_admission(exc: AdmissionRefused) -> HubError:
 
 
 def _credits_of(exc: AdmissionRefused) -> dict[str, int] | None:
-    """A no_tokens refusal's numbers from the hub (admit_usage: `needed`
-    with margin, `remaining` balance), so the screen can say how many
-    credits the video takes and how many the person has."""
-    if exc.reason != "no_tokens":
+    """A no_tokens refusal's numbers from the hub (admit route: `detail`
+    holds admit_usage's `needed` with margin and `remaining`), so the screen
+    can say what the video takes and what the person has. Only when the
+    hold was sized by the real length: the unknown-length default isn't
+    what this video costs."""
+    if exc.reason != "no_tokens" or not exc.length_known:
+        return None
+    hub = exc.detail.get("detail")
+    if not isinstance(hub, dict):
         return None
     out: dict[str, int] = {}
     for key in ("needed", "remaining"):
-        v = exc.detail.get(key)
+        v = hub.get(key)
         if isinstance(v, bool) or not isinstance(v, int | float) or v < 0:
             return None
         out[key] = int(v)

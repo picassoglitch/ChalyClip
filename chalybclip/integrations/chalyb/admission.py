@@ -118,13 +118,22 @@ class AdmissionRefused(ChalybClipError):
     """The hub said no (or couldn't be asked). Carries what a route needs
     to answer the user: an HTTP status and a Spanish message."""
 
-    def __init__(self, reason: str, *, detail: dict[str, Any] | None = None):
+    def __init__(
+        self,
+        reason: str,
+        *,
+        detail: dict[str, Any] | None = None,
+        length_known: bool = False,
+    ):
         status, message = REFUSAL_MESSAGES.get(reason, _UNKNOWN_REFUSAL)
         super().__init__(message)
         self.reason = reason
         self.status_code = status
         self.user_message = message
         self.detail = detail or {}
+        # Whether the hold was sized by the video's real length (not the
+        # unknown-length default), so its credit figure describes this video.
+        self.length_known = length_known
 
 
 @dataclass(frozen=True)
@@ -263,7 +272,9 @@ async def admit(
             "admission refused: %s · tenant=%s job=%s", reason, tenant_id,
             request.external_job_id,
         )
-        raise AdmissionRefused(reason, detail=data)
+        raise AdmissionRefused(
+            reason, detail=data, length_known=request.source_minutes > 0
+        )
 
     result = AdmitResult(
         allowed=True,
