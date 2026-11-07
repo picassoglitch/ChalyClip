@@ -265,6 +265,17 @@ class UsageJobsRepo:
         row = await cur.fetchone()
         return _job_row(row) if row is not None else None
 
+    async def ids_for_stream(self, *, tenant_id: str, stream_id: str) -> list[str]:
+        """Every admitted run of a stream, oldest first: the hub's
+        external_job_ids, which key what it actually charged."""
+        conn = await self._db.connect()
+        cur = await conn.execute(
+            "SELECT id FROM usage_jobs WHERE tenant_id = ? AND stream_id = ? "
+            "ORDER BY created_at, id",
+            (tenant_id, stream_id),
+        )
+        return [str(r["id"]) for r in await cur.fetchall()]
+
     async def set_kickoff(self, job_id: str, kickoff: dict[str, Any]) -> None:
         conn = await self._db.connect()
         await conn.execute(
