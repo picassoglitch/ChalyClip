@@ -134,11 +134,13 @@ async def admit_job(
         )
 
 
-_TENANT_LOCKS: dict[str, asyncio.Lock] = {}
+_TENANT_LOCKS: dict[tuple[int, str], asyncio.Lock] = {}
 
 
 def _tenant_lock(tenant_id: str) -> asyncio.Lock:
-    return _TENANT_LOCKS.setdefault(tenant_id, asyncio.Lock())
+    # Per event loop: an asyncio.Lock can't be shared across loops.
+    key = (id(asyncio.get_running_loop()), tenant_id)
+    return _TENANT_LOCKS.setdefault(key, asyncio.Lock())
 
 
 async def _admit_job_locked(
