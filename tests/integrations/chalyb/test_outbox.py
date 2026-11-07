@@ -186,6 +186,26 @@ async def test_settle_is_queued_once_and_delivered(db: Database, chalyb_env) -> 
     assert (await UsageOutboxRepo(db).get("settle_res-1")).status == "sent"
 
 
+@respx.mock
+async def test_failed_settle_carries_the_clip_count(db: Database, chalyb_env) -> None:
+    """The hub frees a failed run only on outputs = 0; the field rides along
+    as sent, and stays out of the body when unknown (the hub then counts it)."""
+    tid = await _tenant(db)
+    await enqueue_settle(
+        db, tenant_id=tid, reservation_id="res-0", outcome="failed", outputs=0, kick=False
+    )
+    await enqueue_settle(db, tenant_id=tid, reservation_id="res-n", outcome="failed", kick=False)
+    route = respx.post(_SETTLE).mock(return_value=httpx.Response(200, json={"ok": True}))
+    await drain_outbox(db)
+    bodies = sorted(
+        (_json.loads(c.request.content) for c in route.calls), key=lambda b: b["reservation_id"]
+    )
+    assert bodies == [
+        {"reservation_id": "res-0", "outcome": "failed", "outputs": 0},
+        {"reservation_id": "res-n", "outcome": "failed"},
+    ]
+
+
 async def test_enqueue_is_idempotent_on_source_id(db: Database, chalyb_env) -> None:
     tid = await _tenant(db)
     assert await enqueue_usage(
