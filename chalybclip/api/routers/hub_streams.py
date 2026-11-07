@@ -583,6 +583,9 @@ class UploadIn(BaseModel):
     content_type: str = Field(max_length=100)
     persona_id: str | None = Field(default=None, max_length=64)
     boost: bool | None = None
+    # Length the browser read. Only sizes the first hold: /complete re-admits with
+    # ffprobe's figure and runs bill actual usage, so a wrong value buys nothing.
+    duration_s: float | None = Field(default=None, gt=0, le=24 * 3600)
 
 
 @router.post("/uploads", dependencies=[Depends(require_active_tenant)])
@@ -608,12 +611,16 @@ async def hub_upload_start(
     persona = await _resolve_persona(db, body.persona_id)
 
     stream_id = new_id("str")
+    declared_minutes = (body.duration_s or 0.0) / 60.0
     try:
         admission = await admit_job(
             db,
             tenant_id=tenant_id,
             stream_id=stream_id,
             upload_bytes=body.size_bytes,
+            # Unknown length (0) is estimated as 10 min, which alone is more
+            # than a Free month's credits: every Free upload was refused.
+            source_minutes=declared_minutes,
             boost=body.boost,
         )
     except AdmissionRefused as e:

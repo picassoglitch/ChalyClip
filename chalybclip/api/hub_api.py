@@ -23,6 +23,8 @@ This module owns:
     `code` is one of HUB_ERROR_CODES; the hub maps it onto its normalized
     tool errors. 402/413/429 refusals from the consumption contract keep
     their admission `reason` (no_tokens, minutes_cap, upload_too_large…).
+    A no_tokens refusal also carries `"credits": {"needed": int,
+    "remaining": int}` (hub credits) when the hub sent them.
   * `hub_router()` — the APIRouter factory every hub router uses (core,
     editor, publish), so they share the prefix and the tenant binding.
 
@@ -98,6 +100,7 @@ class HubError(Exception):
         status_code: int | None = None,
         reason: str | None = None,
         retryable: bool | None = None,
+        credits: dict[str, int] | None = None,
     ) -> None:
         if code not in HUB_ERROR_CODES:
             raise ValueError(f"unknown hub error code {code!r}")
@@ -107,6 +110,7 @@ class HubError(Exception):
         self.status_code = status_code or HUB_ERROR_CODES[code]
         self.reason = reason
         self.retryable = (code in _RETRYABLE) if retryable is None else retryable
+        self.credits = credits
 
 
 def hub_error_response(
@@ -125,17 +129,17 @@ def hub_error_response(
 
 def _render(err: HubError) -> JSONResponse:
     headers = {"WWW-Authenticate": "Bearer"} if err.status_code == 401 else None
+    error: dict[str, Any] = {
+        "code": err.code,
+        "message": err.message,
+        "reason": err.reason,
+        "retryable": err.retryable,
+    }
+    if err.credits:
+        error["credits"] = err.credits
     return JSONResponse(
         status_code=err.status_code,
-        content={
-            "ok": False,
-            "error": {
-                "code": err.code,
-                "message": err.message,
-                "reason": err.reason,
-                "retryable": err.retryable,
-            },
-        },
+        content={"ok": False, "error": error},
         headers=headers,
     )
 
@@ -179,7 +183,28 @@ def from_http_exception(exc: StarletteHTTPException) -> HubError:
 
 def from_admission(exc: AdmissionRefused) -> HubError:
     code = _code_for_status(exc.status_code, exc.reason)
-    return HubError(code, exc.user_message, status_code=exc.status_code, reason=exc.reason)
+    return HubError(
+        code,
+        exc.user_message,
+        status_code=exc.status_code,
+        reason=exc.reason,
+        credits=_credits_of(exc),
+    )
+
+
+def _credits_of(exc: AdmissionRefused) -> dict[str, int] | None:
+    """A no_tokens refusal's numbers from the hub (admit_usage: `needed`
+    with margin, `remaining` balance), so the screen can say how many
+    credits the video takes and how many the person has."""
+    if exc.reason != "no_tokens":
+        return None
+    out: dict[str, int] = {}
+    for key in ("needed", "remaining"):
+        v = exc.detail.get(key)
+        if isinstance(v, bool) or not isinstance(v, int | float) or v < 0:
+            return None
+        out[key] = int(v)
+    return out
 
 
 def install_hub_error_handlers(app: FastAPI) -> None:
