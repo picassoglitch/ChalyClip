@@ -21,27 +21,35 @@ from chalybclip.db import (
     VodSpeakersRepo,
 )
 from chalybclip.db.models import BrandKitRow, CustomTriggerPhrases
+from chalybclip.errors import ChalybClipError
 
 _log = structlog.get_logger(__name__)
+
+
+class TierUnknownError(ChalybClipError):
+    """The tenant's plan couldn't be read, so platform branding can't be
+    decided. Callers fail the export (retryable) instead of guessing."""
 
 
 async def _tenant_is_free(db: Database, tenant_id: str) -> bool:
     from chalybclip.tiers import FREE, normalize_tier
 
-    tenant = await TenantsRepo(db).get(tenant_id)
-    return normalize_tier(tenant.tier if tenant else None) == FREE
+    try:
+        tenant = await TenantsRepo(db).get(tenant_id)
+    except Exception as e:
+        raise TierUnknownError(f"tier lookup failed for {tenant_id}: {e}") from e
+    if tenant is None:
+        raise TierUnknownError(f"tenant {tenant_id} not found")
+    return normalize_tier(tenant.tier) == FREE
 
 
 async def watermark_enabled_for_clip(db: Database, *, tenant_id: str) -> bool:
     """Whether the corner "CHALYB" mark is burned into this clip.
 
     Free tier only — paid plans carry no watermark (owner, 2026-11-06).
-    A tier lookup failure keeps the mark so free exports never lose it.
+    Raises TierUnknownError when the plan can't be read.
     """
-    try:
-        return await _tenant_is_free(db, tenant_id)
-    except Exception:  # noqa: BLE001 — best-effort; free-safe default
-        return True
+    return await _tenant_is_free(db, tenant_id)
 
 
 async def outro_enabled_for_clip(
@@ -51,15 +59,12 @@ async def outro_enabled_for_clip(
 
     Free tier ALWAYS gets it. Paid tiers get it only when their resolved
     brand kit opts in (`show_chalybclip_outro`); no kit means no outro.
-    A tier lookup failure keeps it (free-safe); a paid kit lookup failure
-    drops it, so a hiccup never brands a paid export.
+    Raises TierUnknownError when the plan can't be read; a paid kit
+    lookup failure drops the outro, so a hiccup never brands a paid export.
     """
     from chalybclip.tenancy import bound_tenant
 
-    try:
-        if await _tenant_is_free(db, tenant_id):
-            return True
-    except Exception:  # noqa: BLE001 — best-effort; free-safe default
+    if await _tenant_is_free(db, tenant_id):
         return True
     try:
         with bound_tenant(tenant_id):

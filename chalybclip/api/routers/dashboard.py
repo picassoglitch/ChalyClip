@@ -3512,9 +3512,14 @@ async def _burn_overlays_for_clip(
         except (TypeError, _json.JSONDecodeError):
             segments = []
 
-    from chalybclip.branding import watermark_enabled_for_clip
+    from chalybclip.branding import TierUnknownError, watermark_enabled_for_clip
 
-    render_wm = await watermark_enabled_for_clip(db, tenant_id=clip.tenant_id)
+    try:
+        render_wm = await watermark_enabled_for_clip(db, tenant_id=clip.tenant_id)
+    except TierUnknownError as e:
+        # Plan unknown → don't guess branding; caller keeps the original.
+        log.warning("burn.tier_unknown", clip_id=clip_id, error=str(e))
+        return "failed:tier_unknown"
 
     try:
         # ffmpeg is sync + CPU-bound; offload to a thread so the
@@ -3547,9 +3552,16 @@ async def _burn_overlays_for_clip(
         from chalybclip.branding import outro_enabled_for_clip
         from chalybclip.clip.outro import append_outro
 
-        if await outro_enabled_for_clip(
-            db, tenant_id=clip.tenant_id, stream_id=clip.stream_id
-        ):
+        try:
+            want_outro = await outro_enabled_for_clip(
+                db, tenant_id=clip.tenant_id, stream_id=clip.stream_id
+            )
+        except TierUnknownError as e:
+            # Don't serve a final whose end card is a guess; re-finalize retries.
+            target_path.unlink(missing_ok=True)
+            log.warning("burn.tier_unknown", clip_id=clip_id, error=str(e))
+            return "failed:tier_unknown"
+        if want_outro:
             await asyncio.to_thread(append_outro, target_path)
     return "burned" if burned else "skipped_no_overlays"
 
@@ -4493,7 +4505,13 @@ async def clip_render_view(
     if clip is None:
         raise HTTPException(status_code=404, detail="clip not found")
 
-    overlay_ctx = await _resolve_overlay_context(db, clip)
+    from chalybclip.branding import TierUnknownError
+
+    try:
+        overlay_ctx = await _resolve_overlay_context(db, clip)
+    except TierUnknownError as e:
+        # Plan unknown → the recorder sees a failed page and the export retries.
+        raise HTTPException(status_code=503, detail="plan unavailable, retry") from e
     return templates.TemplateResponse(
         request,
         "clip_render.html",

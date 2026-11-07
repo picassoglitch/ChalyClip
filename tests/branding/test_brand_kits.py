@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from chalybclip.branding import (
+    TierUnknownError,
     merged_trigger_phrases_for_speaker,
     outro_enabled_for_clip,
     resolve_brand_kit_for_candidate,
@@ -466,20 +467,26 @@ async def test_merged_phrases_speaker_none_skips_lookup(
     assert retro == ["b"]
 
 
-# ---- lookup failures: free-safe on tier, unbranded on paid kit ----
+# ---- lookup failures: unknown tier raises, paid kit miss is unbranded ----
 
 
-async def test_tier_lookup_failure_keeps_branding(
+async def test_tier_lookup_failure_raises_not_guesses(
     migrated_db: Database, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Codex P2: a failed tier read must not brand a paid export as free."""
     async def boom(self, tenant_id):  # type: ignore[no-untyped-def]
         raise RuntimeError("db down")
 
     monkeypatch.setattr(TenantsRepo, "get", boom)
-    assert await watermark_enabled_for_clip(migrated_db, tenant_id="ten_x") is True
-    assert await outro_enabled_for_clip(
-        migrated_db, tenant_id="ten_x", stream_id="str_x"
-    ) is True
+    with pytest.raises(TierUnknownError):
+        await watermark_enabled_for_clip(migrated_db, tenant_id="ten_x")
+    with pytest.raises(TierUnknownError):
+        await outro_enabled_for_clip(migrated_db, tenant_id="ten_x", stream_id="str_x")
+
+
+async def test_missing_tenant_raises(migrated_db: Database) -> None:
+    with pytest.raises(TierUnknownError):
+        await watermark_enabled_for_clip(migrated_db, tenant_id="ten_missing")
 
 
 async def test_paid_kit_lookup_failure_drops_outro(

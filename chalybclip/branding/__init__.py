@@ -57,6 +57,7 @@ from .logo import (
     sanitize_svg,
 )
 from .service import (
+    TierUnknownError,
     merged_trigger_phrases_for_speaker,
     outro_enabled_for_clip,
     resolve_brand_kit_for_candidate,
@@ -65,6 +66,7 @@ from .service import (
 )
 
 __all__ = [
+    "TierUnknownError",
     "BUILTIN_STYLES",
     "BannerVariantId",
     "CaptionPresetId",
