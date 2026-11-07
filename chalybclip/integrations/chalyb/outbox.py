@@ -161,19 +161,25 @@ async def enqueue_settle(
     tenant_id: str,
     reservation_id: str | None,
     outcome: str,
+    outputs: int | None = None,
     kick: bool = True,
 ) -> bool:
     """Queue the terminal settle of a reservation (succeeded / failed /
     cancelled). One per reservation — the first outcome queued wins, which
     matches the hub's "settling twice is a no-op". Heartbeats are sent
-    directly (see admission.heartbeat): a late heartbeat is worthless."""
+    directly (see admission.heartbeat): a late heartbeat is worthless.
+    `outputs` (clips the run left) goes along when known; the hub counts a
+    failure as a free retry only with outputs = 0, and without it as usage."""
     if not reservation_id:
         return False
+    payload: dict[str, Any] = {"reservation_id": reservation_id, "outcome": outcome}
+    if outputs is not None:
+        payload["outputs"] = max(0, int(outputs))
     added = await UsageOutboxRepo(db).add(
         row_id=f"settle_{reservation_id}",
         tenant_id=tenant_id,
         endpoint="settle",
-        payload={"reservation_id": reservation_id, "outcome": outcome},
+        payload=payload,
     )
     if added and kick:
         kick_drain(db)

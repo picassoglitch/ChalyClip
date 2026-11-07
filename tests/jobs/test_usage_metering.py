@@ -8,10 +8,12 @@ from pathlib import Path
 
 import pytest
 
-from chalybclip.db import Database, TenantsRepo, apply_migrations
+from chalybclip.db import ClipsRepo, Database, StreamsRepo, TenantsRepo, apply_migrations
+from chalybclip.db.models import ClipRow, StreamRow
 from chalybclip.db.usage_repos import UsageJobsRepo, UsageOutboxRepo
 from chalybclip.integrations.chalyb import outbox as outbox_mod
-from chalybclip.jobs.usage import COMPUTE_MICROS_PER_S, metered_run
+from chalybclip.jobs.usage import COMPUTE_MICROS_PER_S, metered_run, settle_job
+from chalybclip.tenancy import bound_tenant
 
 
 @pytest.fixture
@@ -137,3 +139,133 @@ async def test_rerunning_the_same_job_meters_each_attempts_compute(db_path: str)
     ids = {r["id"] for r in await cur.fetchall()}
     await db.close()
     assert len(ids) == 2
+
+
+# ---- outputs: the hub frees a failed run only when it left no clips ---------
+
+
+async def _settle_payload(db_path: str, reservation_id: str) -> dict:
+    db = Database(db_path)
+    row = await UsageOutboxRepo(db).get(f"settle_{reservation_id}")
+    await db.close()
+    assert row is not None
+    return row.payload
+
+
+async def _add_clips(db_path: str, stream_id: str, n: int) -> None:
+    db = Database(db_path)
+    with bound_tenant("ten_a"):
+        await StreamsRepo(db).upsert(
+            StreamRow(
+                id=stream_id, tenant_id="ten_a", vod_url="upload://v.mp4",
+                platform="upload", title="v", channel=None, duration_s=0.0,
+                source_video_path="/tmp/v.mp4", source_audio_path="/tmp/v.wav",
+                status="pending", created_at="2026-11-01T00:00:00+00:00",
+            )
+        )
+        await ClipsRepo(db).upsert_many([
+            ClipRow(id=f"clp_{stream_id}_{i}", stream_id=stream_id, tenant_id="ten_a",
+                    start_s=0.0, end_s=10.0, duration_s=10.0, width=1080, height=1920,
+                    path="/tmp/c.mp4", created_at="2026-11-01T00:00:00+00:00")
+            for i in range(n)
+        ])
+    await db.close()
+
+
+async def test_failure_without_clips_settles_outputs_zero(db_path: str) -> None:
+    with pytest.raises(RuntimeError):
+        async with metered_run(
+            db_path, tenant_id="ten_a", stream_id="str_1", job_id="j_bad",
+            reservation_id="r_bad", lane="standard",
+        ):
+            raise RuntimeError("transcription failed")
+    assert await _settle_payload(db_path, "r_bad") == {
+        "reservation_id": "r_bad", "outcome": "failed", "outputs": 0,
+    }
+
+
+async def test_failure_after_making_clips_settles_their_count(db_path: str) -> None:
+    with pytest.raises(RuntimeError):
+        async with metered_run(
+            db_path, tenant_id="ten_a", stream_id="str_1", job_id="j_bad",
+            reservation_id="r_bad", lane="standard",
+        ):
+            await _add_clips(db_path, "str_1", 3)
+            raise RuntimeError("upload of the last clip failed")
+    payload = await _settle_payload(db_path, "r_bad")
+    assert payload["outcome"] == "failed" and payload["outputs"] == 3
+
+
+async def test_clips_of_another_stream_or_tenant_do_not_count(db_path: str) -> None:
+    await _add_clips(db_path, "str_other", 2)
+    with pytest.raises(RuntimeError):
+        async with metered_run(
+            db_path, tenant_id="ten_a", stream_id="str_1", job_id="j_bad",
+            reservation_id="r_bad", lane="standard",
+        ):
+            raise RuntimeError("boom")
+    assert (await _settle_payload(db_path, "r_bad"))["outputs"] == 0
+
+
+async def test_success_and_cancel_send_no_outputs(db_path: str) -> None:
+    async with metered_run(
+        db_path, tenant_id="ten_a", stream_id="str_1", job_id="j_ok",
+        reservation_id="r_ok", lane="boost",
+    ):
+        pass
+    assert "outputs" not in await _settle_payload(db_path, "r_ok")
+
+
+async def test_unreadable_clip_count_sends_no_outputs(
+    db_path: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fail-safe: no count → no field → the hub counts the run."""
+
+    async def broken(*_a: object, **_k: object) -> int:
+        raise RuntimeError("db locked")
+
+    monkeypatch.setattr("chalybclip.jobs.usage.count_stream_clips", broken)
+    with pytest.raises(RuntimeError):
+        async with metered_run(
+            db_path, tenant_id="ten_a", stream_id="str_1", job_id="j_bad",
+            reservation_id="r_bad", lane="standard",
+        ):
+            raise RuntimeError("boom")
+    payload = await _settle_payload(db_path, "r_bad")
+    assert payload["outcome"] == "failed" and "outputs" not in payload
+
+
+async def test_dispatcher_side_failure_settles_its_streams_clip_count(db_path: str) -> None:
+    db = Database(db_path)
+    try:
+        await settle_job(
+            db, tenant_id="ten_a", job_id="j_bad", reservation_id="r_bad", outcome="failed"
+        )
+        await settle_job(
+            db, tenant_id="ten_a", job_id=None, reservation_id="r_cxl", outcome="failed"
+        )
+    finally:
+        await db.close()
+    assert (await _settle_payload(db_path, "r_bad"))["outputs"] == 0
+    # No job row to find the stream by: no count sent.
+    assert "outputs" not in await _settle_payload(db_path, "r_cxl")
+
+
+async def test_dispatcher_failure_still_settles_when_the_job_lookup_fails(
+    db_path: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A metering hiccup must not lose the settle: it goes out without outputs."""
+
+    async def broken(self: UsageJobsRepo, job_id: str) -> None:
+        raise RuntimeError("db locked")
+
+    monkeypatch.setattr(UsageJobsRepo, "get", broken)
+    db = Database(db_path)
+    try:
+        await settle_job(
+            db, tenant_id="ten_a", job_id="j_bad", reservation_id="r_bad", outcome="failed"
+        )
+    finally:
+        await db.close()
+    payload = await _settle_payload(db_path, "r_bad")
+    assert payload["outcome"] == "failed" and "outputs" not in payload

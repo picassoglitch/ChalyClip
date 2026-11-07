@@ -35,6 +35,7 @@ from typing import Any
 from chalybclip.db import Database
 from chalybclip.db.usage_repos import (
     UsageJobsRepo,
+    count_stream_clips,
     set_stream_storage_bytes,
     tenant_storage_bytes,
 )
@@ -297,13 +298,36 @@ async def settle_job(
 ) -> None:
     """Terminal settle by ids (dispatcher-side failures). Never raises."""
     try:
+        outputs = (
+            await _failure_outputs(db, tenant_id=tenant_id, job_id=job_id)
+            if outcome == "failed" else None
+        )
         await enqueue_settle(
-            db, tenant_id=tenant_id, reservation_id=reservation_id, outcome=outcome
+            db, tenant_id=tenant_id, reservation_id=reservation_id, outcome=outcome,
+            outputs=outputs,
         )
         if job_id:
             await UsageJobsRepo(db).set_status(job_id, outcome)
     except Exception:  # noqa: BLE001
         _log.exception("settle_job failed · job=%s", job_id)
+
+
+async def _failure_outputs(
+    db: Database, *, tenant_id: str, stream_id: str | None = None, job_id: str | None = None
+) -> int | None:
+    """Clips a failed run's stream has, for the hub's settle (by stream, or
+    by the job's stream). None when unknown: the hub then counts the run,
+    never a wrongly free one. Never raises, so the settle is always queued."""
+    try:
+        if stream_id is None and job_id:
+            row = await UsageJobsRepo(db).get(job_id)
+            stream_id = row.stream_id if row is not None else None
+        if not stream_id:
+            return None
+        return await count_stream_clips(db, tenant_id=tenant_id, stream_id=stream_id)
+    except Exception:  # noqa: BLE001 — metering must never mask the run's outcome
+        _log.warning("clip count failed · stream=%s job=%s", stream_id, job_id)
+        return None
 
 
 async def _stored_mb(db: Database, tenant_id: str) -> float:
@@ -457,9 +481,13 @@ async def _finish_run(
             await set_stream_storage_bytes(
                 db, tenant_id=tenant_id, stream_id=stream_id, storage_bytes=size
             )
+        outputs = (
+            await _failure_outputs(db, tenant_id=tenant_id, stream_id=stream_id)
+            if outcome == "failed" else None
+        )
         await enqueue_settle(
             db, tenant_id=tenant_id, reservation_id=reservation_id, outcome=outcome,
-            kick=False,
+            outputs=outputs, kick=False,
         )
         if job_id:
             await UsageJobsRepo(db).set_status(job_id, outcome)

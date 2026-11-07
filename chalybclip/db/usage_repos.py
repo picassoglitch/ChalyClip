@@ -318,6 +318,18 @@ async def tenant_storage_bytes(db: Database, tenant_id: str) -> int:
 FREE_FAILED_RETRIES = 3
 
 
+async def count_stream_clips(db: Database, *, tenant_id: str, stream_id: str) -> int:
+    """Clips a stream has, for the hub's settle `outputs`: a failed run with
+    0 is a free retry there, as `count_videos_since` treats it here."""
+    conn = await db.connect()
+    cur = await conn.execute(
+        "SELECT COUNT(*) AS n FROM clips WHERE tenant_id = ? AND stream_id = ?",
+        (tenant_id, stream_id),
+    )
+    row = await cur.fetchone()
+    return int(row["n"] or 0) if row is not None else 0
+
+
 async def count_videos_since(
     db: Database,
     *,
